@@ -14,7 +14,8 @@ public static class SetupApplicationExt
         Action<ApplicationContext>? dbArrange = null,
         string dbName = "",
         Action<IDictionary<string, string?>>? configureSettings = null,
-        string? bearerToken = null) where TStartup : class
+        string? bearerToken = null,
+        Action<IServiceCollection>? configureServices = null) where TStartup : class
     {
         IServiceProvider? rootServices = null;
         var client = factory.WithWebHostBuilder(builder =>
@@ -36,6 +37,8 @@ public static class SetupApplicationExt
                         .UseInMemoryDatabase("Testing_" + dbName)
                         .ConfigureWarnings(x => x.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 );
+
+                configureServices?.Invoke(services);
 
                 var sp = services.BuildServiceProvider();
 

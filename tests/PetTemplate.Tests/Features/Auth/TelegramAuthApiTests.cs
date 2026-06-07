@@ -5,7 +5,7 @@ using PetTemplate.Tests.EntityBuilders;
 
 namespace PetTemplate.Tests.Features.Auth;
 
-public class AuthApiTests
+public class TelegramAuthApiTests
 {
     private const long TestUserId = 12345678;
     private const string TestUsername = "testuser";

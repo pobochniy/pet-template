@@ -15,6 +15,12 @@ public class Profile
     
     [MaxLength(255)]
     public int? AvatarId { get; set; }
+
+    [MaxLength(255)]
+    public string? Email { get; set; }
+
+    [MaxLength(255)]
+    public string? PhoneNumber { get; set; }
     
     [MaxLength(3000)]
     public string? Comment { get; set; }

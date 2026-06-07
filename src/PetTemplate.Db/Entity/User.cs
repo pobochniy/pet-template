@@ -9,6 +9,8 @@ public class User
     [Key]
     public Guid Id { get; set; }
     
+    public long? VkId { get; set; }
+    public string? VkAuthToken { get; set; }
     public long? TelegramId { get; set; }
 
     public string? PasswordHash { get; set; }
@@ -37,6 +39,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder
             .HasIndex(u => u.TelegramId)
+            .IsUnique();
+        
+        builder
+            .HasIndex(u => u.VkId)
             .IsUnique();
         
         builder

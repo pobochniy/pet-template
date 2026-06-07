@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using PetTemplate.Api.Middlewares;
 using PetTemplate.Db.Entity;
+using PetTemplate.Services.Interfaces;
+using PetTemplate.Services.Options;
 
 namespace PetTemplate.Api.Configs;
 
@@ -28,6 +31,7 @@ public static class ServicesExtensions
     private static IServiceCollection AddAppOptions(this IServiceCollection services, IConfiguration config)
     {
         services.AddOptions<JwtOptions>().Bind(config.GetSection("JwtOptions"));
+        services.AddOptions<VkOptions>().Bind(config.GetSection("VkOptions"));
 
         return services;
     }
@@ -73,10 +77,22 @@ public static class ServicesExtensions
 
     private static IServiceCollection AddControllersWithSwagger(this IServiceCollection services)
     {
-        services
-            .AddControllers();
+        services.AddControllers();
         services.AddEndpointsApiExplorer();
-        services.AddSwaggerGen();
+        services.AddSwaggerGen(options =>
+        {
+            options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = JwtBearerDefaults.AuthenticationScheme,
+                BearerFormat = "JWT",
+                Description = "Вставьте JWT токен (без префикса Bearer)"
+            });
+            options.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, doc)] = []
+            });
+        });
 
         return services;
     }
@@ -115,6 +131,7 @@ public static class ServicesExtensions
         services.AddTransient<AuthService>();
         services.AddTransient<ProfileService>();
         services.AddTransient<TelegramService>();
+        services.AddTransient<IVkService, VkService>();
 
         return services;
     }

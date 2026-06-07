@@ -14,6 +14,10 @@ public class ProfileDto
         get => _userName;
         set => _userName = value?.Trim();
     }
+    
+    public string? Phone { get; set; }
+
+    public string? Email { get; set; }
 
     public int? AvatarId { get; set; }
     public string? Comment { get; set; }
