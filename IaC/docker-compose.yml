@@ -1,0 +1,53 @@
+# first run manually: docker network create nginx-proxy-man
+
+# вначале нужно запуститься без https, 
+# потом запустить certbot чтобы он создал сертификат в нужной папке
+# docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ -d durak-test.ru
+# только потом добавить блок для https
+
+version: '3'
+
+services:
+  webserver:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always
+    volumes:
+      - ./frontend:/etc/nginx/html
+      - ./nginx/conf:/etc/nginx/conf.d:ro
+      - ./certbot/www:/var/www/certbot/:ro
+      - ./certbot/conf/:/etc/nginx/ssl/:ro
+    networks:
+      - nginx-proxy-man    # network outside
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/www/:/var/www/certbot/:rw
+      - ./certbot/conf/:/etc/letsencrypt/:rw
+
+  database:
+    image: mysql:8.0.30
+    container_name: dbcontainer
+    restart: always
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${DB_PORT:-3320}:3306"
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - db-data:/var/lib/mysql
+
+networks:
+  nginx-proxy-man:
+    external: true
+
+volumes:
+  db-data:
