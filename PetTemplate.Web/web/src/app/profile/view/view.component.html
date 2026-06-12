@@ -1,0 +1,120 @@
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <!-- Header -->
+      <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">
+          <i class="bi bi-person-circle me-2"></i>Профиль игрока
+        </h2>
+        <p class="text-muted">Информация о пользователе</p>
+      </div>
+
+      <!-- Profile Card -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>Основная информация
+          </h5>
+        </div>
+        <div class="card-body p-4">
+          
+          <!-- Username -->
+          <div class="row mb-4 align-items-center">
+            <div class="col-md-4">
+              <label class="fw-semibold text-muted mb-0">
+                <i class="bi bi-person-badge me-2 text-primary"></i>Никнейм
+              </label>
+            </div>
+            <div class="col-md-8">
+              <div class="p-3 bg-light rounded">
+                <h5 class="mb-0">{{profile?.userName}}</h5>
+              </div>
+            </div>
+          </div>
+
+          <!-- Avatar ID -->
+          <div class="row mb-4 align-items-center">
+            <div class="col-md-4">
+              <label class="fw-semibold text-muted mb-0">
+                <i class="bi bi-image me-2 text-primary"></i>Аватар ID
+              </label>
+            </div>
+            <div class="col-md-8">
+              <div class="p-3 bg-light rounded">
+                <span class="badge bg-secondary fs-6">{{profile?.avatarId}}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comment -->
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <label class="fw-semibold text-muted mb-0">
+                <i class="bi bi-chat-left-text me-2 text-primary"></i>Комментарий
+              </label>
+            </div>
+            <div class="col-md-8">
+              <div class="p-3 bg-light rounded">
+                <p class="mb-0 text-muted fst-italic">
+                  {{profile?.comment || 'Не указан'}}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <hr class="my-4">
+
+          <!-- Verification Section -->
+          <h6 class="fw-semibold mb-3">
+            <i class="bi bi-shield-check me-2 text-success"></i>Подтверждения
+          </h6>
+
+          <!-- Is Adult -->
+          <div class="row mb-3 align-items-center">
+            <div class="col-md-4">
+              <label class="fw-semibold text-muted mb-0">
+                <i class="bi bi-person-check me-2 text-primary"></i>Возраст 18+
+              </label>
+            </div>
+            <div class="col-md-8">
+              @if (profile?.isAdult) {
+                <span class="badge bg-success fs-6">
+                  <i class="bi bi-check-circle me-1"></i>Да
+                </span>
+              } @else {
+                <span class="badge bg-danger fs-6">
+                  <i class="bi bi-x-circle me-1"></i>Нет
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- Terms Accepted -->
+          <div class="row align-items-center">
+            <div class="col-md-4">
+              <label class="fw-semibold text-muted mb-0">
+                <i class="bi bi-file-earmark-check me-2 text-primary"></i>Принял условия
+              </label>
+            </div>
+            <div class="col-md-8">
+              @if (profile?.hasAcceptedTerms) {
+                <span class="badge bg-success fs-6">
+                  <i class="bi bi-check-circle me-1"></i>Да
+                </span>
+              } @else {
+                <span class="badge bg-danger fs-6">
+                  <i class="bi bi-x-circle me-1"></i>Нет
+                </span>
+              }
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+

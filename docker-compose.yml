@@ -1,0 +1,13 @@
+---
+services:
+  mysqldb:
+    image: mysql:8.4.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: templatedb
+      MYSQL_USER: app
+      MYSQL_PASSWORD: 12345
+    ports:
+      - 3301:3306
+      

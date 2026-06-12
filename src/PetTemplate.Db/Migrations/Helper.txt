@@ -1,0 +1,15 @@
+﻿консоль
+
+(из корня)
+dotnet ef migrations add Init --startup-project src/PetTemplate.Api --project src/PetTemplate.Db
+
+
+update-database -Project Atheneum
+(из корня)
+dotnet ef database update --startup-project src/PetTemplate.Api --project src/PetTemplate.Db 
+
+remove-migration
+
+update-database NAME_OF_MIGRATION
+
+script-migration

@@ -1,0 +1,19 @@
+@if (isLoading()) {
+  <div id="loader-container">
+    <br />
+    <br />
+    <br />
+    <div class="lds-ring"><div></div><div></div><div></div><div></div></div>
+    <p>Подключение к Telegram...</p>
+  </div>
+}
+
+@if (authError()) {
+  <div class="error-container">
+    <div class="error-code">{{ authError()!.code }}</div>
+    <div class="error-message">
+      <h3>Ошибка аутентификации</h3>
+      <p>{{ authError()!.message }}</p>
+    </div>
+  </div>
+}

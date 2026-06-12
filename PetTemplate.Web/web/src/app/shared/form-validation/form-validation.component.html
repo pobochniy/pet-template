@@ -1,0 +1,12 @@
+@if (model['errors'] && !model['pristine']) {
+  <div class="error-msg">
+    @if (model['errors']['required']) {
+      <div class="text-danger">{{fieldName}} is required.</div>
+    }
+    @if (model['errors']['minlength'] && model['errors']['minlength']['actualLength'] < model['errors']['minlength']['requiredLength']) {
+      <div class="text-danger">
+        Min Length {{model['errors']['minlength']['requiredLength']}}
+      </div>
+    }
+  </div>
+}

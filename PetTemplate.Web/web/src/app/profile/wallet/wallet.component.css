@@ -1,0 +1,68 @@
+.wallet-container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.wallet-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.onboarding-card {
+  background: var(--bs-light, #f8f9fa);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.onboarding-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.onboarding-steps {
+  padding-left: 1.25rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--bs-body-color);
+}
+
+.onboarding-steps li ul {
+  margin-top: 0.25rem;
+  padding-left: 1rem;
+}
+
+.onboarding-steps a {
+  color: var(--bs-primary);
+}
+
+.wallet-address-block {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wallet-label {
+  font-weight: 500;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.wallet-address {
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+.wallet-balance-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.wallet-error {
+  display: flex;
+  align-items: center;
+}

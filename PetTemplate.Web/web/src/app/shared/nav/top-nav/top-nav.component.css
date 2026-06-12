@@ -1,0 +1,104 @@
+.top-navbar {
+  position: fixed;
+  top: 0;
+  left: 250px;
+  right: 0;
+  height: 50px;
+  background: #7386D5;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.top-navbar-left {
+  display: none;
+}
+
+.top-navbar-content {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.organization-selector {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s ease;
+  min-width: 150px;
+  max-width: 250px;
+}
+
+.organization-selector:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.organization-selector:focus {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.organization-selector:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.organization-selector option {
+  background: #7386D5;
+  color: #fff;
+}
+
+.icon-button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+  outline: none;
+}
+
+.icon-button:hover {
+  background: #6d7fcc;
+}
+
+.icon-button:active {
+  background: #5d6fb8;
+}
+
+#sidebarCollapse {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+#sidebarCollapse:hover {
+  background: #6d7fcc;
+}
+
+@media (max-width: 768px) {
+  .top-navbar {
+    left: 0;
+  }
+
+  .top-navbar-left {
+    display: block;
+  }
+}

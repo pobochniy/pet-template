@@ -1,0 +1,144 @@
+<div class="container py-4">
+  <!-- Back Button -->
+  <div class="d-flex justify-content-end mb-3">
+    <a [routerLink]="['/']" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-2"></i>Вернуться
+    </a>
+  </div>
+
+  <!-- Header -->
+  <div class="text-center mb-4">
+    <h2 class="fw-bold text-primary">
+      <i class="bi bi-person-gear me-2"></i>Редактирование профиля
+    </h2>
+  </div>
+
+  <!-- Two-column layout for fullscreen -->
+  <div class="row">
+    <!-- Left Column - Profile -->
+    <div class="col-lg-7 mb-4 mb-lg-0">
+      <!-- Form Card -->
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-4">
+          <form [formGroup]="profileForm" (ngSubmit)="onSubmit()">
+
+            <!-- Avatar and Username Row -->
+            <div class="mb-4">
+              <div class="d-flex align-items-center gap-3">
+                <!-- Avatar -->
+                <a [routerLink]="['/profile/avatar']" class="flex-shrink-0" style="cursor: pointer;">
+                  <img
+                    [src]="getAvatarUrl()"
+                    alt="Аватар"
+                    class="rounded-circle border border-primary border-2 hover-shadow"
+                    style="width: 80px; height: 80px; object-fit: cover; transition: all 0.3s;">
+                </a>
+
+                <!-- Username Field -->
+                <div class="flex-grow-1">
+                  <label for="userName" class="form-label fw-semibold">
+                    <i class="bi bi-person-badge me-2 text-primary"></i>Никнейм
+                  </label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="userName"
+                    maxlength="20"
+                    formControlName="userName"
+                    placeholder="Введите ваш никнейм" />
+                  <form-validation [model]="profileForm.controls['userName']" fieldName="userName"></form-validation>
+                </div>
+              </div>
+            </div>
+
+            <!-- Comment Field -->
+            <div class="mb-4">
+              <label for="comment" class="form-label fw-semibold">
+                <i class="bi bi-chat-left-text me-2 text-primary"></i>Комментарий
+              </label>
+              <textarea
+                class="form-control"
+                id="comment"
+                formControlName="comment"
+                rows="3"
+                placeholder="Расскажите о себе..."></textarea>
+              <div class="form-text">
+                <i class="bi bi-info-circle me-1"></i>Необязательное поле
+              </div>
+              <form-validation [model]="profileForm.controls['comment']" fieldName="comment"></form-validation>
+            </div>
+
+            <!-- Checkboxes Section -->
+            <div class="border-top pt-4 mb-4">
+              <h6 class="fw-semibold mb-3">
+                <i class="bi bi-shield-check me-2 text-success"></i>Подтверждения
+              </h6>
+
+              <!-- Is Adult Checkbox -->
+              <div class="form-check mb-3 p-3 bg-light rounded">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="isAdult"
+                  formControlName="isAdult">
+                <label class="form-check-label fw-semibold" for="isAdult">
+                  <i class="bi bi-person-check me-2"></i>Мне есть 18 лет
+                </label>
+                <form-validation [model]="profileForm.controls['isAdult']" fieldName="isAdult"></form-validation>
+              </div>
+
+              <!-- Terms Checkbox -->
+              <div class="form-check p-3 bg-light rounded">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="hasAcceptedTerms"
+                  formControlName="hasAcceptedTerms">
+                <label class="form-check-label fw-semibold" for="hasAcceptedTerms">
+                  <i class="bi bi-file-earmark-check me-2"></i>Я согласен с правилами использования
+                </label>
+                <form-validation [model]="profileForm.controls['hasAcceptedTerms']" fieldName="hasAcceptedTerms"></form-validation>
+              </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-save me-2"></i>Сохранить изменения
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column - Wallet -->
+    <div class="col-lg-5">
+      <!-- TON Wallet Section -->
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-wallet2 text-primary"></i>
+          <span class="fw-semibold">TON Кошелёк</span>
+          @if (userService.isWalletConnected()) {
+            <span class="badge bg-success ms-auto">Подключён</span>
+          } @else {
+            <span class="badge bg-secondary ms-auto">Не подключён</span>
+          }
+        </div>
+        <div class="card-body p-0">
+          <app-wallet></app-wallet>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Home Button -->
+  <div class="text-center mt-4">
+    <a [routerLink]="['/']" class="btn btn-outline-primary">
+      <i class="bi bi-arrow-left me-2"></i>На главную (не сохранять изменения)
+    </a>
+  </div>
+</div>
+
+
+

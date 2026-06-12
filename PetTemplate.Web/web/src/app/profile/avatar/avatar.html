@@ -1,0 +1,82 @@
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <!-- Header -->
+      <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">
+          <i class="bi bi-image me-2"></i>Выбор аватара
+        </h2>
+        <p class="text-muted">Выберите изображение для вашего профиля</p>
+      </div>
+
+      <!-- Back Button -->
+      <div class="text-left mt-4 mb-4">
+        <a routerLink="/profile/edit" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-2"></i>Вернуться к профилю
+        </a>
+      </div>
+
+      <!-- Current Avatar -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="bi bi-person-circle me-2"></i>Текущий аватар
+          </h5>
+        </div>
+        <div class="card-body text-center p-4">
+          <img
+            [src]="getAvatarUrl(userService.profile()?.avatarId ?? 0)"
+            [alt]="'Аватар ' + (userService.profile()?.avatarId ?? 0)"
+            class="rounded-circle border border-primary border-3"
+            style="width: 150px; height: 150px; object-fit: cover;">
+          <div class="mt-3">
+            <span class="badge bg-secondary fs-6">ID: {{userService.profile()?.avatarId ?? 0}}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Available Avatars -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0">
+            <i class="bi bi-grid-3x3 me-2"></i>Доступные аватары
+          </h5>
+        </div>
+        <div class="card-body p-4">
+          <div class="row g-3">
+            @for (avatarId of availableAvatars; track avatarId) {
+              <div class="col-6 col-md-3">
+                @let currentId = userService.profile()?.avatarId ?? 0;
+                <div
+                  class="avatar-option text-center p-3 rounded border cursor-pointer"
+                  [class.border-primary]="avatarId === currentId"
+                  [class.border-3]="avatarId === currentId"
+                  [class.bg-light]="avatarId === currentId"
+                  (click)="selectAvatar(avatarId)"
+                  style="cursor: pointer; transition: all 0.3s;">
+                  <img
+                    [src]="getAvatarUrl(avatarId)"
+                    [alt]="'Аватар ' + avatarId"
+                    class="rounded-circle mb-2"
+                    style="width: 100px; height: 100px; object-fit: cover;">
+                  <div>
+                    <span class="badge" [class.bg-primary]="avatarId === currentId" [class.bg-secondary]="avatarId !== currentId">
+                      ID: {{avatarId}}
+                    </span>
+                  </div>
+                  @if (avatarId === currentId) {
+                    <div class="mt-2">
+                      <i class="bi bi-check-circle-fill text-success"></i>
+                      <small class="text-success d-block fw-semibold">Выбран</small>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

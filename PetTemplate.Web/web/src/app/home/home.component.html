@@ -1,0 +1,16 @@
+<div class="home-container">
+  <h1>PetTemplate</h1>
+
+  @if (userService.profile(); as profile) {
+    <p>Добро пожаловать, {{ profile.userName }}!</p>
+    <nav>
+      <a [routerLink]="['/profile/edit']">Профиль</a>
+    </nav>
+    <button (click)="logout()">Выйти</button>
+  } @else {
+    <div class="d-flex gap-3 mt-3">
+      <a [routerLink]="['/auth/register']" class="btn btn-primary btn-lg px-4">Регистрация</a>
+      <a [routerLink]="['/auth/login']" class="btn btn-outline-secondary btn-lg px-4">Войти</a>
+    </div>
+  }
+</div>

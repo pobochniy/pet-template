@@ -1,0 +1,88 @@
+<div class="wallet-container">
+  <!-- Return to Home button for standalone page -->
+  @if (showReturnButton()) {
+    <div class="d-flex justify-content-end mb-3">
+      <a [routerLink]="['/']" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i>Вернуться на главную
+      </a>
+    </div>
+  }
+  
+  <h2 class="wallet-title">TON Кошелёк</h2>
+
+  @if (!userService.isWalletConnected()) {
+    <div class="wallet-disconnected">
+
+      <!-- Onboarding guide -->
+      <div class="onboarding-card mb-4">
+        <h6 class="onboarding-title">
+          <i class="bi bi-info-circle-fill me-2 text-primary"></i>Как подключить кошелёк?
+        </h6>
+        <ol class="onboarding-steps">
+          <li>
+            <strong>Что такое TON-кошелёк?</strong><br>
+            TON-кошелёк — бесплатное приложение на телефоне, которое хранит TONCOIN (TON) — криптовалюту для игр на ставки. Представьте его как цифровой кошелёк, которым управляете только вы.
+          </li>
+          <li>
+            <strong>Какое приложение нужно?</strong><br>
+            Подойдёт любой кошелёк с поддержкой TonConnect. Самые популярные:
+            <ul class="mt-1">
+              <li><a href="https://tonkeeper.com" target="_blank" rel="noopener">Tonkeeper</a> — iOS и Android</li>
+              <li><a href="https://mytonwallet.io" target="_blank" rel="noopener">MyTonWallet</a> — iOS, Android и браузер</li>
+            </ul>
+            Оба бесплатны. Скачайте из App Store или Google Play.
+          </li>
+          <li>
+            <strong>Пополните кошелёк TON</strong><br>
+            После установки пополните кошелёк через встроенную функцию приложения или переведите TON с биржи.
+          </li>
+          <li>
+            <strong>Подключите к игре</strong><br>
+            Нажмите <em>«Подключить кошелёк»</em> ниже — откроется ваше приложение, подтвердите подключение, и всё готово!
+          </li>
+        </ol>
+      </div>
+
+      <button
+        class="btn btn-primary"
+        [class.disabled]="isConnecting()"
+        (click)="connectWallet()"
+        [disabled]="isConnecting()"
+      >
+        @if (isConnecting()) {
+          <span class="spinner-border spinner-border-sm me-2"></span>
+          Подключение…
+        } @else {
+          Подключить кошелёк
+        }
+      </button>
+    </div>
+  } @else {
+    <div class="wallet-connected">
+      <div class="wallet-address-block mb-3">
+        <span class="wallet-label">Адрес:</span>
+        <span class="wallet-address">{{ truncatedAddress }}</span>
+      </div>
+
+      <div class="wallet-balance mb-3">
+        @if (isLoadingBalance()) {
+          <span class="spinner-border spinner-border-sm me-2"></span>
+          Загрузка баланса…
+        } @else if (balanceTon() !== null) {
+          <span class="wallet-balance-value">{{ balanceTon() }} TON</span>
+        } @else if (balanceError()) {
+          <div class="wallet-error">
+            <span class="text-danger">{{ balanceError() }}</span>
+            <button class="btn btn-sm btn-outline-secondary ms-2" (click)="loadBalance()">
+              Повторить
+            </button>
+          </div>
+        }
+      </div>
+
+      <button class="btn btn-outline-danger" (click)="disconnect()">
+        Отключить кошелёк
+      </button>
+    </div>
+  }
+</div>
