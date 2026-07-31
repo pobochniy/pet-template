@@ -13,29 +13,29 @@ Full-stack pet project template: ASP.NET Core API + Angular frontend.
 ### Install template from GitHub
 
 ```bash
-dotnet new install https://github.com/pobochniy/pet-template
+git clone https://github.com/pobochniy/pet-template ~/proj/pet-template && dotnet new install ~/proj/pet-template
 ```
 
 ### Create new project
 
 ```bash
-dotnet new pet -n MyAwesomeProject
+dotnet new pet -n MyAwesomeProject -o folterName
 ```
 
-This will create a new folder `MyAwesomeProject/` with all `PetTemplate` references replaced by `MyAwesomeProject`.
+This will create a new folder `folterName/` with all `PetTemplate` references replaced by `MyAwesomeProject`.
 
 ### Update template
 
-After pushing changes to the repository, reinstall the template with `--force` to overwrite the local copy:
+After pushing changes to the repository, re-clone and reinstall with `--force` to overwrite the local copy:
 
 ```bash
-dotnet new install https://github.com/pobochniy/pet-template --force
+rm -rf ~/proj/pet-template && git clone https://github.com/pobochniy/pet-template ~/proj/pet-template && dotnet new install ~/proj/pet-template --force
 ```
 
 ### Uninstall template
 
 ```bash
-dotnet new uninstall https://github.com/pobochniy/pet-template
+dotnet new uninstall ~/proj/pet-template
 ```
 
 ## Local development
