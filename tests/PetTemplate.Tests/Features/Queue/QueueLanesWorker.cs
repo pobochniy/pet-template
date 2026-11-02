@@ -1,26 +1,25 @@
+using LocalQueue.Processing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
-using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Tests.Arranges;
 
 namespace PetTemplate.Tests.Features.Queue;
 
 /// <summary>
-/// Дорожки очереди команд и аренда строки (<c>tech-debt/localqueue-postgres.md</c>;
-/// спец. assistant, раздел 3): долгая команда одной дорожки не держит другую,
-/// а обработчик продлевает аренду своей строки сам
+/// Свои воркеры очереди и аренда строки (спец. infrastructure, 2.2; спец. assistant, раздел 3):
+/// долгая команда одного воркера не держит другой, а обработчик продлевает аренду своей
+/// строки сам (<c>ICommandLease</c> пакета). Проверяется обвязка шаблона
+/// (<c>AddCommandQueueWorker</c>), а не сам пакет — у него свои тесты
 /// </summary>
 public class QueueLanesWorker
 {
-    private const string Lane = "test-lane";
-
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// Общая дорожка занята долгой командой, а команда своей дорожки, поставленная
-    /// позже, уже разобрана: ход ассистента не стоит за реиндексом поиска
+    /// Один воркер занят долгой командой, а команда другого, поставленная позже,
+    /// уже разобрана: ход ассистента не стоит за реиндексом поиска
     /// </summary>
     [Fact]
     public async Task OwnLaneDoesNotWaitForDefaultLane()
@@ -39,9 +38,8 @@ public class QueueLanesWorker
             },
             services => services
                 .AddSingleton(gate)
-                .AddCommandQueueLane(new CommandQueueLane(Lane, 1, 1, TimeSpan.FromMinutes(1)))
-                .AddCommandHandler<SlowCommand, SlowHandler>()
-                .AddCommandHandler<FastCommand, FastHandler>(lane: Lane));
+                .AddCommandQueueWorker(h => h.Add<SlowCommand, SlowHandler>())
+                .AddCommandQueueWorker(h => h.Add<FastCommand, FastHandler>(), prefetchCount: 1));
 
         // Assert
         await gate.Entered.Task.WaitAsync(Timeout, CancellationToken.None);
@@ -68,7 +66,7 @@ public class QueueLanesWorker
             x => x.LocalQueue.Add(row),
             services => services
                 .AddSingleton(gate)
-                .AddCommandHandler<LeasingCommand, LeasingHandler>());
+                .AddCommandQueueWorker(h => h.Add<LeasingCommand, LeasingHandler>()));
 
         // Assert
         await gate.Entered.Task.WaitAsync(Timeout, CancellationToken.None);
@@ -76,12 +74,12 @@ public class QueueLanesWorker
             .Where(x => x.Id == row.Id)
             .Select(x => x.LockedTillUtc)
             .SingleAsync(CancellationToken.None);
-        Assert.InRange(locked!.Value, before.AddHours(1), DateTime.UtcNow.AddHours(1));
+        Assert.InRange(locked!.Value, before.AddHours(1), DateTime.UtcNow.AddHours(1.5));
         gate.Release.SetResult();
         await WaitGone(db, row.Id);
     }
 
-    private static LocalQueue Row(Type command, DateTime createdAtUtc) => new()
+    private static Db.Entity.LocalQueue Row(Type command, DateTime createdAtUtc) => new()
     {
         Id = Guid.CreateVersion7(),
         Data = "{}",

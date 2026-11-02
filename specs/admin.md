@@ -28,7 +28,7 @@
   экрана нет и не должно быть: это не чей-то интерфейс, а взгляд владельца системы;
 - **модели ассистента и разбор диалогов** — справочник моделей и цен, чтение диалогов
   (разделы 15–16);
-- **очередь команд** (`local_queue`, `tech-debt/localqueue-postgres.md`) — упавшие и зависшие
+- **очередь команд** (`local_queue`, пакет `AsuTrack.LocalQueue`) — упавшие и зависшие
   команды видны только в таблице;
 - **дальше** — выключатели фич, лимиты.
 
@@ -205,7 +205,7 @@
 ## 4. Оболочка (клиент)
 
 Проект `admin` в `angular.json`: `projects/admin/src`, префикс `adm`, порт дев-сервера `4201`,
-тот же `proxy.conf.json`. Angular 20, zoneless, standalone, сигналы — как у продукта; i18n,
+тот же `proxy.conf.json`. Angular 21, zoneless, standalone, сигналы — как у продукта; i18n,
 `form-validation`, адаптив и `provideIcons` не используются: таблицы и формы на полном
 `bootstrap.min.css`, без собственного дизайна.
 
@@ -588,7 +588,7 @@ DialogEvaluation            автооценка прогона судьёй (16
 экран в `SCREENS`, своя роль в конец `AdminRole` (следующий номер — 32) и контроллер `Admin*`.
 
 - **Workspace** — список, создатель, участники числом, активность.
-- **Очередь** — очередь команд (`local_queue`, `CommandQueueWorker`): упавшие и зависшие
+- **Очередь** — очередь команд (`local_queue`, воркеры пакета `AsuTrack.LocalQueue`): упавшие и зависшие
   команды, повтор.
 
 ## 14. Расход
@@ -691,8 +691,8 @@ DialogEvaluation            автооценка прогона судьёй (16
   «без слов об устройстве» (считается только у фраз, где слова заданы), «без единого вызова»,
   «сорвалось», средние шаги и строка на фразу — что ожидалось, что позвано, что ответила
   модель (обрезано до 300 знаков), токены и цена.
-- **Фоном, одной командой** `ModelCheckCommand` на запуск, дорожкой очереди `admin` (один цикл):
-  ходы людей (дорожка `assistant`) и письма за ней не стоят, а оценка, нажатая во время сверки,
+- **Фоном, одной командой** `ModelCheckCommand` на запуск, админским воркером очереди (один цикл):
+  ходы людей (воркер ассистента) и письма за ней не стоят, а оценка, нажатая во время сверки,
   ждёт её конца. Аренда продлевается перед каждой фразой и шагом; после каждой фразы запуск
   сохраняет отчёт — перезапуск API продолжает с той же фразы.
 - **Одна сверка за раз** держит база (частичный уникальный индекс); запуск, не закончившийся
@@ -740,7 +740,7 @@ DialogEvaluation            автооценка прогона судьёй (16
 - **Только вручную** — «Оценить» на вкладке: судья из справочника (своя видеокарта предлагается
   первой) и размер пачки до `AdminOptions.Evaluation.BatchSize` (20). Пачка — неоценённые
   законченные прогоны с трассой, новые первыми; запуск (`AdminJob`) и команды
-  `DialogEvaluationCommand` по одной на прогон уходят одним сохранением, дорожкой `admin`.
+  `DialogEvaluationCommand` по одной на прогон уходят одним сохранением, админским воркером.
   Одна автооценка за раз — две пачки оплатили бы одни и те же прогоны дважды. Пустая пачка
   закрывается сразу.
 - **Судья — своя карта (`IsLocal`) или тот же поставщик, что обработал диалог:** тот содержимое
@@ -786,8 +786,8 @@ DialogEvaluation            автооценка прогона судьёй (16
   `AdminModelService`, `ModelCheckService`, `AdminJobService` (запуски), `AdminDialogService`,
   `DialogEvaluationService`, `AdminAccessLogService`. Сверка в изолированном мире —
   `Assistant/Check` (`ModelCheckRunner`, `ModelCheckWorld`, `phrases.json`); фоновые команды —
-  `ModelCheckCommandHandler` и `DialogEvaluationCommandHandler` на дорожке `admin`
-  (`CommandQueueLanes`). Общее с продуктом: `AccountCards`, `AccountDeletion`.
+  `ModelCheckCommandHandler` и `DialogEvaluationCommandHandler` на админском воркере
+  (`AddCommandQueue` в `ServicesExtensions`). Общее с продуктом: `AccountCards`, `AccountDeletion`.
   Суточная чистка — `DailyCleanupWorker`.
 - **Модель** — `src/PetTemplate.Db/Entity`: `UserInAdminRole`, `AdminInvitation`,
   `AccountAdminAction`, `AdminJob`, `AdminAccessLog`, `DialogEvaluation` (раздел 5).

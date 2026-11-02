@@ -7,8 +7,8 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 Клиент — `src/PetTemplate.Web/web`, проект `pet-template` в `angular.json` (имя `dotnet new`
 не переименовывает).
 
-## Angular 20 & Project Structure
-- Angular 20, builder `@angular/build` (esbuild). Zone.js нет вовсе — ни в сборке, ни в тестах.
+## Angular 21 & Project Structure
+- Angular 21, builder `@angular/build` (esbuild). Zone.js нет вовсе — ни в сборке, ни в тестах.
 - Standalone APIs only. NgModules (AppModule/SharedModule/feature modules) не используются.
   `standalone: true` не пишем — с Angular 19 это значение по умолчанию.
 - Маршруты — только ленивые: раздел подключается в `src/app/app.routes.ts` через `loadChildren`
@@ -356,7 +356,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 
 ## Testing
 
-Angular 20, Karma + Jasmine (`@angular/build:karma`), ChromeHeadless, без Zone.js.
+Angular 21, Karma + Jasmine (`@angular/build:karma`), ChromeHeadless, без Zone.js.
 Отдельного `test.ts` и `karma.conf.js` нет — общая настройка в `src/test-setup.spec.ts`.
 
 ### Zoneless configuration (important)
@@ -455,7 +455,7 @@ npm run build:admin   # сборка со своим бюджетом
   идут в `web-tests.yml` вместе с продуктовыми — и для `publish-angular.yml`, и для
   `publish-admin.yml`.
 
-Остальное — как у продукта: Angular 20, zoneless, standalone, `OnPush` и сигналы, спеки
+Остальное — как у продукта: Angular 21, zoneless, standalone, `OnPush` и сигналы, спеки
 по правилам раздела «Testing».
 
 **Устройство.** Токен своей схемы в `localStorage` поддомена, срок отсчитывает клиент

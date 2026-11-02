@@ -12,7 +12,7 @@ using PetTemplate.Db.Entity;
 namespace PetTemplate.Db.Migrations
 {
     [DbContext(typeof(ApplicationContext))]
-    [Migration("20261102090905_Init")]
+    [Migration("20261102121159_Init")]
     partial class Init
     {
         /// <inheritdoc />
@@ -20,7 +20,7 @@ namespace PetTemplate.Db.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");

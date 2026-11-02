@@ -1,3 +1,4 @@
+using LocalQueue.Processing;
 using PetTemplate.Services.Admin;
 using PetTemplate.Services.Commands;
 
@@ -6,9 +7,9 @@ namespace PetTemplate.Services.LocalQueueHandlers;
 /// <summary>
 /// Сверка модели (спец. admin, 15.3) — см. <see cref="ModelCheckService"/>. Идёт минутами:
 /// два десятка ходов, — поэтому аренда команды продлевается перед каждой фразой и каждым
-/// шагом, как у хода, иначе второй цикл подхватил бы её посреди работы.
+/// шагом, как у хода, иначе воркер взял бы её второй раз посреди работы.
 ///
-/// Дорожка — своя, админская (<c>CommandQueueLanes.Admin</c>): ход людей за сверкой
+/// Воркер — свой, админский (<c>AddCommandQueue</c> в API): ход людей за сверкой
 /// не стоит и сверка за ходами — тоже
 /// </summary>
 public class ModelCheckCommandHandler(ModelCheckService checks, ICommandLease lease)

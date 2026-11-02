@@ -99,7 +99,8 @@ PetTemplate.Tests/
 │   │   └── MailWorker.cs                 # Очередь писем с живым воркером
 │   ├── Queue/
 │   │   ├── QueueMetricsWorker.cs         # метрики очереди (MeterListener)
-│   │   └── QueueLanesWorker.cs           # дорожки очереди и аренда строки
+│   │   ├── QueueLanesWorker.cs           # свои воркеры очереди и аренда строки
+│   │   └── QueueRegistrationTests.cs     # пауза повтора, выключенный разбор — без базы
 │   ├── Assistant/                        # ассистент на FakeChatClient; TestPlan — тестовый раздел
 │   ├── Search/                           # поиск на тестовой сущности (TestNotes), Qdrant в контейнере
 │   ├── Help/                             # линтер и карта справки, индекс в памяти — без докера
@@ -140,11 +141,11 @@ PetTemplate.Tests/
 - Идут на настоящем PostgreSQL: у каждого теста своя база (см. ниже)
 
 **2. `*Worker.cs`** - тесты воркеров и фоновых процессов (`Features/Account/MailWorker.cs`).
-Очередь команд в API-тестах не разбирается: `ApiApplicationFactory` снимает `CommandQueueWorker`,
-и тест проверяет постановку — `QueueAssert.Mails(db)`. Обработку проверяет `Given.WorkerClient`
+Очередь команд в API-тестах не разбирается: `ApiApplicationFactory` ставит
+`CommandQueueOptions:Enabled = false` — воркеры пакета не регистрируются, обработчики остаются, и тест проверяет постановку — `QueueAssert.Mails(db)`. Обработку проверяет `Given.WorkerClient`
 (воркер включён, опрос 100 мс) с заглушкой почты `Mocks/FakeMailSender` (`IsDown` — провайдер упал);
 тест кладёт строку в `local_queue` сам и ждёт, пока она уйдёт из таблицы. Метрики
-(`Features/Queue/QueueMetricsWorker.cs`) слушает `MeterListener`: метр с тем же именем есть
+пакета (`Features/Queue/QueueMetricsWorker.cs`) слушает `MeterListener`: метр с тем же именем есть
 у каждого хоста прогона, поэтому измерения отбираются по своему, уникальному для теста типу команды.
 Суточная чистка (`DailyCleanupWorker`) с приложения под тестом снята (`ApiApplicationFactory`):
 её первый проход удалял бы подготовленные тестом старые строки — тест чистки зовёт сервис сам
@@ -163,7 +164,7 @@ InMemory в тестах нет: он выполняет запросы в па�
 (спец. infrastructure). Поэтому все тесты с приложением идут на PostgreSQL —
 и это дёшево:
 
-- **Контейнер один на прогон** (`Containers/PostgresServer.cs`): `postgres:17`, данные в tmpfs,
+- **Контейнер один на прогон** (`Containers/PostgresServer.cs`): `postgres:18`, данные в tmpfs,
   `fsync=off`, `synchronous_commit=off`, `full_page_writes=off` — надёжность после сбоя
   тестовой базе не нужна. Поднимается на первом обращении; останавливать его некому
   (`ICollectionFixture` отнял бы у классов параллельность) — его уносит Ryuk из Testcontainers
@@ -225,8 +226,8 @@ InMemory в тестах нет: он выполняет запросы в па�
 
 ### Окружение и настройки приложения
 
-- `ApiApplicationFactory` поднимает приложение в `Development`: вне него `Program.cs` зовёт
-  `MigrateAsync()`, а схему тестам раскатывает `PostgresServer`.
+- `ApiApplicationFactory` поднимает приложение в `Development` (настройки дев-машины); схему
+  API не накатывает нигде — тестам её раскатывает `PostgresServer` миграциями.
 - `SetupApplication` всегда перебивает `ConnectionStrings:AppConnection` (то, что осталось
   бы от `appsettings.json`, ведёт в дев-базу) и глушит лог хоста до `Error`, EF — совсем.
   Тест, которому нужен лог, перебьёт уровень своим `configureSettings`.
@@ -235,9 +236,13 @@ InMemory в тестах нет: он выполняет запросы в па�
 ### Запуск
 
 ```bash
-dotnet test tests/PetTemplate.Tests --filter "FullyQualifiedName~ProfileApiTests"
-dotnet test PetTemplate.slnx    # перед сдачей — весь прогон
+dotnet test --project tests/PetTemplate.Tests --filter-class "*ProfileApiTests"
+dotnet test --solution PetTemplate.slnx    # перед сдачей — весь прогон
 ```
+
+Раннер — Microsoft.Testing.Platform (xunit v3 4.x, включён в `global.json`): решение передаётся
+через `--solution`, проект — через `--project`, фильтры — xunit (`--filter-class`, `--filter-method`,
+`--filter-trait`), а не VSTest `--filter "FullyQualifiedName~…"`; `--logger` нет.
 
 В CI тесты сервера — ворота `publish-api.yml` (спец. infrastructure, 5). В git-хуки
 `dotnet test` не вешается (докер на каждый пуш) — перед пушем серверных правок гоняйте руками.

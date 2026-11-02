@@ -1,3 +1,4 @@
+using LocalQueue.Processing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;

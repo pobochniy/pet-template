@@ -1,3 +1,4 @@
+using LocalQueue.Processing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;

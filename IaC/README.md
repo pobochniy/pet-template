@@ -86,9 +86,12 @@ nano .env
 POSTGRES_DB=pettemplatedb
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your_secure_postgres_password
-# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING)
+# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING), только DML
 APP_DB_USER=pettemplate_app
 APP_DB_PASSWORD=your_secure_app_password
+# Владелец базы — под ним выкатка накатывает миграции (секрет MIGRATIONS_DB_CONNECTION_STRING)
+APP_DB_OWNER=pettemplate_owner
+APP_DB_OWNER_PASSWORD=your_secure_owner_password
 # Пользователь экспортёра метрик базы (роль pg_monitor)
 POSTGRES_EXPORTER_USER=postgres_exporter
 POSTGRES_EXPORTER_PASSWORD=your_secure_exporter_password
@@ -202,11 +205,12 @@ docker compose exec webserver nginx -s reload
    - Создаётся через GitHub Actions (`Publish Api`), в compose не входит
    - Порт: `127.0.0.1:5000:8080` — снаружи только через nginx
    - Подключается к сети `nginx-proxy-man`
-   - Миграции накатывает сам при старте — под пользователем приложения
+   - Миграций на старте не накатывает: их до замены контейнера накатывает бандл под владельцем
+     базы (`publish-api.yml`, шаг `apply migrations`)
 
-3. **PostgreSQL 17 (dbcontainer)**
-   - База данных: `pettemplatedb`; API ходит под `pettemplate_app` — владельцем базы без
-     прав суперпользователя (`DEPLOYMENT.md`, «Пользователь приложения»); суперпользователь
+3. **PostgreSQL 18 (dbcontainer)**
+   - База данных: `pettemplatedb`, владелец — `pettemplate_owner` (под ним идут миграции);
+     API ходит под `pettemplate_app` — только DML (`DEPLOYMENT.md`, «Пользователь приложения»); суперпользователь
      `postgres` — только для обслуживания и бэкапа
    - Данные в именованном томе `db-data` (`docker volume ls` → `iac_db-data`)
    - Порт на хост не публикуется вовсе — только сеть `nginx-proxy-man`
@@ -402,7 +406,8 @@ docker inspect --format '{{.State.Health.Status}}' dbcontainer
 docker volume ls | grep db-data
 ```
 
-`APP_DB_USER не задан` в логе первого старта — в `.env` нет `APP_DB_USER`/`APP_DB_PASSWORD`;
+`APP_DB_USER не задан` (или `APP_DB_OWNER`) в логе первого старта — в `.env` нет пары
+`APP_DB_USER`/`APP_DB_PASSWORD` или `APP_DB_OWNER`/`APP_DB_OWNER_PASSWORD`;
 скрипт `postgres/init` упал, и образ postgres оставил том недоинициализированным: исправить
 `.env`, `docker compose down -v` (база ещё пустая) и `up -d` заново.
 
@@ -420,8 +425,12 @@ docker logs dapi
   `Host=dbcontainer;Port=5432;Database=pettemplatedb;Username=pettemplate_app;Password=...`
 - `password authentication failed for user "pettemplate_app"` — пароль в секрете не тот,
   с которым создавался том (`DEPLOYMENT.md`, «Пользователь приложения»).
-- `permission denied` на миграции — таблицы принадлежат не `pettemplate_app` (например,
-  после восстановления с `--no-owner`): `DEPLOYMENT.md`, «Бэкап и восстановление базы».
+- `permission denied for table …` — у `pettemplate_app` нет прав на таблицу: она создана
+  не владельцем (`pettemplate_owner`), и `default privileges` на неё не распространились
+  (например, восстановление с `--no-owner`). Перезапустить `01-app-user.sh` руками —
+  `DEPLOYMENT.md`, «Пользователь приложения».
+- Упал шаг `apply migrations` в `Publish Api` — строка `MIGRATIONS_DB_CONNECTION_STRING`
+  (пользователь `pettemplate_owner`, пароль `APP_DB_OWNER_PASSWORD`); старый контейнер при этом не тронут.
 - Короткий ключ подписи — секрет `JWT_SIGNING_KEY` (`DEPLOYMENT.md`, раздел 6).
 
 ### Фронтенд показывает 404

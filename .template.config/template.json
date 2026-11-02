@@ -43,6 +43,7 @@
             "src/PetTemplate.Web/web/coverage/**",
             "out/**",
             ".artifacts-tests/**",
+            "efbundle",
             "tests.log",
             "tests.exit",
             "IaC/nginx/conf/admin-allow.inc",

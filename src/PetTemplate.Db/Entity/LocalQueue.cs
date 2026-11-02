@@ -5,14 +5,12 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace PetTemplate.Db.Entity;
 
 /// <summary>
-/// Строка очереди команд (спец. mail, 4; <c>tech-debt/localqueue-postgres.md</c>). Команда
-/// ложится сюда тем же <c>SaveChanges</c>, что и доменное изменение (outbox), а разбирает
-/// её <c>CommandQueueWorker</c>.
+/// Строка очереди команд (спец. mail, 4; спец. infrastructure, 2.2). Команда ложится сюда
+/// тем же <c>SaveChanges</c>, что и доменное изменение (outbox,
+/// <c>CommandQueue.Enqueue</c>), а разбирают её воркеры пакета <c>AsuTrack.LocalQueue</c>.
 ///
-/// Колонки — те же, что у таблицы пакета <c>LocalQueue</c>: когда появится
-/// <c>LocalQueue.PostgreSql</c>, воркер заменится пакетом, а таблица и постановка
-/// (<c>CommandQueue.Enqueue</c>) останутся как есть. Id — родной <c>uuid</c> Postgres,
-/// без двоичного представления, которое понадобилось MySQL
+/// Колонки — ровно те, что ждёт хранилище <c>AsuTrack.LocalQueue.PostgreSql</c>: тип
+/// команды — <c>FullName</c>, тело — JSON по умолчанию. Id — родной <c>uuid</c> Postgres
 /// </summary>
 public class LocalQueue
 {

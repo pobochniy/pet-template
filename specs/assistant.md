@@ -145,12 +145,12 @@ Stopped`; обработчик **перечитывает статус пере�
 - **модель отвечает непредсказуемо**, и HTTP-запрос, ждущий её тридцать секунд, упирается
   в таймаут прокси раньше, чем в собственный; очередь снимает этот класс отказов.
 
-**Ход идёт своей дорожкой очереди.** Очередь команд шаблона — своя, поверх таблицы
-`local_queue` (`tech-debt/localqueue-postgres.md`), и её выборка фильтрует строки по типу
-команды. Поэтому ход и компакция живут на отдельной дорожке `assistant`: `Workers` циклов
-разбора, выборка по одной строке, аренда выборки — десять минут. Ход не ждёт за полным
-реиндексом поиска и сам не держит письма. Между шагами обработчик **продлевает аренду**
-своей строки (`ICommandLease`): иначе второй цикл подхватил бы команду, пока первый ещё
+**Ход идёт своим воркером очереди.** Очередь команд шаблона — пакет `AsuTrack.LocalQueue`
+поверх таблицы `local_queue`, и каждый его воркер выбирает только свои типы команд. Ход
+и компакция живут на отдельном воркере ассистента: `Workers` циклов разбора, выборка
+по одной строке, аренда выборки — десять минут (`AssistantRunCommandHandler.Lease`). Ход
+не ждёт за полным реиндексом поиска и сам не держит письма. Между шагами обработчик
+**продлевает аренду** своей строки (`ICommandLease.Extend` пакета): иначе второй цикл подхватил бы команду, пока первый ещё
 думает, и два цикла пошли бы по одному прогону.
 
 **Попыток на ход — две** (`AssistantRun.Attempts`, `AssistantRunCommandHandler.MaxAttempts`);
@@ -678,7 +678,7 @@ Stopped`; обработчик **перечитывает статус пере�
   (`HistoryBuilder`) и потолок по символам (`CompactionThreshold`) как вторая страховка —
   лишнее режется с начала; резюме едет блоком системного промпта «Резюме прежнего
   разговора», а не сообщением;
-- **срабатывает после хода**, командой `AssistantCompactionCommand` на дорожке
+- **срабатывает после хода**, командой `AssistantCompactionCommand` на воркере
   ассистента, когда история после последнего резюме переросла `CompactionThreshold`
   символов; пока порог не достигнут, компакции не бывает вовсе;
 - старая часть треда сворачивается отдельным вызовом модели (`Prompts/compaction.md`)
@@ -1077,7 +1077,7 @@ personal)`: модель зовёт его, когда в разговоре п�
 отправок, попытки, аренда, снос пространства); план (формат, предохранители, граница
 немедленного применения, применение «ровно сохранённого», идемпотентность и повтор,
 права при применении, сверка, отказ раздела, сломанная рамка); `apply_plan` со страховкой
-«реплика сразу за планом»; `search_help`; модели и размыкатель; API и права; дорожки
+«реплика сразу за планом»; `search_help`; модели и размыкатель; API и права; воркеры
 очереди и аренда (`Features/Queue/QueueLanesWorker`). Тесты лежат
 в `tests/PetTemplate.Tests/Features/Assistant` (`AgentLoopTests`, `PromptAndHistoryTests`,
 `CompactionTests`, `AssistantThreadTests`, `PlanExecutorTests`, `PlanModelUnitTests`,
@@ -1160,7 +1160,7 @@ YandexGPT / AI Studio — официальный OpenAI-совместимый �
 или ключа не заводится), `HistoryMessages` (20), `HistoryPageSize` (30),
 `CompactionThreshold` (40 000 символов), `StepsSoft` (8), `StepsHard` (30), `StaleAfter`
 (два часа), `ImmediateLimit` (5), `TelemetrySensitiveData` (выключен), `Workers` (2 —
-циклов дорожки ассистента в очереди), `LongPollSeconds` (20), `TokensPerRun` (60 000),
+циклов воркера ассистента в очереди), `LongPollSeconds` (20), `TokensPerRun` (60 000),
 `ToolTimeoutSeconds` (30), `TraceRetentionDays` (30); у строки `SeedModels` — ещё цены
 `CostIn`, `CostCached`, `CostOut` (13.5, по умолчанию нули). `MemoryFactsLimit` (30, 12.5).
 `Transcription` (раздел 6): `Provider` (`main`), `Model` (пусто — голос выключен),
@@ -1222,7 +1222,7 @@ YandexGPT / AI Studio — официальный OpenAI-совместимый �
 | Настройки | `AssistantOptions`, `ModelBreakerOptions`, `SpendOptions` (`src/PetTemplate.Shared/Options`), секции в `appsettings*.json` (раздел 17); регистрация — `ServicesExtensions` (`src/PetTemplate.Api/Configs`) |
 | API | `AssistantController` (`src/PetTemplate.Api/Controllers`), `[AudioSizeLimit]` (`Middlewares`), заголовок зоны — `HttpContextExtensions.GetTimeZone`; DTO — `src/PetTemplate.Shared/Dto/Assistant`, коды отказов — `AssistantErrors` (`Shared/Constants`) |
 | Тред и ход | `AssistantThreadService`, `AssistantRunService`, `LoopGuards`, `AssistantContext`, `RunOutcome`, `RunCancellation`, `RunNotifier`, `AssistantTexts` (`src/PetTemplate.Services/Assistant`) |
-| Очередь | `AssistantRunCommand`, `AssistantCompactionCommand` (`Services/Commands`), обработчики `AssistantRunCommandHandler`, `AssistantCompactionCommandHandler` (`Services/LocalQueueHandlers`); дорожка `assistant` — `CommandQueueLanes`, `AddCommandQueue` в `ServicesExtensions` |
+| Очередь | `AssistantRunCommand`, `AssistantCompactionCommand` (`Services/Commands`), обработчики `AssistantRunCommandHandler`, `AssistantCompactionCommandHandler` (`Services/LocalQueueHandlers`); воркер ассистента — `AddCommandQueue` в `ServicesExtensions` (`AddCommandQueueWorker`) |
 | Промпт и история | `SystemPromptBuilder`, `HistoryBuilder`, тексты — `Assistant/Prompts/system.md`, `compaction.md` |
 | Инструменты | `Assistant/Tools`: `AssistantTools`, точка расширения `IAssistantToolSource` (`AddAssistantTools<T>`); права — `AssistantPermissions` |
 | План | `Assistant/Plans`: `PlanCollector`, `PlanConsent`, `PlanExecutor`, `IPlanOperationHandler` / `PlanOperationHandler<TArgs>` (`AddPlanOperation<T>`), `PlanOperations`; формат — `PlanDocument`, `PlanResult` |

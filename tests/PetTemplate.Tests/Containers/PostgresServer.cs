@@ -61,13 +61,13 @@ internal static class PostgresServer
     private static async Task<PostgreSqlContainer> StartAsync()
     {
         // Версия — как в docker-compose.yml и на сервере (спец. infrastructure)
-        var container = new PostgreSqlBuilder("postgres:17")
+        var container = new PostgreSqlBuilder("postgres:18")
             .WithName($"pettemplate-test-postgres-{Guid.NewGuid().ToString("N")[..8]}")
             .WithDatabase("pettemplatedb")
             // Данные живут один прогон: каталог данных в памяти и без сброса на диск.
             // Каждая команда схемы и каждый коммит в Postgres по умолчанию ждут fsync,
             // а надёжность после сбоя тестовой базе не нужна
-            .WithTmpfsMount("/var/lib/postgresql/data")
+            .WithTmpfsMount("/var/lib/postgresql")
             .WithCommand(
                 "-c", "fsync=off",
                 "-c", "synchronous_commit=off",

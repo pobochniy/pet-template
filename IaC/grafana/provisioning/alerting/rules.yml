@@ -15,7 +15,7 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: Почта
+    name: Почта и очередь
     folder: PetTemplate
     interval: 1m
     rules:
@@ -40,6 +40,37 @@ groups:
               refId: A
               instant: true
               expr: 'sum(increase({__name__=~"pettemplate_mail_failed.*_total"}[1h])) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # Повтор в очереди без предела попыток (спец. mail, 4): команда, которая не пройдёт
+      # никогда (битое тело, обработчик падает на её данных), иначе крутилась бы молча.
+      # Пауза между повторами удваивается от минуты, поэтому шестая попытка — это уже
+      # больше часа неудач подряд. Тип команды — в метке commandType
+      - uid: queue-command-stuck
+        title: Команда очереди не проходит
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Команда в local_queue упала шесть раз подряд и больше часа повторяется. Причина — в логе её обработчика; тип — в метке commandType
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (commandType) ({__name__=~"local_command_queue_max_try_count.*"}) > 5'
           - refId: B
             datasourceUid: __expr__
             model:

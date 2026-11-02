@@ -1,6 +1,6 @@
 # PetTemplate.Db — база и миграции
 
-Правила работы с сущностями и DTO — в [`agents.md`](agents.md). База — PostgreSQL 17,
+Правила работы с сущностями и DTO — в [`agents.md`](agents.md). База — PostgreSQL 18,
 имена таблиц и колонок в ней — snake_case, логин и почта — `citext`
 (`specs/infrastructure.md`, 3.1).
 
@@ -42,8 +42,9 @@ Host=dbcontainer;Port=5432;Database=pettemplatedb;Username=<пользовате
   база — через compose, `dapi` — через `--network nginx-proxy-man` в `publish-api.yml`.
 - Порт **внутренний, 5432**; `localhost` изнутри контейнера ведёт в сам контейнер API.
 - Пользователь — не суперпользователь `postgres`, а пользователь приложения `pettemplate_app`
-  (`APP_DB_USER` в `IaC/.env`) — владелец своей базы без прав суперпользователя. Заводит его
-  `IaC/postgres/init/01-app-user.sh` при первом старте тома (`IaC/DEPLOYMENT.md`, раздел 9).
+  (`APP_DB_USER` в `IaC/.env`) — только DML: схему он не меняет. Миграции на проде накатывает
+  бандл на шаге выкатки под владельцем базы `pettemplate_owner` (`APP_DB_OWNER`). Обе роли
+  заводит `IaC/postgres/init/01-app-user.sh` при первом старте тома (`IaC/DEPLOYMENT.md`, раздел 9).
 
 ### Прод, с локальной машины
 
@@ -59,8 +60,10 @@ SSH-туннель: сначала раскомментировать публи
 
 ## Миграции
 
-Команды — из корня репозитория: модель лежит здесь, а строку подключения и конфигурацию
-EF берёт стартовый проект API.
+Команды — из корня репозитория (`dotnet tool restore` поставит `dotnet-ef` той же версии,
+что в выкатке, — манифест `dotnet-tools.json`). Контекст `dotnet ef` создаёт
+`Entity/ApplicationContextFactory`, без хоста API: строка — из `ConnectionStrings__AppConnection`
+в окружении, а без неё — дев-база из корневого `docker-compose.yml`.
 
 ```bash
 # новая миграция
@@ -75,6 +78,9 @@ dotnet ef migrations remove --startup-project src/PetTemplate.Api --project src/
 
 # SQL-скрипт миграций — посмотреть, что уйдёт в базу
 dotnet ef migrations script --startup-project src/PetTemplate.Api --project src/PetTemplate.Db
+
+# бандл — то, что накатывает выкатка (publish-api.yml, шаг apply migrations)
+dotnet ef migrations bundle --startup-project src/PetTemplate.Api --project src/PetTemplate.Db --output efbundle --force
 ```
 
 ### Первая миграция `Init`

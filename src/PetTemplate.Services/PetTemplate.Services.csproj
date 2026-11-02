@@ -13,6 +13,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Обработчики очереди команд — ICommandHandler и ICommandLease пакета (спец. mail, 4) -->
+        <PackageReference Include="AsuTrack.LocalQueue" />
         <!-- Русский стеммер Snowball для ключевой половины поиска по справке (спец. help, 6.3) -->
         <PackageReference Include="libstemmer.net" />
         <PackageReference Include="MailKit" />

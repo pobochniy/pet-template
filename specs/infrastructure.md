@@ -77,29 +77,23 @@
 
 ### 2.2 `nuget.config`
 
-Пакеты `localqueue`, `LocalQueue.*`, `LocalQueue.OpenTelemetry` лежат в закрытом фиде
-GitHub Packages (`nuget.pkg.github.com/pobochniy`). `nuget.config` в корне:
-`nuget.org` плюс `pobhub` с учётными данными из переменных `NUGET_GITHUB_USER` /
-`NUGET_GITHUB_TOKEN`; в workflow — секрет `NUGET_GITHUB_TOKEN` (или `github.token`, если у него
-есть `read:packages`). `packageSourceMapping` отправляет в `pobhub` только `localqueue`
-и `LocalQueue.*`, остальное restore берёт с `nuget.org` — поэтому, пока пакетов очереди
-в шаблоне нет, чистый клон и раннер собираются и без токена. `help-check.yml` собирает
-`HelpCheck` с одним источником `nuget.org`: без токена `pobhub` отвечает `401`.
+`nuget.config` в корне — один источник `nuget.org`: закрытых фидов и токенов для restore нет,
+чистый клон и раннер собираются без учётных данных.
 
-Пакета очереди под PostgreSQL нет: в фиде — `localqueue`, `LocalQueue.MySql`,
-`LocalQueue.OpenTelemetry` 1.0.4, и `LocalQueue.MySql` тянет `MySqlConnector`. В исходниках
-очереди (`github.com/pobochniy/localqueue`) есть проект `LocalQueue.PostgreSql`, но это черновик:
-весь код закомментирован, ссылки на Npgsql нет, не публикуется. Ядро `localqueue` без хранилища
-не работает, MySQL-вариант не берём. Поэтому очередь разбирает свой воркер (`CommandQueueWorker`)
-над таблицей `local_queue` того же устройства, что у пакета, — пакеты из `pobhub` шаблон
-не использует (в `Directory.Packages.props` их нет). Дописать и опубликовать
-`LocalQueue.PostgreSql` и заменить им воркер — `tech-debt/localqueue-postgres.md`.
+Очередь команд — пакеты `AsuTrack.LocalQueue`, `AsuTrack.LocalQueue.PostgreSql`
+и `AsuTrack.LocalQueue.OpenTelemetry` с nuget.org (пространства имён в коде — `LocalQueue.*`).
+Постановка — своя: `db.Enqueue(command)` кладёт строку в таблицу `local_queue` тем же
+`SaveChanges`, что и доменное изменение (outbox); колонки таблицы — ровно те, что ждёт
+хранилище пакета под PostgreSQL, тип команды — `FullName`, тело — JSON по умолчанию.
+Разбирают воркеры пакета: `AddCommandQueueStorage(config)` один раз, затем
+`AddCommandQueueWorker(...)` на каждый воркер (`src/PetTemplate.Api/Workers/CommandQueueRegistration.cs`,
+`mail.md`, 4).
 
 ### 2.3 `README.md` — оглавление
 
 Корневой `README.md` — оглавление, а не содержание: стек, ссылка на таблицу спецификаций
 (`specs/README.md`), справка `help/`, таблица `agents.md` подсистем, `tech-debt/README.md`,
-запуск, проверки до коммита и до пуша, пакеты из закрытого фида, ворота выкатки, конфигурация
+запуск, проверки до коммита и до пуша, ворота выкатки, конфигурация
 и секреты, как подключить поиск к своей сущности, установка шаблона и создание проекта
 (`dotnet new pet`). Дублировать документы в нём не нужно — копия расходится с оригиналом первой.
 
@@ -122,7 +116,7 @@ GitHub Packages (`nuget.pkg.github.com/pobochniy`). `nuget.config` в корне
 ## 3. Локальный запуск
 
 Корневой `docker-compose.yml` — инфраструктура для `dotnet run`: PostgreSQL той же версии, что
-в `IaC/` (`postgres:17` на стандартном `5432`, база `pettemplatedb`, пользователь `postgres`,
+в `IaC/` (`postgres:18` на стандартном `5432`, база `pettemplatedb`, пользователь `postgres`,
 пароль `1234` — только для разработки; шаблон — одна база на машину, а занятый порт меняется
 в одном месте вместе со строкой в `appsettings.Development.json`), Qdrant
 (`qdrant/qdrant:v1.20.0`, `6333`/`6334` на `127.0.0.1`) и эмбеддер (llama.cpp, `8080` на `127.0.0.1`;
@@ -166,7 +160,9 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
   как у `AdminInvitation`) от СУБД не зависит. Правило —
   в `src/PetTemplate.Api/agents.md`.
 - **Миграции.** Начальная `Init` собрана под PostgreSQL (Npgsql) и создаёт всю схему;
-  на проде её накатывает `MigrateAsync` (раздел 6), тесты раскатывают ею шаблонную базу.
+  на проде её накатывает бандл миграций на шаге выкатки (раздел 6), тесты раскатывают ею
+  шаблонную базу. Контекст для `dotnet ef` и бандла — `ApplicationContextFactory` (без хоста
+  API: бандлу не нужны его секреты), настройки контекста у API и бандла общие (`Configure`).
   Что проверять в ней — `src/PetTemplate.Db/README.md`, «Первая миграция `Init`».
 - **Тесты** — Testcontainers `PostgreSql`, один сервер на прогон, каталог данных в tmpfs,
   `fsync=off`, `synchronous_commit=off`, `full_page_writes=off`; база каждого теста — копия
@@ -206,7 +202,7 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 
 | Workflow | Триггер | Раннер | Что проверяет до выкатки |
 |---|---|---|---|
-| `publish-api.yml` | `workflow_dispatch` | self-hosted | `HelpCheck lint`; `dotnet test PetTemplate.slnx` — PostgreSQL и Qdrant через Testcontainers, в фоне параллельно сборке; упали — образ не собирается |
+| `publish-api.yml` | `workflow_dispatch` | self-hosted | `HelpCheck lint`; `dotnet test --solution PetTemplate.slnx` — PostgreSQL и Qdrant через Testcontainers, в фоне параллельно сборке; упали — образ не собирается |
 | `publish-angular.yml` | `workflow_dispatch` | тесты — `ubuntu-latest`, сборка и деплой — self-hosted | `web-tests.yml`; затем `npm run build`, которую роняет `maximumError` бюджета бандла |
 | `publish-admin.yml` | `workflow_dispatch` | то же | `web-tests.yml`; `ng build admin` со своим бюджетом (`maximumError` 600 КБ) |
 | `web-tests.yml` | `workflow_call` | `ubuntu-latest` | `i18n:check`, `i18n:lint`, `i18n:codes`, `ng test pet-template`, `ng test admin` — там есть Chrome, ставить его на машину с продом незачем |
@@ -230,17 +226,19 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 0. `HelpCheck lint` — справка с техническими словами останавливает выкатку сразу
    (`specs/help.md`, 6.4).
 1. `dotnet restore`/`build`/`publish` `src/PetTemplate.Api/PetTemplate.Api.csproj` в `Release`;
-   параллельно в фоне — `dotnet test PetTemplate.slnx` с отдельным `ArtifactsPath` (иначе два
-   `dotnet` пишут в одни `obj/`).
+   параллельно в фоне — `dotnet test --solution PetTemplate.slnx` с отдельным `ArtifactsPath` (иначе два
+   `dotnet` пишут в одни `obj/`); бандл миграций `efbundle` (`dotnet ef migrations bundle`).
 2. Ожидание тестов — ворота: красные или не уложились в 20 минут — `exit 1` до `docker build`.
 3. `docker build --tag pettemplate-api:<yyyy_MM_dd__HH_mm_ss>` из `src/PetTemplate.Api/Dockerfile`
-   (образ `aspnet:10.0`, копирует готовую публикацию; сборки внутри образа нет, токен фида
-   в образ не попадает).
-4. `docker rm -f dapi`, `docker run --restart unless-stopped -p 127.0.0.1:5000:8080 --name dapi
+   (образ `aspnet:10.0`, копирует готовую публикацию; сборки внутри образа нет).
+4. Миграции: `efbundle` в контейнере `aspnet:10.0` в сети `nginx-proxy-man` под владельцем базы
+   (`MIGRATIONS_DB_CONNECTION_STRING`; секрет пуст или миграция упала — `exit 1`, старый
+   контейнер не тронут).
+5. `docker rm -f dapi`, `docker run --restart unless-stopped -p 127.0.0.1:5000:8080 --name dapi
    --network nginx-proxy-man` с переменными окружения из секретов и переменных (раздел 9),
    `OTEL_*` (раздел 10) и `ASPNETCORE_ENVIRONMENT=Release`; тег `pettemplate-api:latest`.
    Справка хоста `~/pettemplate-help` монтируется только на чтение в `/app/help`.
-5. `publish-help.yml` — справка того же коммита в `~/pettemplate-help/releases/<sha>`, ссылка
+6. `publish-help.yml` — справка того же коммита в `~/pettemplate-help/releases/<sha>`, ссылка
    `current` на неё (`specs/help.md`, 6.4); `cleanup-old-images.yml` — оставить пять
    последних версий плюс `latest`, бегущую не трогать.
 
@@ -252,8 +250,12 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 (`ServicesExtensions.ConfigureForwardedHeaders`). Держится это на том, что до порта API снаружи
 не дойти.
 
-**Миграции накатывает само приложение** при старте вне `Development` (`MigrateAsync`
-в `Program.cs`) — отдельного шага нет. Поэтому миграции пишутся expand → датафикс → contract:
+**Миграции накатывает шаг выкатки, а не приложение.** `publish-api.yml` собирает бандл
+(`dotnet ef migrations bundle`, `dotnet-ef` — из манифеста `dotnet-tools.json`) и после тестов,
+до замены контейнера, запускает его в контейнере `aspnet:10.0` в сети базы под владельцем
+(`MIGRATIONS_DB_CONNECTION_STRING`, раздел 8). Упали миграции — старый контейнер не тронут.
+API на старте схему не трогает и не может: его роль — только DML. Старый API работает, пока
+идут миграции, а откат образа (`rollback-api.yml`) схему не откатывает — поэтому миграции пишутся expand → датафикс → contract:
 каждая выкатка не ломает прод, а откат образа не требует отката схемы. На пустой боевой базе
 всю схему создаёт начальная миграция `Init` (3.1).
 
@@ -315,36 +317,38 @@ IaC/
 
 **`docker-compose.yml`:**
 
-- `webserver` — `nginx:latest`, тома `./frontend`, `./adminka`, `./nginx/conf:ro`, certbot;
+- `webserver` — `nginx:1.30` (стабильная ветка; патчи приходят сами), тома `./frontend`, `./adminka`, `./nginx/conf:ro`, certbot;
   сеть `nginx-proxy-man` (внешняя, создаётся `setup-vm.sh`).
 - `certbot` — выпуск и продление; первый запуск — без https, потом сертификат, потом блок 443
   (порядок — в шапке файла и `IaC/DEPLOYMENT.md`, раздел 4).
-- `database` — `postgres:17`, `container_name: dbcontainer`, **именованный том `db-data`**
-  (`/var/lib/postgresql/data`; в анонимном томе данные уносит `docker compose down -v`
+- `database` — `postgres:18`, `container_name: dbcontainer`, **именованный том `db-data`**
+  (`/var/lib/postgresql`: с 18-й версии образ держит данные в `18/docker` под ним; в анонимном томе данные уносит `docker compose down -v`
   или пересоздание), пароли из `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
-  `APP_DB_USER`, `APP_DB_PASSWORD`, `POSTGRES_EXPORTER_USER`, `POSTGRES_EXPORTER_PASSWORD`),
+  `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_OWNER`, `APP_DB_OWNER_PASSWORD`,
+  `POSTGRES_EXPORTER_USER`, `POSTGRES_EXPORTER_PASSWORD`),
   healthcheck `pg_isready -h 127.0.0.1` (по TCP: во время первичной инициализации образ держит
   временный сервер только на сокете, и по сокету healthcheck сказал бы «готов» до того, как
   заведена роль приложения). Порт на хост не пробрасывается: API ходит по сети докера,
   человек — через `docker exec … psql`; для SSH-туннеля публикацию раскомментируют, и только
   на `127.0.0.1` (ufw докеру не указ).
-- **Пользователь приложения** — `APP_DB_USER` (`pettemplate_app`). Заводит его `IaC/postgres/init/01-app-user.sh`, смонтированный
+- **Роли базы** — владелец `APP_DB_OWNER` (`pettemplate_owner`) и роль API `APP_DB_USER`
+  (`pettemplate_app`). Заводит их `IaC/postgres/init/01-app-user.sh`, смонтированный
   в `/docker-entrypoint-initdb.d`: образ запускает его сам один раз, на пустом томе; скрипт
-  идемпотентный, на живой базе его запускают руками (смена пароля, переезд). Роль — **владелец
-  базы** `pettemplatedb` без `SUPERUSER`/`CREATEDB`/`CREATEROLE`/`REPLICATION`/`BYPASSRLS`.
-  Почему владелец, а не роль только с DML: миграции под ней накатывает сам API
-  при старте (`MigrateAsync`, раздел 6) — всё на свою базу и ничего за её пределами. Роли API нужны права на DDL в своей
-  схеме и `create extension citext` (доверенное расширение — владельцу базы хватает); схема
-  `public` в Postgres 15+ принадлежит `pg_database_owner`, отдельный `GRANT` не нужен.
-  Разделение «владелец для миграций + роль с DML и `default privileges`» требует второй строки
-  подключения для миграций — `tech-debt/db-app-role.md`. Суперпользователь `postgres` — только
+  идемпотентный, на живой базе его запускают руками (смена пароля, переезд, база шаблона v1 —
+  `REASSIGN OWNED` передаёт объекты роли API владельцу). Владелец — владелец базы и всех
+  объектов: под ним бандл миграций (раздел 6) делает DDL и `create extension citext`
+  (доверенное расширение — владельцу базы хватает; схема `public` в Postgres 15+ принадлежит
+  `pg_database_owner`). Роль API — только `SELECT/INSERT/UPDATE/DELETE` на таблицы и
+  `USAGE, SELECT` на последовательности; таблицы будущих миграций достаются ей через
+  `ALTER DEFAULT PRIVILEGES FOR ROLE` владельца. Ни у одной нет
+  `SUPERUSER`/`CREATEDB`/`CREATEROLE`/`REPLICATION`/`BYPASSRLS`. Суперпользователь `postgres` — только
   для обслуживания и бэкапа: по сокету внутри контейнера вход доверенный (`local all all trust`
   у образа), снаружи контейнера — только по паролю (`scram-sha-256`).
 - `qdrant` — `qdrant/qdrant:v1.20.0` (как `Qdrant.Client` 1.20 и Testcontainers),
   `container_name: qdrantcontainer`, том `qdrant-data` (не бэкапится — индекс восстанавливается
   реиндексом, `specs/search.md`, 3), порты только на `127.0.0.1` (`QDRANT_REST_PORT`,
   `QDRANT_GRPC_PORT`).
-- `embeddings` — `ghcr.io/ggml-org/llama.cpp:server`, `container_name: embeddingscontainer`,
+- `embeddings` — `ghcr.io/ggml-org/llama.cpp:server-b11096` (сборка закреплена: проверена на этой модели), `container_name: embeddingscontainer`,
   `multilingual-e5-small` в Q8 (модель меняется `EMBEDDINGS_REPO`/`EMBEDDINGS_FILE` в `.env`),
   том `embeddings-cache` на весь `/root/.cache` (нынешние сборки кладут веса в `huggingface/`,
   прежние — в `llama.cpp/`), портов на хост нет; веса качает сам при первом старте
@@ -391,13 +395,13 @@ IaC/
 | Секрет | Переменная в контейнере | Что |
 |---|---|---|
 | `API_DB_CONNECTION_STRING` | `ConnectionStrings__AppConnection` | `Host=dbcontainer;Port=5432;Database=pettemplatedb;Username=<пользователь приложения>;Password=…` |
+| `MIGRATIONS_DB_CONNECTION_STRING` | — (шаг `apply migrations`, бандл миграций) | та же строка с владельцем базы `APP_DB_OWNER`; пусто — выкатка останавливается до замены контейнера |
 | `JWT_SIGNING_KEY` | `JwtOptions__SigningKey` | `openssl rand -base64 48`; пустой или короче 32 байт — API не стартует |
 | `ADMIN_JWT_SIGNING_KEY` | `AdminOptions__SigningKey` | не короче 32 байт и другой, чем `JWT_SIGNING_KEY`; иначе API не стартует (`specs/admin.md`, 3.3) |
 | `TELEGRAM_BOT_TOKEN` | `Telegram__BotToken` | токен бота — подпись mini-app Telegram (`specs/accounts.md`, 5.6) |
 | `VK_MINIAPP_PRIVATE_KEY` | `VkOptions__PrivateKey` | защищённый ключ mini-app VK (`specs/accounts.md`, 5.6) |
 | `SMTP_PASSWORD` | `MailOptions__Password` | пароль SMTP-ящика (`specs/mail.md`, 5) |
 | `ASSISTANT_API_KEY` | `AssistantOptions__Providers__main__ApiKey` | ключ поставщика модели ассистента (`specs/assistant.md`, 17) |
-| `NUGET_GITHUB_TOKEN` | — (restore) | токен с `read:packages` для фида `pobhub`; пока пакетов оттуда нет — необязателен (2.2) |
 
 Пароль суперпользователя Postgres секретом не нужен: `backup-db.yml` зовёт `pg_dump` через
 `docker exec` по сокету внутри контейнера, где вход доверенный, — пароль не нужен и в аргументы
@@ -425,10 +429,9 @@ IaC/
 - API шлёт метрики и трассы по OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcollectorcontainer:4317`,
   `OTEL_SERVICE_NAME=pettemplate-api` в `publish-api.yml` и `rollback-api.yml`; без переменной
   не шлёт ничего — так локально и в тестах). Метрики — ASP.NET Core, HttpClient, рантайм .NET,
-  письма (`MailMetrics`) и очередь команд (`CommandQueueMetrics`, `AddCommandQueueInstrumentation`:
-  у своего воркера очереди — `tech-debt/localqueue-postgres.md` — те же имена, метки и границы
-  гистограмм, что у пакета `LocalQueue.OpenTelemetry`, поэтому дашборд `queue`
-  подходит обоим), ассистент и справка (`AssistantMetrics`), расход (`BillingMetrics`).
+  письма (`MailMetrics`), очередь команд (метрики пакета `AsuTrack.LocalQueue.OpenTelemetry`,
+  `AddLocalCommandQueueInstrumentation()`, meter `LocalQueue`: `local-command-queue-*`
+  с меткой `commandType`, `dataSource` — `база.схема.таблица`, дашборд `queue`), ассистент и справка (`AssistantMetrics`), расход (`BillingMetrics`).
   Трассы — входящие запросы, походы наружу по HTTP и ход ассистента (источники
   `PetTemplate.Assistant` и `Experimental.Microsoft.Extensions.AI`, без текстов — `assistant.md`, 13.3).
 - `otel-collector` раскладывает: метрики в `prometheus` (`--web.enable-otlp-receiver`, 30 дней
@@ -447,7 +450,8 @@ IaC/
   на `6333`, и `qdrant` в тревоге `infra-target-down`); `assistant` («Ассистент») — ход, модели, справка,
   расход и счёт у поставщика (`assistant.md`, 13.4–13.5);
   `pettemplate-overview` свой: HTTP, почта, рантайм. Тревоги (`provisioning/alerting/rules.yml`) —
-  инфраструктура, база и «Письма не уходят»; группа «Ассистент» —
+  инфраструктура, база, «Письма не уходят» и «Команда очереди не проходит» (`TryCount` строки
+  больше пяти — с удвоением паузы это больше часа неудач, `mail.md`, 4); группа «Ассистент» —
   «Модель разомкнута», «Остаток у поставщика модели ниже порога», «Расчёт разошёлся с фактом
   у поставщика»; тревоги базы — по `pg_up` и `pg_stat_database_numbackends` /
   `pg_settings_max_connections`. Доставка тревог в Telegram — раздел 13.
@@ -482,7 +486,7 @@ IaC/
 
 | Решение | Почему |
 |---|---|
-| PostgreSQL 17, `pg_dump`, `postgres-exporter`, `SqlState`, snake_case (3.1) | База шаблона; что от неё зависит — 3.1 |
+| PostgreSQL 18, `pg_dump`, `postgres-exporter`, `SqlState`, snake_case (3.1) | База шаблона; что от неё зависит — 3.1 |
 | Своего прода нет; домен — `example.com`, символ шаблона: `dotnet new pet --domain <домен>` заменяет его везде (раздел 13) | Шаблон — заготовка; прод, живые данные и миграции expand/contract начинаются в проекте |
 | Только ядро: аккаунты, workspace и права, почта, админка, телеметрия, поиск, справка, ассистент | Шаблон без бизнес-сущностей |
 | Один тестовый проект `PetTemplate.Tests` | Проще |
@@ -499,8 +503,9 @@ IaC/
 - **Выкатка — по кнопке**; автодеплоя с `main` нет (раздел 1).
 - **База — PostgreSQL**, имена в базе snake_case, регистр логина и почты — `citext`,
   конкуренция — `xmin` (3.1).
-- **Пользователь приложения в Postgres** — владелец своей базы без атрибутов суперпользователя,
-  заводится init-скриптом тома `IaC/postgres/init/01-app-user.sh` (8).
+- **Роли в Postgres** — владелец базы для миграций и роль API только с DML, обе без атрибутов
+  суперпользователя; заводятся init-скриптом тома `IaC/postgres/init/01-app-user.sh` (8).
+  Миграции — бандлом на шаге выкатки, не на старте API (6).
 - **Формат дампа** — custom (`pg_dump -Fc`), проверка `pg_restore -f /dev/null` (11).
 - **Доставка тревог в Telegram выключена по умолчанию** (10):
   `telegram.yml` лежит в `IaC/grafana/on-hold/`, вне провижининга. Без токена бота и id группы
@@ -522,18 +527,12 @@ IaC/
   в `README.md`, «Новый проект из шаблона». `postActions` с `run script` спрашивают подтверждение
   и по-разному ведут себя на разных платформах, а `git init` в новой папке ещё не сделан.
 - **Чек-лист «что настроить в новом проекте»** (домен, хуки, секреты и переменные
-  GitHub, `NUGET_GITHUB_TOKEN`) — `README.md`, «Новый проект из шаблона».
+  GitHub) — `README.md`, «Новый проект из шаблона».
 
 Не реализовано:
 
 1. **Заглушки ключей подписи не отвергаются.** Длину обоих ключей и их несовпадение API
    проверяет на старте (9), но известное всем значение-заглушку из `appsettings.json` пропускает.
-
-Открыто:
-
-1. **Пакет очереди под PostgreSQL** — готового нет, есть закомментированный черновик
-   `LocalQueue.PostgreSql` в исходниках очереди (2.2). До него — свой воркер
-   (`tech-debt/localqueue-postgres.md`).
 
 ---
 
@@ -552,7 +551,7 @@ IaC/
 | Старт API: миграции, OTel, forwarded headers | `src/PetTemplate.Api/Program.cs`, `src/PetTemplate.Api/Configs/ServicesExtensions.cs` |
 | Конфигурация | `src/PetTemplate.Api/appsettings.json`, `appsettings.Development.json`, `appsettings.Release.json` |
 | PostgreSQL в модели | `src/PetTemplate.Db/Entity/ApplicationContext.cs`, `src/PetTemplate.Db/Extensions/FullTextSearch.cs`, `src/PetTemplate.Services/Services/DbErrors.cs`, `src/PetTemplate.Db/Migrations/` (исключена из сборки) |
-| Qdrant и очередь | `src/PetTemplate.Api/Workers/QdrantInitializer.cs`, `CommandQueueWorker.cs`, `CommandQueueMetrics.cs` |
+| Qdrant и очередь | `src/PetTemplate.Api/Workers/QdrantInitializer.cs`, `CommandQueueRegistration.cs`, `CommandQueueOptions.cs` |
 | Метрики подсистем | `src/PetTemplate.Services/Mail/MailMetrics.cs`, `Assistant/AssistantMetrics.cs`, `Billing/BillingMetrics.cs` |
 | Тестовая инфраструктура | `tests/PetTemplate.Tests/Containers/PostgresServer.cs`, `QdrantServer.cs` |
 | Сервер | `IaC/docker-compose.yml`, `IaC/.env.example`, `IaC/setup-vm.sh`, `IaC/nginx/conf/`, `IaC/postgres/init/` |

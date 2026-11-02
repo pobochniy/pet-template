@@ -2,7 +2,7 @@
 
 Сделано в `tests/PetTemplate.Tests/Containers/PostgresServer.cs`:
 
-- один контейнер `postgres:17` на прогон, данные в tmpfs, `fsync=off`, `synchronous_commit=off`,
+- один контейнер `postgres:18` на прогон, данные в tmpfs, `fsync=off`, `synchronous_commit=off`,
   `full_page_writes=off`;
 - схема раскатывается один раз — в шаблонную базу `pettemplate_template` тем же приложением,
   что и в тестах, миграциями (`Migrate()`), чтобы прогон ловил сломанную миграцию;

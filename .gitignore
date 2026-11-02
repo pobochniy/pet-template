@@ -82,3 +82,6 @@ IaC/nginx/conf/admin-allow-open.inc
 .claude/settings.local.json
 # Claude Code: worktrees агентов — рабочие копии, не код
 .claude/worktrees/
+
+# Бандл миграций выкатки (publish-api.yml)
+efbundle

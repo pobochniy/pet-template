@@ -341,12 +341,8 @@ public static class ServicesExtensions
     private static IServiceCollection AddDbContext(this IServiceCollection services, IConfiguration config)
     {
         var connString = config.GetConnectionString("AppConnection");
-        // Имена в базе — snake_case (спец. infrastructure, 3.1): C#-модель остаётся PascalCase,
-        // а таблицы, колонки и ограничения — `profiles`, `user_name`, `ix_profiles_user_name`,
-        // чтобы ручной SQL писался без кавычек
-        services.AddDbContext<ApplicationContext>(opt => opt
-            .UseNpgsql(connString, x => x.MigrationsAssembly("PetTemplate.Db"))
-            .UseSnakeCaseNamingConvention());
+        // Настройки — те же, что у бандла миграций (snake_case, сборка миграций)
+        services.AddDbContext<ApplicationContext>(opt => ApplicationContextFactory.Configure(opt, connString));
 
         return services;
     }
@@ -547,8 +543,9 @@ public static class ServicesExtensions
 
     /// <summary>
     /// Очередь команд (спец. mail, 4): постановка — <c>CommandQueue.Enqueue</c> тем же
-    /// сохранением, что и доменное изменение, разбор — <see cref="CommandQueueWorker"/>.
-    /// Письма: только обработчик очереди зовёт отправителя. Индексация поиска — тем же путём
+    /// сохранением, что и доменное изменение, разбор — воркеры пакета <c>AsuTrack.LocalQueue</c>
+    /// (<see cref="CommandQueueRegistration"/>). Письма: только обработчик очереди зовёт
+    /// отправителя. Индексация поиска — тем же путём
     /// </summary>
     private static IServiceCollection AddCommandQueue(this IServiceCollection services, IConfiguration config)
     {
@@ -558,34 +555,37 @@ public static class ServicesExtensions
         var assistant = config.GetSection("AssistantOptions").Get<AssistantOptions>() ?? new AssistantOptions();
 
         services
-            // Письмо: провайдер упал — повтор через минуту, а не потеря (спец. mail, 4)
-            .AddCommandHandler<SendMailCommand, SendMailCommandHandler>(TimeSpan.FromMinutes(1))
-            // Индексация (спец. search, 4): эмбеддер или Qdrant легли — повтор через минуту
-            .AddCommandHandler<SearchIndexCommand, SearchIndexCommandHandler>()
-            .AddCommandHandler<SearchReindexCommand, SearchIndexCommandHandler>()
-            // Ассистент (спец. assistant, раздел 3) — своей дорожкой: ход идёт минуты,
+            .AddCommandQueueStorage(config)
+            // Общий воркер, один цикл: команды идут по одной
+            .AddCommandQueueWorker(h => h
+                // Письмо: провайдер упал — повтор через минуту, а не потеря (спец. mail, 4)
+                .Add<SendMailCommand, SendMailCommandHandler>(TimeSpan.FromMinutes(1))
+                // Индексация (спец. search, 4): эмбеддер или Qdrant легли — повтор через минуту
+                .Add<SearchIndexCommand, SearchIndexCommandHandler>()
+                .Add<SearchReindexCommand, SearchIndexCommandHandler>())
+            // Ассистент (спец. assistant, раздел 3) — своим воркером: ход идёт минуты,
             // и ни письма за ним, ни он за полным реиндексом поиска не стоят.
-            // «Сколько ходов одновременно» — число циклов дорожки; выборка по одной строке:
-            // взятая пачка разбиралась бы по очереди. Аренда выборки — заведомо больше
+            // «Сколько ходов одновременно» — число циклов; выборка по одной строке:
+            // взятая пачка ждала бы свободного цикла. Аренда выборки — заведомо больше
             // одного шага (обращения к модели), дальше её продлевает обработчик хода
-            .AddCommandQueueLane(new CommandQueueLane(
-                CommandQueueLanes.Assistant, Math.Max(assistant.Workers, 1), 1, AssistantRunCommandHandler.Lease))
-            // Попыток на ход — две, повтор через десять секунд: бесконечного повтора
-            // у хода нет, вторую попытку считает сам обработчик (раздел 3)
-            .AddCommandHandler<AssistantRunCommand, AssistantRunCommandHandler>(
-                TimeSpan.FromSeconds(10), CommandQueueLanes.Assistant)
-            .AddCommandHandler<AssistantCompactionCommand, AssistantCompactionCommandHandler>(
-                lane: CommandQueueLanes.Assistant)
-            // Сверка моделей и автооценка из админки (спец. admin, 15.3 и 16.3) — своей
-            // дорожкой в один цикл: сверка идёт минутами и не должна ни занимать циклы
+            .AddCommandQueueWorker(h => h
+                    // Попыток на ход — две, повтор через десять секунд: бесконечного повтора
+                    // у хода нет, вторую попытку считает сам обработчик (раздел 3)
+                    .Add<AssistantRunCommand, AssistantRunCommandHandler>(TimeSpan.FromSeconds(10))
+                    .Add<AssistantCompactionCommand, AssistantCompactionCommandHandler>(),
+                workers: Math.Max(assistant.Workers, 1),
+                prefetchCount: 1,
+                invisibilityTimeout: AssistantRunCommandHandler.Lease)
+            // Сверка моделей и автооценка из админки (спец. admin, 15.3 и 16.3) — своим
+            // воркером в один цикл: сверка идёт минутами и не должна ни занимать циклы
             // ходов людей, ни ждать за ними. Аренда — как у хода, дальше её продлевает сверка
-            .AddCommandQueueLane(new CommandQueueLane(
-                CommandQueueLanes.Admin, 1, 1, ModelCheckCommandHandler.Lease))
-            .AddCommandHandler<ModelCheckCommand, ModelCheckCommandHandler>(lane: CommandQueueLanes.Admin)
-            // Отказ поставщика оценка считает исходом, а не бросает: повтор очереди —
-            // только для сбоя базы
-            .AddCommandHandler<DialogEvaluationCommand, DialogEvaluationCommandHandler>(lane: CommandQueueLanes.Admin)
-            .AddCommandQueueWorker(config);
+            .AddCommandQueueWorker(h => h
+                    .Add<ModelCheckCommand, ModelCheckCommandHandler>()
+                    // Отказ поставщика оценка считает исходом, а не бросает: повтор очереди —
+                    // только для сбоя базы
+                    .Add<DialogEvaluationCommand, DialogEvaluationCommandHandler>(),
+                prefetchCount: 1,
+                invisibilityTimeout: ModelCheckCommandHandler.Lease);
 
         return services;
     }

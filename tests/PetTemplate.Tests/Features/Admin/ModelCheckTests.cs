@@ -299,7 +299,7 @@ public class ModelCheckTests
 
     /// <summary>
     /// Аренда команды продлевается перед каждой фразой: сверка идёт минутами, и без
-    /// продления второй цикл дорожки подхватил бы её посреди работы
+    /// продления воркер очереди взял бы её второй раз посреди работы
     /// </summary>
     [Fact]
     public async Task HandlerExtendsLeaseBeforeEachPhrase()

@@ -45,7 +45,7 @@ assistant.md:
   "Точка входа и раскладка": skip
   "Строка ввода на главной": { article: assistant, hash: bfd62ac98788a8ab }
   "Страница чата": { article: assistant, hash: fabdfe5af50eac4b }
-  "Один ход и растущий бюджет": { article: assistant, hash: 4a7b73a433cbc4fe }
+  "Один ход и растущий бюджет": { article: assistant, hash: 761bf4cdb8e796a7 }
   "Что ассистент умеет": { article: assistant, hash: 220b681c11249090 }
   "Согласие репликой, а не нажатием": skip
   "Уточняющий вопрос": { article: assistant, hash: d02d9d7dac70fbde }

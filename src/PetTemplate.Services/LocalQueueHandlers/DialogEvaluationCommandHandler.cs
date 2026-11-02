@@ -1,3 +1,4 @@
+using LocalQueue.Processing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PetTemplate.Db.Entity;
@@ -12,7 +13,7 @@ namespace PetTemplate.Services.LocalQueueHandlers;
 /// закрывает. Отказ поставщика в повтор очереди не уходит: повторит его следующий запуск,
 /// а повтор, о котором экран не знает, держал бы запуск открытым.
 ///
-/// Дорожка — админская (<c>CommandQueueLanes.Admin</c>): пачка оценок не задерживает ходы людей
+/// Воркер — админский (<c>AddCommandQueue</c> в API): пачка оценок не задерживает ходы людей
 /// </summary>
 public class DialogEvaluationCommandHandler(
     ApplicationContext db,

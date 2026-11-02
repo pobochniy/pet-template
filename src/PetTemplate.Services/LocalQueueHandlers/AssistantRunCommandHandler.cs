@@ -1,3 +1,4 @@
+using LocalQueue.Processing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -15,8 +16,8 @@ namespace PetTemplate.Services.LocalQueueHandlers;
 /// Ход исполняется командой, а не в HTTP-запросе: модель отвечает непредсказуемо,
 /// и запрос, ждущий её тридцать секунд, упирается в таймаут прокси раньше, чем
 /// в собственный. Очередь заодно — естественный ограничитель нагрузки: ходы идут
-/// своей дорожкой очереди в <c>AssistantOptions.Workers</c> циклов
-/// (<c>CommandQueueLanes.Assistant</c>) и не ждут за реиндексом поиска.
+/// своим воркером очереди в <c>AssistantOptions.Workers</c> циклов
+/// (<c>AddCommandQueue</c> в API) и не ждут за реиндексом поиска.
 /// </summary>
 public class AssistantRunCommandHandler(
     ApplicationContext context,

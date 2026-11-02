@@ -7,8 +7,7 @@
 
 > **Статус — действует.** Отправка, очередь, шаблоны и метрики есть в коде. Провайдер почты
 > выбирает проект, созданный из шаблона, — раздел 6: в шаблоне `MailOptions.Host` пуст, и письма
-> только пишутся в лог. Очередь пока своя, а не пакет `LocalQueue` — раздел 4
-> и `tech-debt/localqueue-postgres.md`.
+> только пишутся в лог. Очередь — пакет `AsuTrack.LocalQueue`, раздел 4.
 
 ## 1. Зачем
 
@@ -23,8 +22,9 @@
   Тесты подменяют его `FakeMailSender` (`tests/PetTemplate.Tests/Mocks`).
 - **Очередь** — команда `SendMailCommand` (`src/PetTemplate.Services/Commands`) в таблице
   `local_queue`, обработчик `SendMailCommandHandler` в `src/PetTemplate.Services/LocalQueueHandlers`.
-  Только он зовёт `IMailSender`. Разбирает очередь `CommandQueueWorker` (`src/PetTemplate.Api/Workers`),
-  регистрация — `AddCommandQueue` в `src/PetTemplate.Api/Configs/ServicesExtensions.cs`.
+  Только он зовёт `IMailSender`. Разбирает очередь воркер пакета `AsuTrack.LocalQueue`
+  (`CommandQueueRegistration` в `src/PetTemplate.Api/Workers`), регистрация — `AddCommandQueue`
+  в `src/PetTemplate.Api/Configs/ServicesExtensions.cs`.
 - **Кто ставит письма** — `AccountTokens.IssueForMail` (письма со ссылкой: токен и команда одним
   сохранением), `EmailConfirmation` (подтверждение, «почту сменили»), `PasswordReset` (сброс);
   всё в `src/PetTemplate.Services/Services`.
@@ -59,18 +59,20 @@
 
 - **Через очередь, а не из запроса.** Команда ставится тем же `SaveChanges`, что и токен
   (outbox): в базу ложатся либо оба, либо ничего. Провайдер упал — письмо уйдёт повтором
-  через минуту (`AddCommandHandler<SendMailCommand, SendMailCommandHandler>(1 минута)`); число
-  попыток не ограничено, неотправленное видно в метриках (раздел 7).
-- **Очередь своя, временно.** Пакет `localqueue` без хранилища не работает, а хранилища
-  под PostgreSQL у него нет (`infrastructure.md`, 2.2). `CommandQueueWorker` разбирает таблицу
-  `local_queue` того же устройства, что у пакета: выборка `FOR UPDATE SKIP LOCKED`, удачная
-  строка удаляется, упавшая откладывается. Строки живут в базе, поэтому перезапуск API
-  письма **не теряет**: недоделанное возьмёт следующий запуск. Метрики очереди — свои, под
-  именами пакета (`CommandQueueMetrics`, дашборд «Очередь команд», `infrastructure.md`, раздел 10).
-  Чего нет по сравнению с пакетом — параллельной обработки; замена — `tech-debt/localqueue-postgres.md`.
-- **Письма идут общей дорожкой очереди**, одним циклом: долгий полный реиндекс поиска на той же
-  дорожке задерживает их (ход ассистента — нет, у него своя дорожка). Когда станет заметно —
-  индексацию на свою дорожку (`tech-debt/localqueue-postgres.md`, «Когда возвращаться»).
+  через минуту (`h.Add<SendMailCommand, SendMailCommandHandler>(1 минута)`), дальше пауза
+  удваивается с каждой попыткой до часа (`CommandQueueOptions.MaxRetryAfterFailure`): письмо,
+  которое не уйдёт никогда, не долбит провайдера раз в минуту. Число попыток не ограничено,
+  неотправленное видно в метриках (раздел 7), застрявшая команда — тревогой «Команда очереди
+  не проходит» (`infrastructure.md`, 10).
+- **Очередь — пакет `AsuTrack.LocalQueue`** с хранилищем PostgreSQL (`infrastructure.md`, 2.2).
+  Строку ставит EF, разбирает воркер пакета: удачная строка удаляется, упавшая прячется
+  до повтора. Строки живут в базе, поэтому перезапуск API письма **не теряет**: недоделанное
+  возьмёт следующий запуск. Метрики очереди — пакета (дашборд «Очередь команд»,
+  `infrastructure.md`, раздел 10).
+- **Письма идут общим воркером очереди**, одним циклом, вместе с индексацией поиска: долгий
+  полный реиндекс большой базы задерживает их (ход ассистента и сверка моделей — нет, у них
+  свои воркеры). Когда станет заметно (подтверждение почты ждут минуты) — индексацию
+  на свой воркер, ещё одним `AddCommandQueueWorker` в `AddCommandQueue`.
 - **Токена в очереди нет.** Обработчик придумывает его перед отправкой, в базе — только хеш
   (`AccountToken`), в письме — сам токен. Упало сохранение после отправки — повтор пришлёт
   новую ссылку, а первая не сработает: её хеш в базу не лёг.
@@ -134,7 +136,7 @@
 
 - `local_queue` — строка команды `SendMailCommand` до отправки: `id`, `data` (JSON команды:
   `Kind`, `TokenId` или `To` и `Language`), `command_type`, `created_at_utc`, `locked_till_utc`,
-  `try_count`. Колонки — как у пакета `LocalQueue` (`tech-debt/localqueue-postgres.md`).
+  `try_count`. Колонки — те, что ждёт хранилище пакета `AsuTrack.LocalQueue.PostgreSql`.
   Отправлено — строка удаляется.
 - `AccountToken` (`accounts.md`, 11) — у писем со ссылкой: `Email` — адрес письма, `Hash` —
   `null`, пока письмо не ушло, `MailSentAtUtc` — ключ идемпотентности, `IssuedByUserId` —
@@ -143,4 +145,3 @@
 ## 9. Не сделано
 
 - **Провайдер и DNS** (раздел 6) — выбирает и настраивает проект, созданный из шаблона.
-- **Пакет `LocalQueue` вместо своей очереди** — `tech-debt/localqueue-postgres.md`.

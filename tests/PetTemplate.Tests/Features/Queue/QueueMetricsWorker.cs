@@ -1,21 +1,27 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using LocalQueue.Diagnostics;
+using LocalQueue.Processing;
 using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
-using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Tests.Arranges;
 
 namespace PetTemplate.Tests.Features.Queue;
 
 /// <summary>
-/// Метрики очереди команд (спец. infrastructure, 10): имена и метки — как у пакета
-/// <c>LocalQueue.OpenTelemetry</c>, на них стоит дашборд «Очередь команд».
+/// Метрики очереди команд (спец. infrastructure, 10) — пакета <c>AsuTrack.LocalQueue</c>:
+/// на их именах и метках стоит дашборд «Очередь команд». Проверяется, что воркеры шаблона
+/// их пишут и что инструменты называются так, как их ждёт дашборд.
 ///
-/// Метр с этим именем есть у каждого хоста, а тесты идут параллельно — поэтому у каждого
-/// теста свой тип команды, и измерения отбираются по нему
+/// Метр пакета — один на процесс, а тесты идут параллельно — поэтому у каждого теста
+/// свой тип команды, и измерения отбираются по нему
 /// </summary>
 public class QueueMetricsWorker
 {
+    private const string Completed = "local-command-queue-completed";
+    private const string Length = "local-command-queue-length";
+    private const string MaxTryCount = "local-command-queue-max-try-count";
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
@@ -28,7 +34,7 @@ public class QueueMetricsWorker
         // Arrange
         using var listener = new QueueListener();
         var commandType = typeof(PingCommand).FullName!;
-        var row = new LocalQueue
+        var row = new Db.Entity.LocalQueue
         {
             Id = Guid.CreateVersion7(),
             Data = "{}",
@@ -39,14 +45,14 @@ public class QueueMetricsWorker
         // Act
         await Given.WorkerClient(
             db => db.LocalQueue.Add(row),
-            services => services.AddCommandHandler<PingCommand, PingHandler>());
+            services => services.AddCommandQueueWorker(h => h.Add<PingCommand, PingHandler>()));
 
         // Assert
-        var completed = await listener.WaitFor(CommandQueueMetrics.CompletedName, commandType);
+        var completed = await listener.WaitFor(Completed, commandType);
         Assert.Equal(1, completed.Value);
-        var lag = await listener.WaitFor(CommandQueueMetrics.ProcessingLagName, commandType);
+        var lag = await listener.WaitFor(Instruments.CommandProcessingLagHistogramName, commandType);
         Assert.InRange(lag.Value, 60, 60 + Timeout.TotalSeconds);
-        var time = await listener.WaitFor(CommandQueueMetrics.ProcessingTimeName, commandType);
+        var time = await listener.WaitFor(Instruments.CommandProcessingTimeHistogramName, commandType);
         Assert.InRange(time.Value, 0, Timeout.TotalSeconds);
     }
 
@@ -69,14 +75,15 @@ public class QueueMetricsWorker
         });
 
         // Assert
-        var length = await listener.WaitFor(CommandQueueMetrics.LengthName, commandType);
+        var length = await listener.WaitFor(Length, commandType);
         Assert.Equal(2, length.Value);
-        Assert.Equal("local_queue", length.Tags["dataSource"]);
-        var tries = await listener.WaitFor(CommandQueueMetrics.MaxTryCountName, commandType);
+        // Источник — «база.схема.таблица»: у каждого теста своя база
+        Assert.EndsWith(".public.local_queue", (string)length.Tags["dataSource"]!);
+        var tries = await listener.WaitFor(MaxTryCount, commandType);
         Assert.Equal(3, tries.Value);
     }
 
-    private static LocalQueue Orphan(string commandType, int tryCount) => new()
+    private static Db.Entity.LocalQueue Orphan(string commandType, int tryCount) => new()
     {
         Id = Guid.CreateVersion7(),
         Data = "{}",
@@ -104,7 +111,7 @@ public class QueueMetricsWorker
         {
             _listener.InstrumentPublished = (instrument, listener) =>
             {
-                if (instrument.Meter.Name == CommandQueueMetrics.MeterName)
+                if (instrument.Meter.Name == Instruments.MeterName)
                     listener.EnableMeasurementEvents(instrument);
             };
             _listener.SetMeasurementEventCallback<int>((i, value, tags, _) => Record(i, value, tags));
@@ -133,7 +140,7 @@ public class QueueMetricsWorker
 
         /// <summary>Наблюдаемый счётчик до первой сводки отдаёт ноль — ждём настоящего значения</summary>
         private static bool IsGauge(string instrument) =>
-            instrument is CommandQueueMetrics.LengthName or CommandQueueMetrics.MaxTryCountName;
+            instrument is Length or MaxTryCount;
 
         private void Record<T>(Instrument instrument, T value, ReadOnlySpan<KeyValuePair<string, object?>> tags)
             where T : struct

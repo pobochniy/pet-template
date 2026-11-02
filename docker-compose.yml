@@ -3,7 +3,7 @@
 # Версии — те же, что на сервере (IaC/docker-compose.yml)
 services:
   postgres:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_DB: pettemplatedb
       POSTGRES_USER: postgres
@@ -11,7 +11,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - postgres_data_pettemplate:/var/lib/postgresql/data
+      - postgres18_data_pettemplate:/var/lib/postgresql
 
   # Векторный индекс поиска (спец. search, 3). API ходит по gRPC на localhost:6334
   # (QdrantOptions в appsettings.json); без него API не стартует, как без базы.
@@ -32,7 +32,7 @@ services:
   # SearchOptions:EmbeddingsEndpoint (appsettings.json, http://localhost:8080/v1); порт —
   # только на 127.0.0.1. Не запущен — индексация ждёт в очереди, поиск идёт по словам
   embeddings:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server-b11096
     command: >
       --hf-repo ${EMBEDDINGS_REPO:-TwinSunsLLC/multilingual-e5-small-gguf}
       --hf-file ${EMBEDDINGS_FILE:-multilingual-e5-small-q8_0.gguf}
@@ -43,6 +43,6 @@ services:
       - embeddings_cache_pettemplate:/root/.cache
 
 volumes:
-  postgres_data_pettemplate:
+  postgres18_data_pettemplate:
   qdrant_data_pettemplate:
   embeddings_cache_pettemplate:

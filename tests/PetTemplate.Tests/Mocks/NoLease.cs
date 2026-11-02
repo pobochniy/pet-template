@@ -1,4 +1,4 @@
-using PetTemplate.Services.LocalQueueHandlers;
+using LocalQueue.Processing;
 
 namespace PetTemplate.Tests.Mocks;
 

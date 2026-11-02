@@ -337,8 +337,7 @@ public class ModelBreakerTests
     private static Task Update(
         AssistantWorld world,
         Guid id,
-        System.Linq.Expressions.Expression<Func<Microsoft.EntityFrameworkCore.Query.SetPropertyCalls<AiModel>,
-            Microsoft.EntityFrameworkCore.Query.SetPropertyCalls<AiModel>>> set) =>
+        Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<AiModel>> set) =>
         world.Db.AiModels.Where(x => x.Id == id).ExecuteUpdateAsync(set, CancellationToken.None);
 
     /// <summary>Упавший ход доводит до конца обработчик; здесь — руками, чтобы завести следующий</summary>

@@ -1,10 +1,9 @@
 using PetTemplate.Api.Configs;
 using PetTemplate.Api.Middlewares;
-using PetTemplate.Db.Entity;
 using PetTemplate.Services.Assistant;
 using PetTemplate.Services.Billing;
 using PetTemplate.Services.Mail;
-using Microsoft.EntityFrameworkCore;
+using LocalQueue.OpenTelemetry;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -36,8 +35,8 @@ services.AddOpenTelemetry()
             .AddMeter(AssistantMetrics.MeterName)
             .AddMeter(BillingMetrics.MeterName)
             // Очередь команд: длина, попытки, сколько команда ждала до выполнения
-            // и сколько выполнялась — по ней идут письма и индексация поиска в Qdrant
-            .AddCommandQueueInstrumentation();
+            // и сколько выполнялась — метрики пакета AsuTrack.LocalQueue.OpenTelemetry
+            .AddLocalCommandQueueInstrumentation();
 
         if (!string.IsNullOrWhiteSpace(otlp))
             b.AddOtlpExporter();
@@ -62,12 +61,9 @@ services.AddOpenTelemetry()
 
 var app = builder.Build();
 
-if (!app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-    await db.Database.MigrateAsync();
-}
+// Миграций на старте нет: их накатывает бандл на шаге выкатки под владельцем базы
+// (publish-api.yml; спец. infrastructure, 8), а API ходит ролью только с DML и схему
+// менять не может. Дев-база — `dotnet ef database update` (src/PetTemplate.Db/README.md)
 
 // Configure the HTTP request pipeline.
 // Первым: всё ниже — лимитер, логи, обработчик ошибок — видит адрес клиента

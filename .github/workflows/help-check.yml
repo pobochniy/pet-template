@@ -28,12 +28,10 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # HelpCheck зависит только от PetTemplate.Help и пакетов nuget.org. Источник — только
-      # nuget.org: закрытый фид pobhub из nuget.config без токена отвечает 401, и restore
-      # упал бы на нём, хотя пакетов оттуда здесь нет
+      # HelpCheck зависит только от PetTemplate.Help и пакетов nuget.org
       - name: build
         id: build
-        run: dotnet build tools/HelpCheck -c Release --source https://api.nuget.org/v3/index.json
+        run: dotnet build tools/HelpCheck -c Release
 
       - name: lint 📖
         run: dotnet run --project tools/HelpCheck -c Release --no-build -- lint

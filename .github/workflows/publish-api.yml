@@ -46,30 +46,29 @@ jobs:
           nohup bash -c '
             dotnet restore PetTemplate.slnx \
               -p:ArtifactsPath="$PWD/${{ env.TEST_ARTIFACTS_DIR }}" \
-            && dotnet test PetTemplate.slnx --no-restore -c Release \
-              -p:ArtifactsPath="$PWD/${{ env.TEST_ARTIFACTS_DIR }}" \
-              --logger "console;verbosity=minimal"
+            && dotnet test --solution PetTemplate.slnx --no-restore -c Release \
+              -p:ArtifactsPath="$PWD/${{ env.TEST_ARTIFACTS_DIR }}"
             echo $? > tests.exit.tmp && mv tests.exit.tmp tests.exit
           ' > tests.log 2>&1 < /dev/null &
           echo "тесты запущены в фоне, pid $!"
-        env:
-          NUGET_GITHUB_USER: pobochniy
-          NUGET_GITHUB_TOKEN: ${{ secrets.NUGET_GITHUB_TOKEN || github.token }}
 
-      # localqueue — из закрытого фида pobhub (nuget.config): учётные данные — переменными.
-      # Токен остаётся на раннере: в образ и в аргументы docker build он не попадает —
-      # сборки внутри образа нет (Dockerfile)
       - name: restore
         run: dotnet restore src/PetTemplate.Api/PetTemplate.Api.csproj
-        env:
-          NUGET_GITHUB_USER: pobochniy
-          NUGET_GITHUB_TOKEN: ${{ secrets.NUGET_GITHUB_TOKEN || github.token }}
 
       - name: build 🏗️
         run: dotnet build src/PetTemplate.Api/PetTemplate.Api.csproj --no-restore -c Release
 
       - name: publish
         run: dotnet publish src/PetTemplate.Api/PetTemplate.Api.csproj --no-build -c Release -o ${{ env.PUBLISH_DIR }}
+
+      # Бандл миграций (спец. infrastructure, 8): собирается здесь, накатывается ниже —
+      # после тестов и до замены контейнера. Контекст ему даёт ApplicationContextFactory,
+      # без хоста API и его секретов. dotnet-ef — из манифеста dotnet-tools.json в корне
+      - name: migrations bundle
+        run: |
+          dotnet tool restore
+          dotnet ef migrations bundle --project src/PetTemplate.Db --startup-project src/PetTemplate.Api \
+            --configuration Release --output efbundle --force
 
       - name: copy Dockerfile
         run: cp src/PetTemplate.Api/Dockerfile ${{ env.PUBLISH_DIR }}/Dockerfile
@@ -96,6 +95,25 @@ jobs:
 
       - name: build docker image
         run: docker build --tag pettemplate-api:${{ steps.date.outputs.date }} ${{ env.PUBLISH_DIR }}
+
+      # Миграции — под владельцем базы (MIGRATIONS_DB_CONNECTION_STRING), а не под ролью API:
+      # у той только DML (IaC/postgres/init/01-app-user.sh). Бандл идёт в контейнере
+      # с рантаймом в сети базы — dbcontainer на хост порта не выставляет; строка — переменной
+      # без значения в `--env` (docker берёт её из окружения шага), чтобы не светиться в списке процессов. Упали миграции — старый
+      # контейнер не тронут. Старый API живёт, пока они идут: миграция обязана не ломать
+      # предыдущую версию кода (её же поднимает и rollback-api.yml — откат схему не откатывает)
+      - name: apply migrations 🗄️
+        env:
+          ConnectionStrings__AppConnection: ${{ secrets.MIGRATIONS_DB_CONNECTION_STRING }}
+        run: |
+          if [ -z "$ConnectionStrings__AppConnection" ]; then
+            echo "::error::секрет MIGRATIONS_DB_CONNECTION_STRING не задан (IaC/DEPLOYMENT.md, 6 и 9)"
+            exit 1
+          fi
+          docker run --rm --network nginx-proxy-man \
+            --env ConnectionStrings__AppConnection \
+            -v "$PWD/efbundle:/efbundle:ro" \
+            mcr.microsoft.com/dotnet/aspnet:10.0 /efbundle
 
       - name: remove old container
         run: docker rm -f dapi 2>/dev/null || true

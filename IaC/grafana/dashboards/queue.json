@@ -6,7 +6,7 @@
     "localqueue"
   ],
   "timezone": "browser",
-  "description": "Метрики очереди — CommandQueueMetrics (AddCommandQueueInstrumentation в Program.cs), имена как у LocalQueue.OpenTelemetry",
+  "description": "Метрики очереди команд — пакет AsuTrack.LocalQueue.OpenTelemetry (AddLocalCommandQueueInstrumentation в Program.cs, meter LocalQueue)",
   "schemaVersion": 39,
   "version": 1,
   "editable": true,

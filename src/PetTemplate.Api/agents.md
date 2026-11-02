@@ -155,21 +155,25 @@
 
 ## Очередь команд и письма
 
-Устройство — `specs/mail.md`, 4; почему очередь своя — `tech-debt/localqueue-postgres.md`.
+Устройство — `specs/mail.md`, 4; пакет — `AsuTrack.LocalQueue` (`specs/infrastructure.md`, 2.2).
 
 - Всё, что не должно ни теряться, ни выполняться в запросе (письмо), — **командой в очередь**:
   `db.Enqueue(command)` (`LocalQueueHandlers/CommandQueue`) до общего `SaveChanges` — команда
   ложится в `local_queue` той же транзакцией, что и доменное изменение (outbox). Отдельный
   `SaveChanges` на команду не делаем. Команда сериализует себя сама (`ToString()` — JSON)
-- Обработчик — `ICommandHandler<TCommand>` (сигнатура пакета `LocalQueue`), регистрация —
-  `AddCommandHandler<TCommand, THandler>(retryAfterFailure)` в `ServicesExtensions.AddCommandQueue`.
+- Обработчик — `LocalQueue.Processing.ICommandHandler<TCommand>` пакета, регистрация —
+  `h.Add<TCommand, THandler>(retryAfterFailure)` внутри `AddCommandQueueWorker(h => …)`
+  в `ServicesExtensions.AddCommandQueue` (`Workers/CommandQueueRegistration`). Упала — строка
+  прячется на `retryAfterFailure` (по умолчанию минута), и с каждой попыткой пауза удваивается
+  до `CommandQueueOptions.MaxRetryAfterFailure` (час); предела попыток нет — застрявшую команду
+  показывает тревога «Команда очереди не проходит».
   Исключение — повтор, поэтому обработчик идемпотентен: сам проверяет, что уже сделано
   (письмо — по `AccountToken.MailSentAtUtc`)
-- **Дорожки.** Обычная команда идёт общей дорожкой (один цикл). Команда, которая идёт минутами
-  и не должна ни ждать за чужими, ни держать их (ход ассистента), — своей:
-  `AddCommandQueueLane(new CommandQueueLane(имя, циклов, выборка, аренда))` и
-  `AddCommandHandler<…>(lane: имя)`. Обработчик долгой команды продлевает аренду своей строки
-  между шагами — `ICommandLease.Extend` (`tech-debt/localqueue-postgres.md`)
+- **Воркеры.** Обычная команда — в общий воркер (один цикл, `CommandQueueOptions`). Команда,
+  которая идёт минутами и не должна ни ждать за чужими, ни держать их (ход ассистента, сверка
+  модели), — своим воркером: ещё один `AddCommandQueueWorker(h => h.Add<…>(), workers, prefetchCount,
+  invisibilityTimeout)`. Обработчик долгой команды продлевает аренду своей строки между шагами —
+  `LocalQueue.Processing.ICommandLease.Extend(срок, ct)` пакета (вне воркера — ничего не делает)
 - Почта — только из обработчика очереди через `IMailSender`; тексты — `Mail/Templates/{ru,en}.json`
   на языке профиля (`Profile.Language`), никогда не на неподтверждённый адрес, кроме письма
   подтверждения. Ссылочный токен в очередь и в базу не кладём — только хеш (`AccountTokens`)
@@ -234,13 +238,13 @@
 Устройство — `specs/infrastructure.md`, 10: OpenTelemetry по OTLP, адрес — `OTEL_EXPORTER_OTLP_ENDPOINT`
 (без него API ничего не шлёт — так локально и в тестах).
 
-- Своя метрика — класс-синглтон со своим `Meter` (образец — `MailMetrics`, `CommandQueueMetrics`),
+- Своя метрика — класс-синглтон со своим `Meter` (образец — `MailMetrics`),
   имя метра — `PetTemplate.<Раздел>`, инструменты — `pettemplate.<раздел>.<что>`; метр
   подключается `AddMeter` в `Program.cs`, иначе до коллектора он не доедет
 - Метки — только с конечным набором значений (вид письма, тип команды): id пользователя
   или пространства в метке раздувает Prometheus
-- Очередь команд меряется сама (`CommandQueueMetrics`, имена — как у пакета `LocalQueue`):
-  новой команде метрики заводить не нужно
+- Очередь команд меряется пакетом (`AddLocalCommandQueueInstrumentation()` в `Program.cs`,
+  метр `LocalQueue`): новой команде метрики заводить не нужно
 
 ## Логирование и обработка ошибок
 

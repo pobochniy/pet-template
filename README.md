@@ -11,7 +11,7 @@
 
 ## Стек
 
-- **Бэкенд:** ASP.NET Core (.NET 10), EF Core, PostgreSQL 17 (Npgsql, snake_case)
+- **Бэкенд:** ASP.NET Core (.NET 10), EF Core, PostgreSQL 18 (Npgsql, snake_case)
 - **Поиск:** Qdrant и эмбеддер llama.cpp (`multilingual-e5-small`), полнотекст — PostgreSQL `tsvector`
 - **Клиент:** Angular
 - **Тесты:** xUnit v3, `WebApplicationFactory`, PostgreSQL и Qdrant в Testcontainers
@@ -66,7 +66,7 @@ npm run test:admin                # её тесты — свой прогон, �
 npm run build:admin               # её сборка со своим бюджетом (600 КБ)
 ```
 
-Тесты сервера — `dotnet test PetTemplate.slnx` (нужен запущенный Docker: тесты идут на настоящем
+Тесты сервера — `dotnet test --solution PetTemplate.slnx` (нужен запущенный Docker: тесты идут на настоящем
 PostgreSQL и Qdrant в Testcontainers, [`tests/PetTemplate.Tests/agents.md`](tests/PetTemplate.Tests/agents.md)).
 Тесты клиента — только headless: `npx ng test pet-template --watch=false --browsers=ChromeHeadless`
 в `src/PetTemplate.Web/web` (проект назван явно: второй в `angular.json` — админка).
@@ -93,26 +93,6 @@ git config core.hooksPath .githooks
 в `publish-api.yml`; тесты клиента — воротами выкатки клиента (`.github/workflows/web-tests.yml`).
 Полная таблица — `specs/infrastructure.md`, разделы 4–5. Обойти хук на один раз — `--no-verify`.
 
-### Пакеты из закрытого фида
-
-Пакеты очереди (`localqueue`, `LocalQueue.*`) лежат в GitHub Packages (`pobhub`
-в [`nuget.config`](nuget.config)). `packageSourceMapping` там же отправляет в `pobhub` только
-их, всё остальное restore берёт с `nuget.org`: пока проект пакетов очереди не использует
-(очередь писем своя до `LocalQueue.PostgreSql` — [`tech-debt/localqueue-postgres.md`](tech-debt/localqueue-postgres.md)),
-токен не нужен. Как только они появятся, учётные данные `nuget.config` возьмёт из переменных
-окружения — заведите их один раз в профиле оболочки (`~/.zshrc`):
-
-```bash
-export NUGET_GITHUB_USER=<логин GitHub>
-export NUGET_GITHUB_TOKEN=<classic personal access token со scope read:packages>
-```
-
-Токен — GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic),
-только `read:packages`. Источник `pobhub` в `nuget.config` перекрывает одноимённый из
-глобального `~/.nuget/NuGet/NuGet.Config`: без переменных restore с пустым кэшем упадёт
-с `401`, даже если глобально токен прописан. На раннере то же самое делает секрет
-`NUGET_GITHUB_TOKEN`.
-
 ### Ворота выкатки
 
 Красная ветка до прода не доезжает: проверки стоят в самих workflow выкатки. Выкатка —
@@ -125,7 +105,7 @@ export NUGET_GITHUB_TOKEN=<classic personal access token со scope read:package
 
 | Workflow | Что проверяет до выкатки |
 |---|---|
-| `publish-api.yml` | `dotnet test PetTemplate.slnx` — PostgreSQL через Testcontainers, в фоне параллельно сборке; упали — образ не собирается |
+| `publish-api.yml` | `dotnet test --solution PetTemplate.slnx` — PostgreSQL через Testcontainers, в фоне параллельно сборке; упали — образ не собирается |
 | `publish-angular.yml` | `web-tests.yml`; затем `npm run build`, которую роняет превышение `maximumError` бюджета бандла в `angular.json` |
 | `publish-admin.yml` | `web-tests.yml`; `ng build admin`, которую роняет превышение своего бюджета (`maximumError` 600 КБ) |
 | `web-tests.yml` | на облачном раннере (там есть Chrome): `i18n:check`, `i18n:lint`, `i18n:codes`, `ng test pet-template`, `ng test admin` |
@@ -193,22 +173,21 @@ dotnet new pet -n MyAwesomeProject -o folderName --domain myawesome.ru
 2. **Домен** — проект создан без `--domain`: домен сейчас `example.com`, заменить его поиском
    по всему репозиторию.
    DNS: A-записи домена, `www.`, `adminka.`, `grafana.` на виртуалку ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 3, 8, 11).
-3. **Пакеты из закрытого фида** — `NUGET_GITHUB_USER`/`NUGET_GITHUB_TOKEN` в профиле оболочки,
-   когда проект начнёт брать пакеты очереди (ниже, «Пакеты из закрытого фида»).
-4. **GitHub → Settings → Secrets and variables → Actions** ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6):
-   - секреты: `API_DB_CONNECTION_STRING`, `JWT_SIGNING_KEY`, `ADMIN_JWT_SIGNING_KEY` (другой,
+3. **GitHub → Settings → Secrets and variables → Actions** ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6):
+   - секреты: `API_DB_CONNECTION_STRING`, `MIGRATIONS_DB_CONNECTION_STRING` (владелец базы —
+     под ним выкатка накатывает миграции), `JWT_SIGNING_KEY`, `ADMIN_JWT_SIGNING_KEY` (другой,
      чем `JWT_SIGNING_KEY`), `SMTP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `VK_MINIAPP_PRIVATE_KEY`,
-     `ASSISTANT_API_KEY`, `NUGET_GITHUB_TOKEN` (`read:packages`; пуст — берётся `github.token`);
+     `ASSISTANT_API_KEY`;
      пустые `TELEGRAM_BOT_TOKEN`, `VK_MINIAPP_PRIVATE_KEY`, `SMTP_PASSWORD`, `ASSISTANT_API_KEY`
      выключают свою функцию, API стартует;
    - переменные: `TELEGRAM_BOT_ID`, `VK_ID_APP_ID`, `ASSISTANT_ENDPOINT`, `ASSISTANT_MODEL`,
      `ASSISTANT_TRANSCRIPTION_MODEL` — пустая выключает свою кнопку или функцию.
-5. **Сервер** — self-hosted runner, `IaC/.env` (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
+4. **Сервер** — self-hosted runner, `IaC/.env` (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
    `POSTGRES_EXPORTER_PASSWORD`), сертификат, первый админ, адреса замка админки —
    [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md) по порядку разделов.
-6. **Почта** — `MailOptions` в `src/PetTemplate.Api/appsettings.Release.json` и DNS-записи
+5. **Почта** — `MailOptions` в `src/PetTemplate.Api/appsettings.Release.json` и DNS-записи
    SPF/DKIM/DMARC ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6, «Почта»; `specs/mail.md`).
-7. **Telegram и VK** — бот, mini-app, приложение VK ID и адреса возврата
+6. **Telegram и VK** — бот, mini-app, приложение VK ID и адреса возврата
    ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6, «Вход через Telegram и VK»).
 
 ### Обновить

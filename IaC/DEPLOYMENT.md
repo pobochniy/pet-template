@@ -83,7 +83,7 @@ nginx при старте разрешает `dapi` из `proxy_pass` и чит�
 
 1. `docker compose up -d database qdrant embeddings certbot`, дождаться `healthy` у `database`
    (`docker compose ps`) — на пустом томе в этот момент заводятся пользователь приложения
-   (раздел 9, в логе — `01-app-user.sh: роль … — владелец базы …`) и пользователь
+   (раздел 9, в логе — `01-app-user.sh: … — владелец базы …, … — только DML`) и пользователь
    экспортёра метрик (раздел 11, `02-exporter-user.sh: роль … с pg_monitor`).
    `qdrantcontainer` обязателен до первого `Publish Api`: без Qdrant API не стартует
    (`specs/infrastructure.md`, 6). Эмбеддер — нет, но веса он качает при первом старте
@@ -164,13 +164,13 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 | Секрет | Переменная в контейнере | Значение |
 |---|---|---|
 | `API_DB_CONNECTION_STRING` | `ConnectionStrings__AppConnection` | `Host=dbcontainer;Port=5432;Database=pettemplatedb;Username=pettemplate_app;Password=…` — пользователь и пароль из `APP_DB_USER`/`APP_DB_PASSWORD` в `.env`, **не** `postgres` |
+| `MIGRATIONS_DB_CONNECTION_STRING` | — (шаг `apply migrations`) | то же, но `Username=pettemplate_owner;Password=…` из `APP_DB_OWNER`/`APP_DB_OWNER_PASSWORD`: миграции идут владельцем базы (раздел 9). Пусто — `Publish Api` останавливается до замены контейнера |
 | `JWT_SIGNING_KEY` | `JwtOptions__SigningKey` | `openssl rand -base64 48`; короче 32 байт API не стартует |
 | `ADMIN_JWT_SIGNING_KEY` | `AdminOptions__SigningKey` | Ключ админской схемы — **другой**, чем `JWT_SIGNING_KEY`: совпадение API на старте не пропускает (`specs/admin.md`, 3.3) |
 | `TELEGRAM_BOT_TOKEN` | `Telegram__BotToken` | Токен бота — им подписан `initData` mini-app Telegram (`specs/accounts.md`, 5.6). Входу на сайте токен не нужен. Пусто — вход из mini-app Telegram закрыт |
 | `VK_MINIAPP_PRIVATE_KEY` | `VkOptions__PrivateKey` | «Защищённый ключ» mini-app VK — им VK подписывает параметры запуска (5.6). Пусто — вход из mini-app VK закрыт |
 | `SMTP_PASSWORD` | `MailOptions__Password` | Пароль SMTP-ящика `info@` у провайдера (`specs/mail.md`, 5). Провайдер без авторизации — секрет пустой. Остальные поля почты (`Host`, `Port`, `UserName`, `From`, `PublicBaseUrl`) — в `appsettings.Release.json`; пустой `Host` — почта выключена, письма только пишутся в лог |
 | `ASSISTANT_API_KEY` | `AssistantOptions__Providers__main__ApiKey` | Ключ OpenAI-совместимого поставщика модели ассистента (`specs/assistant.md`, 16 и 17). Пусто — запрос уходит без ключа, и поставщик, которому ключ нужен, ответит отказом: ход кончится строкой «модель не отозвалась» |
-| `NUGET_GITHUB_TOKEN` | — (restore) | Токен GitHub с `read:packages` для фида `pobhub` |
 
 Ключи остальных внешних сервисов — тоже секретами, по той же схеме `Секция__Ключ`.
 
@@ -198,7 +198,7 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 `main`; второй поставщик (запасная модель другого сервиса) — ещё одна тройка `--env`
 `AssistantOptions__Providers__<код>__…` в обоих workflow и строка справочника с этим кодом.
 Провайдер-специфичные поля запроса (folder id и т. п.) — `AssistantOptions__Providers__<код>__ProviderOptions__<поле>`.
-Ходы ассистента идут своей дорожкой очереди команд в `AssistantOptions:Workers` потоков
+Ходы ассистента идут своим воркером очереди команд в `AssistantOptions:Workers` потоков
 (по умолчанию 2) и не ждут за письмами и реиндексом поиска.
 
 **Расход и лимиты ассистента** (`specs/assistant.md`, 13.5–13.6). Баланса нет — расход
@@ -252,7 +252,7 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 5. Проверка: вписать свою почту в профиле — письмо во «Входящих», в заголовках SPF, DKIM,
    DMARC — `pass`.
 
-Очередь писем пока живёт в процессе API поверх таблицы `local_queue` (`tech-debt/localqueue-postgres.md`):
+Очередь писем живёт в процессе API поверх таблицы `local_queue` (пакет `AsuTrack.LocalQueue`, `specs/mail.md`, 4):
 письма, не ушедшие до перезапуска, уходят после него — строки остаются в базе.
 
 ### 7. Деплой через GitHub Actions
@@ -349,42 +349,46 @@ curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<адрес сервера>
 
 ### 9. Пользователь приложения
 
-API ходит в базу не суперпользователем `postgres`, а своей ролью `APP_DB_USER`
-(`pettemplate_app`) (`specs/infrastructure.md`, 8 и 13).
+В базе две роли, и ни одна не суперпользователь `postgres` (`specs/infrastructure.md`, 8 и 13):
 
-**Как заводится.** Скрипт `postgres/init/01-app-user.sh` смонтирован в
+| Роль | Кто под ней ходит | Права |
+|---|---|---|
+| `APP_DB_OWNER` (`pettemplate_owner`) | бандл миграций в `Publish Api` (`MIGRATIONS_DB_CONNECTION_STRING`) | владелец базы и всех её объектов: DDL в своей схеме, `create extension citext` |
+| `APP_DB_USER` (`pettemplate_app`) | API (`API_DB_CONNECTION_STRING`) | только `SELECT/INSERT/UPDATE/DELETE` на таблицы и `USAGE, SELECT` на последовательности |
+
+**Как заводятся.** Скрипт `postgres/init/01-app-user.sh` смонтирован в
 `/docker-entrypoint-initdb.d`: образ postgres запускает его сам один раз — при первом старте
-на пустом томе `db-data`, сразу после создания базы `POSTGRES_DB`. Скрипт создаёт роль
-с паролем `APP_DB_PASSWORD` и делает её **владельцем базы**.
+на пустом томе `db-data`, сразу после создания базы `POSTGRES_DB`. Скрипт создаёт обе роли
+с паролями из `.env`, делает владельца владельцем базы, выдаёт роли API права на таблицы
+и `ALTER DEFAULT PRIVILEGES FOR ROLE` владельца — таблицы будущих миграций достаются API сами.
 
-**Какие права и почему.** Нужны все права на свою базу и ничего за её пределами — это владелец
-базы без атрибутов суперпользователя:
+**Почему так.** Миграции не накатывает API на старте: их накатывает бандл
+(`dotnet ef migrations bundle`) на шаге `apply migrations` — после тестов и до замены
+контейнера. Поэтому у API нет ни `DROP`, ни `ALTER`, ни `TRUNCATE`, ни `CREATE` в схеме:
+SQL-инъекция или ошибка в коде портит строки, но не схему. Ни у одной роли нет `SUPERUSER`,
+`CREATEDB`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS` — не создадут базу или роль, не включат
+недоверенное расширение, не прочтут файлы сервера (`pg_read_file`, `COPY … TO PROGRAM`),
+не тронут чужие базы.
 
-- может: всё со своей схемой `public` (в Postgres 15+ она принадлежит `pg_database_owner`,
-  то есть владельцу базы) — таблицы, индексы, `ALTER` и `DROP` в миграциях; `create extension
-  citext` (расширение доверенное, суперпользователь не нужен);
-- не может: `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS` — не создаст
-  базу или роль, не включит недоверенное расширение, не прочтёт файлы сервера
-  (`pg_read_file`, `COPY … TO PROGRAM`), не тронет чужие базы.
-
-Только DML (`SELECT/INSERT/UPDATE/DELETE`) роли API дать нельзя, пока миграции накатывает сам
-API при старте (`Program.cs`, `MigrateAsync`): тогда ему нужны и права на DDL. Разделение на
-владельца схемы для миграций и роль только с DML и `default privileges` —
-`tech-debt/db-app-role.md`.
+**Переход с шаблона v1**, где владельцем базы была роль API и миграции накатывал сам API:
+дописать `APP_DB_OWNER`/`APP_DB_OWNER_PASSWORD` в `.env`, пересоздать контейнер базы
+и запустить скрипт руками (ниже, «Сменить пароль») — он заведёт владельца, передаст ему базу
+и объекты (`REASSIGN OWNED`) и оставит роли API только DML. Затем — секрет
+`MIGRATIONS_DB_CONNECTION_STRING` и `Publish Api`.
 
 **Проверить**, что роль есть и пускает по паролю — тем же путём, что API, из другого
 контейнера сети:
 
 ```bash
 read -rsp 'APP_DB_PASSWORD: ' PGPASSWORD; export PGPASSWORD; echo
-docker run --rm --network nginx-proxy-man -e PGPASSWORD postgres:17 \
+docker run --rm --network nginx-proxy-man -e PGPASSWORD postgres:18 \
   psql "host=dbcontainer dbname=pettemplatedb user=pettemplate_app" \
   -c "select current_user, current_database();"
 unset PGPASSWORD
 ```
 
-**Сменить пароль** (или завести роль в базе, созданной без скрипта): поправить
-`APP_DB_PASSWORD` в `.env`, пересоздать контейнер, чтобы он увидел новое значение, и запустить
+**Сменить пароль** (или завести роли в базе, созданной без скрипта): поправить
+`APP_DB_PASSWORD` или `APP_DB_OWNER_PASSWORD` в `.env`, пересоздать контейнер, чтобы он увидел новое значение, и запустить
 скрипт руками — он идемпотентный, недостающее создаст, пароль выставит заново:
 
 ```bash
@@ -394,6 +398,7 @@ docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
 
 Потом — новый пароль в секрет `API_DB_CONNECTION_STRING` и `Rollback Api` с `latest`
 (или `Publish Api`): переменные окружения контейнер `dapi` получает только при создании.
+Пароль владельца — в `MIGRATIONS_DB_CONNECTION_STRING`, его читает следующий `Publish Api`.
 
 ### 10. Бэкап и восстановление базы
 
@@ -408,7 +413,7 @@ docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
 
 Дамп — тем `pg_dump`, что в контейнере (той же версии, что сервер), суперпользователем по
 сокету: вход доверенный, пароль не нужен и в аргументы не попадает. Владельцы объектов
-(`pettemplate_app`) в дампе сохраняются. Это же делает workflow `Backup Db` (дампы в
+(`pettemplate_owner`) и права роли API на них в дампе сохраняются. Это же делает workflow `Backup Db` (дампы в
 `~/db-backups`, последние `keep`). Вручную:
 
 ```bash
@@ -426,19 +431,37 @@ docker exec dbcontainer pg_dump -U postgres -d pettemplatedb -Fc > "$f" \
 docker stop dapi
 docker exec dbcontainer psql -U postgres -v ON_ERROR_STOP=1 \
   -c "drop database pettemplatedb with (force)" \
-  -c "create database pettemplatedb owner pettemplate_app"
+  -c "create database pettemplatedb owner pettemplate_owner"
 docker exec -i dbcontainer pg_restore -U postgres -d pettemplatedb \
   --exit-on-error --single-transaction < ~/db-backups/<файл>.dump
+docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
 docker start dapi
 ```
 
-- Роль `pettemplate_app` должна существовать до `pg_restore` — объекты в дампе принадлежат ей.
-  На новом сервере её заводит `01-app-user.sh` при первом `docker compose up -d database`
-  (`APP_DB_USER` в `.env` — то же имя, что было).
-- Имя роли другое — восстанавливать с `--no-owner --role=<новая роль>`: объекты станут её.
-  Просто `--no-owner` без `--role` отдаст их `postgres`, и миграции API упадут на
-  `permission denied` / `must be owner of table`.
+- Роли `pettemplate_owner` и `pettemplate_app` должны существовать до `pg_restore` — объекты
+  в дампе принадлежат владельцу, права на них выданы роли API. На новом сервере их заводит
+  `01-app-user.sh` при первом `docker compose up -d database` (`APP_DB_OWNER`, `APP_DB_USER`
+  в `.env` — те же имена, что были). Повторный запуск скрипта после восстановления выдаёт
+  права заново — на случай дампа шаблона v1, где владельцем была роль API.
+- Имя владельца другое — восстанавливать с `--no-owner --role=<новый владелец>`: объекты станут
+  его. Просто `--no-owner` без `--role` отдаст их `postgres`, и миграции упадут на
+  `must be owner of table`.
 - `--single-transaction` — либо дамп встал целиком, либо база осталась пустой.
+
+**Переход с PostgreSQL 17** (проект из шаблона v1). Каталог данных 17-й версии 18-я не
+поднимет, а образ 18 ещё и держит данные не в `/var/lib/postgresql/data`, а в `18/docker`
+под `/var/lib/postgresql` — поэтому и точка монтирования тома в `docker-compose.yml` другая.
+Путь — через дамп, тем же форматом, что выше:
+
+1. На старом `docker-compose.yml` (образ 17): `Backup Db` или дамп руками; `docker stop dapi`.
+2. `docker compose stop database`, переименовать или удалить том `iac_db-data`
+   (`docker volume rm iac_db-data` — только когда дамп проверен `pg_restore -f /dev/null`
+   и скачан).
+3. Новый `docker-compose.yml` (образ 18) и `.env` с `APP_DB_OWNER`/`APP_DB_OWNER_PASSWORD`:
+   `docker compose up -d database` — на пустом томе заведутся обе роли (раздел 9).
+4. Восстановление, как выше, — с повторным запуском `01-app-user.sh`: в дампе v1 объекты
+   принадлежат роли API, скрипт передаст их владельцу.
+5. Секрет `MIGRATIONS_DB_CONNECTION_STRING` и `Publish Api`.
 
 **Qdrant не бэкапится.** Векторный индекс целиком выводится из базы: точки — это чанки
 текстов сущностей, посчитанные эмбеддером. Пропал том `qdrant-data`, переехали на новый

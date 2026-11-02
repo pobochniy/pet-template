@@ -173,9 +173,12 @@ if [ ! -f "$ENV_FILE" ]; then
 POSTGRES_DB=pettemplatedb
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=change_me_postgres_password
-# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING)
+# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING), только DML
 APP_DB_USER=pettemplate_app
 APP_DB_PASSWORD=change_me_app_password
+# Владелец базы — под ним выкатка накатывает миграции (секрет MIGRATIONS_DB_CONNECTION_STRING)
+APP_DB_OWNER=pettemplate_owner
+APP_DB_OWNER_PASSWORD=change_me_owner_password
 
 # Порты
 # DB_PORT=5432   # только если раскомментирован ports у database (на 127.0.0.1)

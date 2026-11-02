@@ -42,7 +42,7 @@ public class MailWorker
         };
     }
 
-    private static LocalQueue Command(object command) => new()
+    private static Db.Entity.LocalQueue Command(object command) => new()
     {
         Id = Guid.CreateVersion7(),
         Data = command.ToString()!,
@@ -215,7 +215,7 @@ public class MailWorker
         Assert.Null((await db.AccountTokens.AsNoTracking().SingleAsync(x => x.Id == token.Id)).MailSentAtUtc);
     }
 
-    private static Task Processed(ApplicationContext db, LocalQueue command) =>
+    private static Task Processed(ApplicationContext db, Db.Entity.LocalQueue command) =>
         Until(async () => !await db.LocalQueue.AsNoTracking().AnyAsync(x => x.Id == command.Id));
 
     private static async Task Until(Func<Task<bool>> condition)

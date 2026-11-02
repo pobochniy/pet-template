@@ -38,7 +38,7 @@
       }
     ]
   },
-  "description": "grafana.com/dashboards/9628 — импорт, источник подставлен. Под одну машину без Kubernetes: переменные namespace и release убраны, instance — по pg_up. CPU, память и дескрипторы в первом ряду — процесса postgres-exporter, а не сервера. На PostgreSQL 17 счётчики bgwriter и checkpoint частью пусты: их перенесли в pg_stat_checkpointer и pg_stat_io",
+  "description": "grafana.com/dashboards/9628 — импорт, источник подставлен. Под одну машину без Kubernetes: переменные namespace и release убраны, instance — по pg_up. CPU, память и дескрипторы в первом ряду — процесса postgres-exporter, а не сервера. С PostgreSQL 17 счётчики bgwriter и checkpoint частью пусты: их перенесли в pg_stat_checkpointer и pg_stat_io",
   "editable": true,
   "gnetId": 9628,
   "graphTooltip": 0,

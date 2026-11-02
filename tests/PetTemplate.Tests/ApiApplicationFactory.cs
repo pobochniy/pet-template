@@ -21,10 +21,17 @@ public class ApiApplicationFactory<TStartup>(bool withQueueWorker = false) : Web
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        // Явно, а не по умолчанию WebApplicationFactory: вне Development Program.cs
-        // зовёт MigrateAsync(), а схема у тестов уже есть — база каждого теста скопирована
-        // из шаблонной, которую один раз мигрировал PostgresServer
+        // Явно, а не по умолчанию WebApplicationFactory: настройки — дев-машины
+        // (appsettings.Development.json), а не сервера. Схема у тестов уже есть — база
+        // каждого теста скопирована из шаблонной, которую один раз мигрировал PostgresServer
         builder.UseEnvironment("Development");
+
+        // Очередь без разбора: команды ложатся в local_queue и ждут проверки теста,
+        // обработчики остаются в контейнере (CommandQueueOptions.Enabled)
+        if (!withQueueWorker)
+        {
+            builder.UseSetting("CommandQueueOptions:Enabled", "false");
+        }
 
         builder.ConfigureServices(services =>
         {
@@ -43,13 +50,6 @@ public class ApiApplicationFactory<TStartup>(bool withQueueWorker = false) : Web
                 d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(QdrantInitializer));
 
             if (qdrant != null) services.Remove(qdrant);
-
-            if (withQueueWorker) return;
-
-            var queue = services.FirstOrDefault(d =>
-                d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(CommandQueueWorker));
-
-            if (queue != null) services.Remove(queue);
         });
     }
 }

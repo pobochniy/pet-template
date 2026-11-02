@@ -11,7 +11,7 @@
 
 services:
   webserver:
-    image: nginx:latest
+    image: nginx:1.30
     ports:
       - "${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_HTTPS_PORT:-443}:443"
@@ -30,7 +30,7 @@ services:
         ipv4_address: 172.30.255.2
 
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot:v5.9.0
     volumes:
       - ./certbot/www/:/var/www/certbot/:rw
       - ./certbot/conf/:/etc/letsencrypt/:rw
@@ -45,10 +45,11 @@ services:
   # 127.0.0.1: ufw докеру не указ (README.md, «Доступ к БД: ufw здесь не работает»)
   #
   # POSTGRES_* — суперпользователь и имя базы: читаются только при первом старте на пустом
-  # томе. API под ним не ходит — у API своя роль APP_DB_USER, её заводит скрипт из
-  # postgres/init (IaC/DEPLOYMENT.md, «Пользователь приложения»)
+  # томе. Ни API, ни миграции под ним не ходят: владелец базы APP_DB_OWNER (миграции)
+  # и роль API APP_DB_USER (только DML) заводит скрипт из postgres/init
+  # (IaC/DEPLOYMENT.md, «Пользователь приложения»)
   database:
-    image: postgres:17
+    image: postgres:18
     container_name: dbcontainer
     restart: always
     environment:
@@ -57,6 +58,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       APP_DB_USER: ${APP_DB_USER}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      APP_DB_OWNER: ${APP_DB_OWNER}
+      APP_DB_OWNER_PASSWORD: ${APP_DB_OWNER_PASSWORD}
       # Пользователь postgres-exporter (postgres/init/02-exporter-user.sh, ниже)
       POSTGRES_EXPORTER_USER: ${POSTGRES_EXPORTER_USER:-postgres_exporter}
       POSTGRES_EXPORTER_PASSWORD: ${POSTGRES_EXPORTER_PASSWORD:-}
@@ -65,7 +68,7 @@ services:
     networks:
       - nginx-proxy-man
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     # Через TCP, а не сокет: пока идёт первичная инициализация (initdb и скрипты
     # postgres/init), образ поднимает временный сервер только на сокете — по сокету
@@ -107,7 +110,7 @@ services:
   # отвечает тем, что нашёл по словам. Сменил модель — меняются размерность и имя
   # коллекции в SearchOptions и нужен полный реиндекс из админки (спец. search, 5)
   embeddings:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server-b11096
     container_name: embeddingscontainer
     restart: always
     command: >
