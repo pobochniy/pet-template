@@ -7,7 +7,7 @@
   (`403` постороннему, `specs/authorization.md`, 5).
 - Наружу едет `ProfileSummaryDto` (`id`, `userName`, `avatarId`), а не сущность `Profile`:
   ни почты, ни телефона, ни основного пространства про чужих
-  (`UsersProfilesTests.MembersListHasNoContacts`, как ASU `cdb054f`).
+  (`UsersProfilesTests.MembersListHasNoContacts`).
 - Списка «все пользователи системы» на клиенте нет; если он понадобится — только в админке
   («Аккаунты», `specs/admin.md`, 12).
 
@@ -21,5 +21,3 @@
 `workspaceId` без `[AuthorizePermissions]` — только из явного белого списка.
 
 Карточка чужого профиля и видимость полей — `profile-visibility.md`.
-
-По мотивам `Lad/tech-debt/profile-contacts.md` и ASU; решение «не трогать» не переносится.

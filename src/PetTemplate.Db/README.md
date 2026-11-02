@@ -26,10 +26,8 @@ cd src/PetTemplate.Api && dotnet run
 ```
 
 Порт `5432` стандартный: если на машине уже есть свой Postgres, поменяйте публикацию
-в `docker-compose.yml` и порт в строке вместе. Схемы в пустой базе пока не будет: старая
-миграция `Init` собрана под MySQL и исключена из сборки, пока её не пересобрали под
-PostgreSQL (ниже, «Первая миграция `Init`»); до тех пор схему поднимают только тесты
-через `EnsureCreated`.
+в `docker-compose.yml` и порт в строке вместе. В `Development` API миграции сам не накатывает —
+схему в пустую дев-базу поднимает `dotnet ef database update` (ниже, «Миграции»).
 
 ### Прод, изнутри докера
 
@@ -81,50 +79,17 @@ dotnet ef migrations script --startup-project src/PetTemplate.Api --project src/
 
 ### Первая миграция `Init`
 
-В `Migrations/` лежит `Init` старого шаблона под MySQL (Pomelo): без него она не компилируется
-и исключена из сборки (`<Compile Remove="Migrations/**" />` в `PetTemplate.Db.csproj`).
-Пока её не пересобрали, вне `Development` API зовёт `MigrateAsync()` впустую и на пустой
-базе не стартует, а тесты поднимают схему `EnsureCreated` — сломанную миграцию они не ловят.
-Пересборка — один раз, владельцем шаблона (или первым коммитом проекта, если шаблон
-дошёл до него без неё):
+`Init` собрана под PostgreSQL (Npgsql) и создаёт всю схему с нуля. Что в ней проверять
+глазами при пересборке (в `Migrations/*_Init.cs` и в SQL `migrations script`):
 
-1. Удалить старую миграцию целиком: `rm -rf src/PetTemplate.Db/Migrations`.
-2. В `src/PetTemplate.Db/PetTemplate.Db.csproj` убрать блок с комментарием про Pomelo —
-   `<ItemGroup>` с `<Compile Remove="Migrations/**" />` и `<None Include="Migrations/**" />`.
-3. Собрать новую из корня репозитория (база для этого не нужна — `migrations add` к ней
-   не ходит; `dotnet-ef` — глобальный инструмент, `dotnet tool update -g dotnet-ef`):
+- расширение `citext` — `CREATE EXTENSION IF NOT EXISTS citext` **до** первой таблицы;
+  `user_name` и `email` у `profiles` — `citext`;
+- уникальный индекс фактов памяти ассистента `assistant_facts` по
+  `(workspace_id, user_id, kind, key)` — `NULLS NOT DISTINCT` (`AssistantFact.OwnerKeyIndex`);
+- частичные индексы `WHERE status = 0` у `admin_jobs` и `assistant_runs` (`HasFilter`);
+- у `ai_models` нет колонки `version`/`xmin`: `xmin` — системная колонка Postgres;
+- имена таблиц, колонок и индексов — snake_case (`ix_…`, `pk_…`): по ним `DbErrors`
+  разбирает нарушения уникальности.
 
-   ```bash
-   dotnet ef migrations add Init --startup-project src/PetTemplate.Api --project src/PetTemplate.Db
-   ```
-
-4. Глазами — в `Migrations/*_Init.cs` и в SQL (`dotnet ef migrations script --startup-project
-   src/PetTemplate.Api --project src/PetTemplate.Db`):
-   - расширение `citext` — `AlterDatabase().Annotation("Npgsql:PostgresExtension:citext", …)`,
-     в SQL `CREATE EXTENSION IF NOT EXISTS citext` **до** первой таблицы; `user_name` и `email`
-     у `profiles` — `citext`;
-   - уникальный индекс фактов памяти ассистента `assistant_facts` по
-     `(workspace_id, user_id, kind, key)` — с `Npgsql:NullsDistinct = false`, в SQL
-     `NULLS NOT DISTINCT` (`AssistantFact.OwnerKeyIndex`);
-   - частичные индексы `WHERE status = 0` у `admin_jobs` и `assistant_runs` (`HasFilter`);
-   - у `ai_models` нет колонки `version`/`xmin`: `xmin` — системная колонка Postgres,
-     миграция её не создаёт;
-   - имена таблиц, колонок и индексов — snake_case (`ix_…`, `pk_…`): по ним `DbErrors`
-     разбирает нарушения уникальности.
-5. Тесты — со схемой из миграции, а не из модели:
-   - `tests/PetTemplate.Tests/Containers/PostgresServer.cs`, `CreateTemplateAsync` —
-     `EnsureCreatedAsync()` → `MigrateAsync()` (и комментарий над методом);
-   - `tests/PetTemplate.Tests/SetupApplication.cs` — убрать `db.Database.EnsureCreated()`
-     с комментарием: на базе с историей миграций он молча ничего не делает;
-   - `ApiApplicationFactory` оставить в `Development` (старт API не зовёт `MigrateAsync()`,
-     схема уже в копии шаблонной базы), поправить в нём комментарий про отсутствие миграций;
-   - тесты поиска менять не нужно: `TestNotesContext.CreateTable` зовёт
-     `IRelationalDatabaseCreator.CreateTablesAsync` — создаёт по своей модели только
-     `test_notes` и на историю миграций не смотрит, поэтому на мигрированной базе работает
-     так же, как на созданной `EnsureCreated`. Таблица остаётся вне миграции и вне шаблонной базы.
-6. `dotnet build PetTemplate.slnx` и `dotnet test PetTemplate.slnx` — зелёные; локально
-   `dotnet ef database update --startup-project src/PetTemplate.Api --project src/PetTemplate.Db`
-   на пустую дев-базу и `dotnet run` API — стартует.
-7. Убрать упоминания «до пересборки `Init`»: этот раздел и абзац о пустой схеме выше,
-   `tests/PetTemplate.Tests/agents.md` («Схема раскатывается один раз»), `AiModelSeeder`,
-   `specs/infrastructure.md` (3.1 и 13, «Не реализовано», пункт 1).
+Тесты раскатывают схему этой же миграцией (`MigrateAsync` в
+`tests/PetTemplate.Tests/Containers/PostgresServer.cs`), так что сломанную миграцию ловит прогон.

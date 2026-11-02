@@ -190,15 +190,12 @@ dotnet new pet -n MyAwesomeProject -o folderName --domain myawesome.ru
    ```bash
    cd folderName && git init && git config core.hooksPath .githooks
    ```
-2. **Первая миграция `Init`**, если шаблон пришёл без неё (в `src/PetTemplate.Db/Migrations`
-   лежит MySQL-версия, исключённая из сборки) — `src/PetTemplate.Db/README.md`,
-   «Первая миграция `Init`». Без неё API на пустой боевой базе не стартует.
-3. **Домен** — проект создан без `--domain`: домен сейчас `example.com`, заменить его поиском
+2. **Домен** — проект создан без `--domain`: домен сейчас `example.com`, заменить его поиском
    по всему репозиторию.
    DNS: A-записи домена, `www.`, `adminka.`, `grafana.` на виртуалку ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 3, 8, 11).
-4. **Пакеты из закрытого фида** — `NUGET_GITHUB_USER`/`NUGET_GITHUB_TOKEN` в профиле оболочки,
+3. **Пакеты из закрытого фида** — `NUGET_GITHUB_USER`/`NUGET_GITHUB_TOKEN` в профиле оболочки,
    когда проект начнёт брать пакеты очереди (ниже, «Пакеты из закрытого фида»).
-5. **GitHub → Settings → Secrets and variables → Actions** ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6):
+4. **GitHub → Settings → Secrets and variables → Actions** ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6):
    - секреты: `API_DB_CONNECTION_STRING`, `JWT_SIGNING_KEY`, `ADMIN_JWT_SIGNING_KEY` (другой,
      чем `JWT_SIGNING_KEY`), `SMTP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `VK_MINIAPP_PRIVATE_KEY`,
      `ASSISTANT_API_KEY`, `NUGET_GITHUB_TOKEN` (`read:packages`; пуст — берётся `github.token`);
@@ -206,12 +203,12 @@ dotnet new pet -n MyAwesomeProject -o folderName --domain myawesome.ru
      выключают свою функцию, API стартует;
    - переменные: `TELEGRAM_BOT_ID`, `VK_ID_APP_ID`, `ASSISTANT_ENDPOINT`, `ASSISTANT_MODEL`,
      `ASSISTANT_TRANSCRIPTION_MODEL` — пустая выключает свою кнопку или функцию.
-6. **Сервер** — self-hosted runner, `IaC/.env` (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
+5. **Сервер** — self-hosted runner, `IaC/.env` (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
    `POSTGRES_EXPORTER_PASSWORD`), сертификат, первый админ, адреса замка админки —
    [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md) по порядку разделов.
-7. **Почта** — `MailOptions` в `src/PetTemplate.Api/appsettings.Release.json` и DNS-записи
+6. **Почта** — `MailOptions` в `src/PetTemplate.Api/appsettings.Release.json` и DNS-записи
    SPF/DKIM/DMARC ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6, «Почта»; `specs/mail.md`).
-8. **Telegram и VK** — бот, mini-app, приложение VK ID и адреса возврата
+7. **Telegram и VK** — бот, mini-app, приложение VK ID и адреса возврата
    ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6, «Вход через Telegram и VK»).
 
 ### Обновить

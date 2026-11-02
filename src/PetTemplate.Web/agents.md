@@ -5,7 +5,7 @@ trigger: always_on
 You are an expert in TypeScript, Angular, and scalable web application development. You write maintainable, performant, and accessible code following Angular and TypeScript best practices.
 
 Клиент — `src/PetTemplate.Web/web`, проект `pet-template` в `angular.json` (имя `dotnet new`
-не переименовывает). Образцы и подробные причины решений — Lad и ASU (тот же стек и движок i18n).
+не переименовывает).
 
 ## Angular 20 & Project Structure
 - Angular 20, builder `@angular/build` (esbuild). Zone.js нет вовсе — ни в сборке, ни в тестах.
@@ -100,7 +100,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 ## TypeScript Best Practices
 
 - Use strict type checking: `strict` (вместе с `strictNullChecks`) включён, шаблоны проверяются
-  `strictTemplates` и `typeCheckHostBindings`, `module: preserve` (`tsconfig.json` — как у Lad).
+  `strictTemplates` и `typeCheckHostBindings`, `module: preserve` (`tsconfig.json`).
 - `null`/`undefined` — через `?.` и `??` или проверку с ранним выходом. `!` — только
   с комментарием, почему значение здесь точно есть.
 - `tsconfig.app.json` берёт все `src/**/*.ts`, кроме спек: файл, на который нет импорта,
@@ -223,7 +223,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 
 Корневые сервисы переживают выход: следующий пользователь в той же вкладке до первого
 ответа сервера видел бы данные предыдущего. Поэтому уборка идёт через реестр
-`SessionResetService` (`shared/core/session-reset.service.ts`, образец — Lad и ASU),
+`SessionResetService` (`shared/core/session-reset.service.ts`),
 а не прямыми вызовами из кнопки «Выйти». Сама сессия — токен (`TokenService`), профиль
 и права по пространствам (`UserService`), активное пространство (`WorkspaceContextService`),
 права в нём (`PermissionsService`) — в реестр не пишется: её обнуляет `UserService`.
@@ -246,7 +246,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
   это второй экземпляр мимо общей конфигурации. Исключение — `provideIcons(...)` (см. «Иконки»).
 - Интерцепторы — функции (`HttpInterceptorFn`) в `withInterceptors([...])`, а не классы.
 - **Подмены под запуск без бэкенда нет.** Раньше `environment.useMockApi` подставлял моки
-  в сборку; убран (как в ASU): моки расходились с сервером и молча показывали не то, что покажет
+  в сборку; убран: моки расходились с сервером и молча показывали не то, что покажет
   прод, а проверка поведения и так лежит на тестах. Посмотреть экран руками — поднимается
   настоящий бэкенд, дев-сервер ходит в него через `proxy.conf.json`.
 
@@ -295,8 +295,6 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - Закрытие — через `(click)` → `remove`, не `data-bs-dismiss`.
 
 ## 🌍 Язык интерфейса (i18n)
-
-Образец и подробные причины решений — проект Lad (тот же движок, через ASU).
 
 ### Quick Reference
 

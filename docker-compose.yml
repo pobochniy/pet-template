@@ -28,7 +28,7 @@ services:
   # multilingual-e5-small в Q8 (126 МБ весов, 384 измерения). Веса сервер качает сам
   # с Hugging Face при первом старте в том embeddings_cache_pettemplate — на весь
   # /root/.cache: нынешние сборки кладут веса в huggingface/, прежние — в llama.cpp/
-  # (у Lad и ASU том стоит на llama.cpp/, и веса качаются заново). API ходит сюда по
+  # (том только на llama.cpp/ качал бы веса заново). API ходит сюда по
   # SearchOptions:EmbeddingsEndpoint (appsettings.json, http://localhost:8080/v1); порт —
   # только на 127.0.0.1. Не запущен — индексация ждёт в очереди, поиск идёт по словам
   embeddings:

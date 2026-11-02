@@ -8,7 +8,7 @@
 
 Подняты вместе с телеметрией (`specs/infrastructure.md`, 10):
 
-- `OpenTelemetry*` 1.15.0 → 1.20.1 — одна линейка, как в ASU; уязвимость `OpenTelemetry.Api` ушла.
+- `OpenTelemetry*` 1.15.0 → 1.20.1 — одна линейка; уязвимость `OpenTelemetry.Api` ушла.
 - `Microsoft.OpenApi` 2.4.1 → 2.7.5 — исправление GHSA-v5pm-xwqc-g5wc в ветке 2.x. На 3.x
   не переходили: Swashbuckle 10 собран под 2.x; `/swagger/v1/swagger.json` отдаётся.
 

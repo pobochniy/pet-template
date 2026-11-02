@@ -42,7 +42,7 @@ public class UsersProfilesTests
 
     /// <summary>
     /// Почта и телефон участника — только в его собственном профиле: в ответе списка
-    /// этих полей нет вовсе, а не просто пусто (как ASU <c>cdb054f</c>)
+    /// этих полей нет вовсе, а не просто пусто
     /// </summary>
     [Fact]
     public async Task MembersListHasNoContacts()

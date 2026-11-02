@@ -1,8 +1,8 @@
 # Bootstrap целиком или поштучно через `@import`
 
-Шаблон, как Lad и ASU, собирает Bootstrap поштучно — `src/PetTemplate.Web/web/src/bootstrap.scss`
-(стили 230.98 → 110.18 КБ). Бюджет прижал: с `bootstrap.min.css` initial был 518 КБ, а ориентир
-ASU — 480 (`bundle.md`). Цена — `@import`, который уезжает в Dart Sass 3.0, и
+Шаблон собирает Bootstrap поштучно — `src/PetTemplate.Web/web/src/bootstrap.scss`
+(стили 230.98 → 110.18 КБ). Бюджет прижал: с `bootstrap.min.css` initial был 518 КБ, а ошибка
+бюджета — 410 (`bundle.md`). Цена — `@import`, который уезжает в Dart Sass 3.0, и
 `silenceDeprecations: ["import"]` в `angular.json` у `build` и `test`. Это выбор между двумя
 долгами; ниже — цена каждого и путь назад.
 
@@ -10,7 +10,7 @@ ASU — 480 (`bundle.md`). Цена — `@import`, который уезжает
 
 | Сборка | minified | gzip |
 |---|---|---|
-| поштучный `@import` (Lad, ASU) | 123 КБ | 19 КБ |
+| поштучный `@import` | 123 КБ | 19 КБ |
 | весь Bootstrap (исходный шаблон; то же даёт `@use "bootstrap/scss/bootstrap"`) | 230 КБ | 31 КБ |
 
 ## Поштучная сборка: что пришло вместе с ней
@@ -63,12 +63,10 @@ Dart Sass 3.0 приедет только вместе с мажором Angular
 
 ## План
 
-На Bootstrap 6 не переходим (решение ASU 2026-10-29) — остаёмся на 5.3.
+На Bootstrap 6 не переходим (решение владельца 2026-10-29) — остаёмся на 5.3.
 
 1. ~~Пока бюджет позволяет — `bootstrap.min.css` целиком, флага нет.~~
-2. Бюджет прижал — поштучный `src/bootstrap.scss` из Lad/ASU с флагом `silenceDeprecations`. **Сейчас здесь.**
+2. Бюджет прижал — поштучный `src/bootstrap.scss` с флагом `silenceDeprecations`. **Сейчас здесь.**
 3. Мажор Angular потянет Sass 3.0 — сначала `overrides` в `package.json` на последний
    `sass@1`; не проходит — назад к `bootstrap.min.css`, свои цвета — переменными `--bs-*`,
    бюджет пересмотреть, флаг из `angular.json` убрать.
-
-Перенесено из `Lad/tech-debt/sass-import.md` через ASU.

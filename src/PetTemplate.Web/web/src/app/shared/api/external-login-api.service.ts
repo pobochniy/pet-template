@@ -7,7 +7,7 @@ import { I18nService } from '../i18n/i18n.service';
 
 /**
  * Вход через Telegram и VK (спец. accounts, 5): параметры площадок, вход с сайта и вход
- * из mini-app. Отдельно от `AuthApiService`, как в ASU: экраны входа через площадки
+ * из mini-app. Отдельно от `AuthApiService`: экраны входа через площадки
  * ленивые, и их код уезжает в свои чанки (`tech-debt/bundle.md`). Сессию раскладывает
  * экран — `UserService.applySession`. Заводится вместе с `external-login-api.service.mock.ts`.
  *

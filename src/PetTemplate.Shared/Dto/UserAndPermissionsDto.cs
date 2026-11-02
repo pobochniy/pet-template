@@ -20,7 +20,7 @@ public class UserAndPermissionsDto : IValidatableObject
     /// <summary>
     /// Пустой набор — это уже не участник; убирают участника отдельным действием
     /// (<c>Workspace/RemoveMember</c>). Видно из самого запроса, поэтому <c>422</c>
-    /// у поля, а не <c>400</c> из сервиса (как ASU <c>d4c86fc</c>)
+    /// у поля, а не <c>400</c> из сервиса
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

@@ -106,8 +106,8 @@ function* walk(dir) {
 /** @param {string} file @param {string} text */
 function checkTemplate(file, text) {
   // Комментарии убираем целиком: в них объясняют решения, и по-русски
-  // Инлайновый `<script>` — код, а не текст. Сейчас в `index.html` его нет, но вырезается
-  // заранее: лексер у шаблона, ASU и Lad один, и скрипт до старта Angular не должен ронять проверку
+  // Инлайновый `<script>` — код, а не текст (в `index.html` так снимаются параметры mini-app
+  // до старта Angular): вырезается целиком, чтобы не ронять проверку
   const clean = text
     .replace(/<!--[\s\S]*?-->/g, match => match.replace(/[^\n]/g, ' '))
     .replace(/<script\b[\s\S]*?<\/script>/g, match => match.replace(/[^\n]/g, ' '));

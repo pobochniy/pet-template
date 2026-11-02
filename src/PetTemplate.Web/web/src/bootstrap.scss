@@ -2,7 +2,7 @@
 @use "sass:map";
 @use "sass:meta";
 
-// Точечная сборка Bootstrap 5.3 вместо bootstrap.min.css (образец — Lad и ASU).
+// Точечная сборка Bootstrap 5.3 вместо bootstrap.min.css.
 //
 // Как пользоваться: нужен компонент — раскомментируй его строку в блоке
 // "Компоненты" и пересобери. Больше ничего делать не нужно.
@@ -47,7 +47,7 @@
 // @import "bootstrap/scss/transitions"; // .fade, .collapse
 // @import "bootstrap/scss/dropdown";    // .dropdown-*
 // @import "bootstrap/scss/nav";         // .nav, .nav-link
-// @import "bootstrap/scss/list-group";  // .list-group — в ASU урезан подменой переменных вокруг импорта
+// @import "bootstrap/scss/list-group";  // .list-group
 // @import "bootstrap/scss/progress";    // .progress-bar
 // @import "bootstrap/scss/modal";       // .modal-*
 // @import "bootstrap/scss/images";      // .img-fluid, .figure

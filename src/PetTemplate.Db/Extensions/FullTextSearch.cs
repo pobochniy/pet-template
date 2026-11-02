@@ -7,7 +7,7 @@ namespace PetTemplate.Db.Extensions;
 
 /// <summary>
 /// Полнотекстовая половина гибридного поиска (спец. search, 7) — PostgreSQL <c>tsvector</c>
-/// с GIN-индексом вместо MySQL <c>FULLTEXT</c> из Lad и ASU (спец. infrastructure, 3.1).
+/// с GIN-индексом (спец. infrastructure, 3.1).
 ///
 /// Колонка вычисляемая (<c>GENERATED ALWAYS AS (to_tsvector(...)) STORED</c>): её пишет сама
 /// база при каждой вставке и правке, и забыть обновить её коду нечем. Индекс один, без
@@ -50,9 +50,8 @@ public static class FullTextSearch
     }
 
     /// <summary>
-    /// Запрос «любое из слов» для <c>websearch_to_tsquery</c>: как natural language mode у
-    /// MySQL <c>MATCH … AGAINST</c> в Lad и ASU, а не «все слова сразу», как по умолчанию
-    /// у PostgreSQL. Полнотекстовая половина — про полноту: порядок выдачи решает
+    /// Запрос «любое из слов» для <c>websearch_to_tsquery</c>, а не «все слова сразу»,
+    /// как по умолчанию у PostgreSQL. Полнотекстовая половина — про полноту: порядок выдачи решает
     /// <c>ts_rank</c>, а запись с одним словом из трёх в слиянии всё равно уступит найденной
     /// и вектором. <c>websearch_to_tsquery</c> не падает на кавычках, минусах и прочем
     /// вводе человека — синтаксической ошибки у запроса быть не может.

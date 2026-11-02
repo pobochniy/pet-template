@@ -1,8 +1,7 @@
 # Спецификация: репозиторий, проверки и выкатка
 
 Как код проекта из шаблона PetTemplate доезжает до прода: устройство репозитория, ворота до коммита
-и до выкатки, workflow GitHub Actions, инфраструктура виртуальной машины (`IaC/`). Образцы — проекты
-Lad (`README.md`, `IaC/`, `.github/workflows/`, `.githooks/`) и ASU; отличия — раздел 12.
+и до выкатки, workflow GitHub Actions, инфраструктура виртуальной машины (`IaC/`). Решения шаблона — раздел 12.
 
 > **Статус.** Описывает то, что лежит в репозитории шаблона. Чего нет или что сделано не до
 > конца — раздел 13. Своего прода у шаблона нет: «прод» здесь — сервер проекта, созданного
@@ -14,8 +13,7 @@ Lad (`README.md`, `IaC/`, `.github/workflows/`, `.githooks/`) и ASU; отлич
 
 Шаблон отдаёт проекту не только код, но и путь до прода: хуки, ворота выкатки, workflow
 и описание одной виртуальной машины, на которой живут API, клиент, база, поиск и телеметрия.
-Проект из шаблона в первый же день выкатывается тем же способом, что Lad и ASU, и не изобретает
-его заново.
+Проект из шаблона в первый же день выкатывается готовым способом и не изобретает его заново.
 
 - **Красная ветка до прода не доезжает.** Проверки стоят в самих workflow выкатки,
   а не в отдельном «CI», на который можно не посмотреть: упали тесты — образ не собирается,
@@ -63,9 +61,9 @@ Lad (`README.md`, `IaC/`, `.github/workflows/`, `.githooks/`) и ASU; отлич
 </Solution>
 ```
 
-Папки решения совпадают с каталогами на диске: как в Lad, `src/` и `tests/` лежат физически;
+Папки решения совпадают с каталогами на диске: `src/` и `tests/` лежат физически;
 клиент — в `src/PetTemplate.Web/web` (раньше лежал в корневом `PetTemplate.Web/`). Проект
-тестов один — `PetTemplate.Tests`, как `Lad.Tests`. Пути знают workflow, `Dockerfile`, хуки,
+тестов один — `PetTemplate.Tests`. Пути знают workflow, `Dockerfile`, хуки,
 скрипты i18n клиента (`src/PetTemplate.Web/web/tools/*.mjs`, корень репозитория — три уровня
 вверх от `web/`), `template.json` и ссылки в документах.
 
@@ -80,7 +78,7 @@ Lad (`README.md`, `IaC/`, `.github/workflows/`, `.githooks/`) и ASU; отлич
 ### 2.2 `nuget.config`
 
 Пакеты `localqueue`, `LocalQueue.*`, `LocalQueue.OpenTelemetry` лежат в закрытом фиде
-GitHub Packages (`nuget.pkg.github.com/pobochniy`). `nuget.config` в корне — как в Lad:
+GitHub Packages (`nuget.pkg.github.com/pobochniy`). `nuget.config` в корне:
 `nuget.org` плюс `pobhub` с учётными данными из переменных `NUGET_GITHUB_USER` /
 `NUGET_GITHUB_TOKEN`; в workflow — секрет `NUGET_GITHUB_TOKEN` (или `github.token`, если у него
 есть `read:packages`). `packageSourceMapping` отправляет в `pobhub` только `localqueue`
@@ -116,9 +114,8 @@ GitHub Packages (`nuget.pkg.github.com/pobochniy`). `nuget.config` в корне
   `*.DotSettings.user`, `.DS_Store`. В проект из шаблона они тоже не копируются — `exclude`
   в `.template.config/template.json`.
 - **Файлов сервера** — `IaC/nginx/conf/admin-allow.inc`, `admin-allow-open.inc`, `.env`.
-- **Мёртвых файлов.** Остатки проекта, из которого вырос шаблон (игра «дурак»:
-  `NoBetWithBotsAttribute`, домен `durak-test.ru`), закомментированный код,
-  `Migrations/Helper.txt` и `.vscode` на несуществующие проекты удалены.
+- **Мёртвых файлов.** Закомментированный код, `Migrations/Helper.txt` и `.vscode`
+  на несуществующие проекты удалены.
 
 ---
 
@@ -136,13 +133,12 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 (`specs/admin.md`, раздел 4).
 
 Подключение к базе в трёх случаях (локально, с прода изнутри докера, с прода через SSH-туннель)
-описано в `src/PetTemplate.Db/README.md` по образцу `Lad/src/Lad.Db/README.md`: главный
+описано в `src/PetTemplate.Db/README.md`: главный
 источник путаницы — хост и порт, `localhost:<порт дев-базы>` верен ровно для одного из трёх.
 
-### 3.1 PostgreSQL вместо MySQL
+### 3.1 PostgreSQL
 
-Lad и ASU живут на MySQL, шаблон — на PostgreSQL. Всё, что зависит от СУБД, переведено,
-а не скопировано:
+База шаблона — PostgreSQL. Что от этого зависит:
 
 - **Провайдер** — `Npgsql.EntityFrameworkCore.PostgreSQL`, `UseNpgsql(...)`
   (`ServicesExtensions.AddDbContext`).
@@ -150,41 +146,33 @@ Lad и ASU живут на MySQL, шаблон — на PostgreSQL. Всё, чт
   `.UseSnakeCaseNamingConvention()` рядом с `UseNpgsql`. C#-модель остаётся PascalCase.
   Имена ограничений тоже snake_case (`pk_users`, `ix_users_user_name`). Ручной SQL
   в `IaC/DEPLOYMENT.md`, дашбордах и workflow — без кавычек, snake_case.
-- **Уникальность.** Нарушение — `PostgresException.SqlState == "23505"` вместо MySQL 1062;
-  какое ограничение — по `ConstraintName`. `DbErrors` сверяет его с именами шаблона, а не ASU.
+- **Уникальность.** Нарушение — `PostgresException.SqlState == "23505"`;
+  какое ограничение — по `ConstraintName`. `DbErrors` сверяет его с именами ограничений шаблона.
   Правило — в `src/PetTemplate.Api/agents.md`.
-- **Регистр — `citext`.** У MySQL сравнение строк по умолчанию регистронезависимое,
-  у Postgres — нет. Колонки, которые сравниваются без учёта регистра (логин `user_name`,
+- **Регистр — `citext`.** Postgres сравнивает строки с учётом регистра. Колонки, которые сравниваются без учёта регистра (логин `user_name`,
   почта `email`), — типа `citext`: `HasPostgresExtension("citext")` в `ApplicationContext`,
-  `.HasColumnType("citext")` у свойства. Так переносимый из Lad/ASU код, полагавшийся
-  на collation MySQL (`==`, `Contains`, `StartsWith`, уникальный индекс), работает без изменений:
-  `Masha` и `masha` — один логин, `ix_profiles_user_name` их не пустит. Отдельная колонка
-  `NormalizedUserName` (как в Lad) с `citext` не нужна — сравнения идут по `UserName`,
+  `.HasColumnType("citext")` у свойства. Так `==`, `Contains`, `StartsWith` и уникальный индекс
+  не учитывают регистр без особого кода: `Masha` и `masha` — один логин,
+  `ix_profiles_user_name` их не пустит. Отдельная колонка `NormalizedUserName` с `citext` не нужна — сравнения идут по `UserName`,
   а нормализация `UserNameRule` остаётся только правилом ввода. Длину у `citext` база
   не держит — её держит валидация DTO.
 - **Время.** `timestamptz` у Npgsql требует `DateTime.Kind = Utc` (запись `Local`
   падает `ArgumentException`), читается обратно тоже `Utc` — все `DateTime` в сущностях
-  и сервисах в UTC (`DateTime.UtcNow`). MySQL-специфичного (`longtext`/`mediumtext`/`longblob`,
-  `datetime(6)`, `json`, `HasCharSet`, collation, `ON UPDATE CURRENT_TIMESTAMP`) в модели нет:
-  вместо `longtext` — `text`, вместо `longblob` — `bytea`, вместо `json` — `jsonb`.
-- **Конкуренция — `xmin`.** Замена `ON UPDATE CURRENT_TIMESTAMP` и `[Timestamp]`-колонок:
-  системная колонка Postgres `xmin` меняется при каждом обновлении строки сама. В сущности —
+  и сервисах в UTC (`DateTime.UtcNow`). Длинный текст — `text`, двоичное — `bytea`, JSON — `jsonb`.
+- **Конкуренция — `xmin`.** Своей колонки версии нет: системная колонка Postgres `xmin` меняется при каждом обновлении строки сама. В сущности —
   `public uint Version { get; set; }`, в конфигурации — `builder.Property(x => x.Version).IsRowVersion();`
   (Npgsql сопоставит с `xmin`, в таблицу колонка не добавляется; пример — `AiModel`). Конфликт —
   `DbUpdateConcurrencyException`. Токен по своему полю (`IsConcurrencyToken()` на `Status`,
-  как у `AdminInvitation` в Lad) переносится как есть — он от СУБД не зависит. Правило —
+  как у `AdminInvitation`) от СУБД не зависит. Правило —
   в `src/PetTemplate.Api/agents.md`.
-- **Первой миграции под PostgreSQL нет.** `Migrations/Init` собрана под MySQL (Pomelo) и без
-  него не компилируется — исключена из сборки (`<Compile Remove="Migrations/**" />` в
-  `PetTemplate.Db.csproj`), файлы лежат до пересборки `Init` под PostgreSQL. Пока её нет,
-  схему поднимают только тесты через `EnsureCreated`; `dotnet run` против пустой базы схемы
-  не создаёт, а `MigrateAsync` на проде (раздел 6) накатывать нечего. Раздел 13; шаги
-  пересборки — `src/PetTemplate.Db/README.md`, «Первая миграция `Init`».
+- **Миграции.** Начальная `Init` собрана под PostgreSQL (Npgsql) и создаёт всю схему;
+  на проде её накатывает `MigrateAsync` (раздел 6), тесты раскатывают ею шаблонную базу.
+  Что проверять в ней — `src/PetTemplate.Db/README.md`, «Первая миграция `Init`».
 - **Тесты** — Testcontainers `PostgreSql`, один сервер на прогон, каталог данных в tmpfs,
   `fsync=off`, `synchronous_commit=off`, `full_page_writes=off`; база каждого теста — копия
   базы-шаблона со схемой (`CREATE DATABASE … TEMPLATE`, `tests/PetTemplate.Tests/Containers/PostgresServer.cs`;
   `tech-debt/test-schema-per-test.md`). Qdrant — свой контейнер (`QdrantServer.cs`).
-- **Полнотекст** — вычисляемая колонка `tsvector` с GIN-индексом вместо MySQL FULLTEXT,
+- **Полнотекст** — вычисляемая колонка `tsvector` с GIN-индексом,
   словари `russian` (`FullTextSearch` в `src/PetTemplate.Db/Extensions`, `specs/search.md`, 7).
 
 ---
@@ -237,7 +225,7 @@ Lad и ASU живут на MySQL, шаблон — на PostgreSQL. Всё, чт
 
 ## 6. Выкатка API
 
-`publish-api.yml`, по образцу Lad/ASU:
+`publish-api.yml`:
 
 0. `HelpCheck lint` — справка с техническими словами останавливает выкатку сразу
    (`specs/help.md`, 6.4).
@@ -266,9 +254,8 @@ Lad и ASU живут на MySQL, шаблон — на PostgreSQL. Всё, чт
 
 **Миграции накатывает само приложение** при старте вне `Development` (`MigrateAsync`
 в `Program.cs`) — отдельного шага нет. Поэтому миграции пишутся expand → датафикс → contract:
-каждая выкатка не ломает прод, а откат образа не требует отката схемы. Начальной миграции `Init`
-под PostgreSQL пока нет (3.1, раздел 13): тесты поднимают схему через `EnsureCreated`,
-а на пустой боевой базе схема не создастся, пока `Init` не пересобран.
+каждая выкатка не ломает прод, а откат образа не требует отката схемы. На пустой боевой базе
+всю схему создаёт начальная миграция `Init` (3.1).
 
 **Qdrant обязателен, как база** (через него идёт поиск по смыслу, `specs/search.md`):
 `QdrantInitializer` на старте создаёт коллекции и без Qdrant роняет API — так и задумано.
@@ -297,7 +284,7 @@ Lad и ASU живут на MySQL, шаблон — на PostgreSQL. Всё, чт
 
 Версии клиента у шаблона нет: ни `client-version.ts`, ни заголовка `X-Client-Version`, ни проверки
 минимальной версии на сервере — *возврат:* когда у проекта появится второй клиент (мобильное
-приложение), по образцу Lad.
+приложение).
 
 ---
 
@@ -341,14 +328,12 @@ IaC/
   заведена роль приложения). Порт на хост не пробрасывается: API ходит по сети докера,
   человек — через `docker exec … psql`; для SSH-туннеля публикацию раскомментируют, и только
   на `127.0.0.1` (ufw докеру не указ).
-- **Пользователь приложения** — `APP_DB_USER` (`pettemplate_app`), аналог `user_write`
-  в Lad/ASU. Заводит его `IaC/postgres/init/01-app-user.sh`, смонтированный
+- **Пользователь приложения** — `APP_DB_USER` (`pettemplate_app`). Заводит его `IaC/postgres/init/01-app-user.sh`, смонтированный
   в `/docker-entrypoint-initdb.d`: образ запускает его сам один раз, на пустом томе; скрипт
   идемпотентный, на живой базе его запускают руками (смена пароля, переезд). Роль — **владелец
   базы** `pettemplatedb` без `SUPERUSER`/`CREATEDB`/`CREATEROLE`/`REPLICATION`/`BYPASSRLS`.
-  Почему владелец, а не роль только с DML: `user_write` в ASU — это `MYSQL_USER` образа mysql,
-  то есть `ALL` на свою базу и ничего за её пределами, и миграции под ним накатывает сам API
-  при старте (`MigrateAsync`, раздел 6). Без правки кода роли API нужны права на DDL в своей
+  Почему владелец, а не роль только с DML: миграции под ней накатывает сам API
+  при старте (`MigrateAsync`, раздел 6) — всё на свою базу и ничего за её пределами. Роли API нужны права на DDL в своей
   схеме и `create extension citext` (доверенное расширение — владельцу базы хватает); схема
   `public` в Postgres 15+ принадлежит `pg_database_owner`, отдельный `GRANT` не нужен.
   Разделение «владелец для миграций + роль с DML и `default privileges`» требует второй строки
@@ -363,7 +348,7 @@ IaC/
   `multilingual-e5-small` в Q8 (модель меняется `EMBEDDINGS_REPO`/`EMBEDDINGS_FILE` в `.env`),
   том `embeddings-cache` на весь `/root/.cache` (нынешние сборки кладут веса в `huggingface/`,
   прежние — в `llama.cpp/`), портов на хост нет; веса качает сам при первом старте
-  (`IaC/DEPLOYMENT.md`, раздел 4). Тег образа не закреплён — как в Lad; у llama.cpp теги —
+  (`IaC/DEPLOYMENT.md`, раздел 4). Тег образа не закреплён: у llama.cpp теги —
   номера сборок (`tech-debt/embeddings-model.md`).
 - телеметрия (раздел 10): `grafana`, `otel-collector`, `prometheus`, `tempo`, `postgres-exporter`,
   `node-exporter`, `cadvisor` — версии закреплены, портов на хост нет; тома `grafana-data`,
@@ -372,8 +357,7 @@ IaC/
   раньше nginx, заняла бы его `.2` из `GF_AUTH_PROXY_WHITELIST`.
 - **Пользователь экспортёра** — `POSTGRES_EXPORTER_USER` (`postgres_exporter`) со
   встроенной ролью `pg_monitor`: статистика `pg_stat_*` и `pg_settings`, без доступа к строкам
-  таблиц, `CONNECTION LIMIT 3` — аналог `exporter` с `PROCESS, REPLICATION CLIENT` у
-  `mysqld-exporter` в Lad/ASU. Заводит его `IaC/postgres/init/02-exporter-user.sh` так же, как
+  таблиц, `CONNECTION LIMIT 3`. Заводит его `IaC/postgres/init/02-exporter-user.sh` так же, как
   пользователя приложения: на пустом томе сам, на живой базе — руками; пароль не задан —
   скрипт пропускает, база встаёт.
 - Без `version:` — compose v2 его не читает и предупреждает.
@@ -393,7 +377,7 @@ IaC/
 - server-блоки `grafana.example.com` (раздел 10): тот же замок, что у админки, `auth_request` на
   `Admin/Auth/Verify` и `proxy_pass` в сеть `grafana-gateway`.
 
-**`setup-vm.sh`** — перенесён из ASU/Lad с заменой имён: проверка прав на докер без `sudo`
+**`setup-vm.sh`** — проверка прав на докер без `sudo`
 и запрет запуска от root, каталоги `~/frontend`, `~/frontend-backup`, `~/adminka`,
 `~/adminka-backup`, симлинки `IaC/frontend` и `IaC/adminka`, `certbot/`, сеть `nginx-proxy-man`,
 наличие `docker-compose.yml`, `nginx.conf` и обоих скриптов `postgres/init/` (`01-app-user.sh`,
@@ -436,20 +420,20 @@ IaC/
 
 ## 10. Телеметрия
 
-Стек Lad перенесён целиком (`IaC/DEPLOYMENT.md`, раздел 11 «Шлюз к инструментам» и дальше):
+Стек телеметрии — `IaC/DEPLOYMENT.md`, раздел 11 «Шлюз к инструментам» и дальше:
 
 - API шлёт метрики и трассы по OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcollectorcontainer:4317`,
   `OTEL_SERVICE_NAME=pettemplate-api` в `publish-api.yml` и `rollback-api.yml`; без переменной
   не шлёт ничего — так локально и в тестах). Метрики — ASP.NET Core, HttpClient, рантайм .NET,
   письма (`MailMetrics`) и очередь команд (`CommandQueueMetrics`, `AddCommandQueueInstrumentation`:
   у своего воркера очереди — `tech-debt/localqueue-postgres.md` — те же имена, метки и границы
-  гистограмм, что у пакета `LocalQueue.OpenTelemetry` в Lad/ASU, поэтому дашборд `queue`
-  перенесён как есть), ассистент и справка (`AssistantMetrics`), расход (`BillingMetrics`).
+  гистограмм, что у пакета `LocalQueue.OpenTelemetry`, поэтому дашборд `queue`
+  подходит обоим), ассистент и справка (`AssistantMetrics`), расход (`BillingMetrics`).
   Трассы — входящие запросы, походы наружу по HTTP и ход ассистента (источники
   `PetTemplate.Assistant` и `Experimental.Microsoft.Extensions.AI`, без текстов — `assistant.md`, 13.3).
 - `otel-collector` раскладывает: метрики в `prometheus` (`--web.enable-otlp-receiver`, 30 дней
   или 2 ГБ), трассы в `tempo` (30 дней);
-- `postgres-exporter` (вместо `mysqld-exporter`), `node-exporter`, `cadvisor` и `/metrics` самого
+- `postgres-exporter`, `node-exporter`, `cadvisor` и `/metrics` самого
   Qdrant — Prometheus забирает сам (`IaC/prometheus/prometheus.yml`);
 - `grafana` за шлюзом: своих учёток нет, вход — тот же, что в админку; nginx спрашивает
   `GET /api/Admin/Auth/Verify` по куке админской сессии (`specs/admin.md`, 3.3), кеширует «да»
@@ -457,19 +441,18 @@ IaC/
   в отдельной сети `grafana-gateway`. Замок `grafana.example.com` — тот же, что у админки. Портов
   на хост ни у кого из них нет.
 - Источники данных, дашборды и тревоги — файлами в `IaC/grafana/`, не кликами.
-  Дашборды `containers`, `host-node`, `queue` — из Lad как есть; `postgres` — вместо `mysql`
-  (grafana.com 9628 под метрики `postgres-exporter`, переменные Kubernetes убраны);
+  Дашборды `containers`, `host-node`, `queue`; `postgres` — grafana.com 9628 под метрики
+  `postgres-exporter`, переменные Kubernetes убраны;
   `qdrant` — grafana.com 24603 как есть, источник подставлен (job `qdrant`, его `/metrics`
-  на `6333`, и `qdrant` в тревоге `infra-target-down`); `assistant` («Ассистент») — строки
-  «Ассистент» и «Деньги» дашборда Lad без кошельков, курсов и пополнений: ход, модели, справка,
+  на `6333`, и `qdrant` в тревоге `infra-target-down`); `assistant` («Ассистент») — ход, модели, справка,
   расход и счёт у поставщика (`assistant.md`, 13.4–13.5);
   `pettemplate-overview` свой: HTTP, почта, рантайм. Тревоги (`provisioning/alerting/rules.yml`) —
-  из Lad без кошельков, платежей и предметки, плюс «Письма не уходят»; группа «Ассистент» —
+  инфраструктура, база и «Письма не уходят»; группа «Ассистент» —
   «Модель разомкнута», «Остаток у поставщика модели ниже порога», «Расчёт разошёлся с фактом
-  у поставщика»; MySQL-тревоги переведены на `pg_up` и `pg_stat_database_numbackends` /
+  у поставщика»; тревоги базы — по `pg_up` и `pg_stat_database_numbackends` /
   `pg_settings_max_connections`. Доставка тревог в Telegram — раздел 13.
 
-Машина: у Lad это два ядра и шесть гигабайт — хватает; проекту из шаблона сверить со своим тарифом.
+Машина: стек рассчитан на два ядра и шесть гигабайт; проекту из шаблона сверить со своим тарифом.
 Всё на одной машине с API — `tech-debt/telemetry-single-host.md`.
 
 ---
@@ -480,7 +463,7 @@ IaC/
 клиентом, что в контейнере (той же версии, что сервер), суперпользователем по сокету — пароль
 не нужен (раздел 9). **Формат — custom, `-Fc`**: сжат сам, без конвейера `| gzip`, в котором код
 возврата `pg_dump` теряется без `pipefail`; проверяется целиком — `pg_restore -f /dev/null`
-прочитывает весь архив и падает на обрезанном (аналог строки `Dump completed` у `mysqldump`);
+прочитывает весь архив и падает на обрезанном;
 восстанавливается выборочно и с `--clean`. SQL глазами — `pg_restore -f - файл`. Владельцы
 объектов (`pettemplate_app`) в дампе сохраняются.
 Проверка в workflow: `pg_dump` завершился с кодом 0, файл непустой, `pg_restore -f /dev/null`
@@ -495,38 +478,37 @@ IaC/
 
 ---
 
-## 12. Отличия от образцов (Lad/ASU)
+## 12. Решения шаблона
 
-| В Lad/ASU | В шаблоне | Почему |
-|---|---|---|
-| MySQL 8.4, `mysqldump`, `mysqld-exporter`, коды ошибок MySQL | PostgreSQL 17, `pg_dump`, `postgres-exporter`, `SqlState`, snake_case (3.1) | Решение шаблона (3.1) |
-| Свой прод, домен, живые данные | Прода нет; домен — `example.com`, символ шаблона: `dotnet new pet --domain <домен>` заменяет его везде (раздел 13) | Шаблон — заготовка; миграции expand/contract начинаются в проекте |
-| Предметные разделы | Только ядро: аккаунты, workspace и права, почта, админка, телеметрия, поиск, справка, ассистент | Шаблон без бизнес-сущностей |
-| ASU: организации | Workspace (`specs/authorization.md`) | Как в Lad |
-| ASU: `FunctionalTests` + `UnitTests` | Один `PetTemplate.Tests`, как в Lad | Проще и уже так |
-| Lad: `publish-android.yml`, поддомен `img.`, страницы справки на сайте | Нет; `publish-help.yml` есть — справка для ассистента (`specs/help.md`, 6.4) | Нет мобильных приложений и пользовательских картинок; показ справки на сайте — `tech-debt/help-client.md` |
-| `X-Client-Version` и `ClientVersionGate` (Lad) | Нет | Второго клиента нет |
-| `dapi`/`lad-api`/`laddb` (Lad), `aapi`/`asu-api`/`asudb` (ASU) | `dapi`, `pettemplate-api`, `pettemplatedb` | `dotnet new` заменяет `pettemplate` на имя проекта сам |
-| ASU: `net9.0` | `net10.0`, `aspnet:10.0`, как Lad | Шаблон уже на `net10.0` |
+| Решение | Почему |
+|---|---|
+| PostgreSQL 17, `pg_dump`, `postgres-exporter`, `SqlState`, snake_case (3.1) | База шаблона; что от неё зависит — 3.1 |
+| Своего прода нет; домен — `example.com`, символ шаблона: `dotnet new pet --domain <домен>` заменяет его везде (раздел 13) | Шаблон — заготовка; прод, живые данные и миграции expand/contract начинаются в проекте |
+| Только ядро: аккаунты, workspace и права, почта, админка, телеметрия, поиск, справка, ассистент | Шаблон без бизнес-сущностей |
+| Один тестовый проект `PetTemplate.Tests` | Проще |
+| Ни мобильной выкатки, ни поддомена картинок, ни страниц справки на сайте; `publish-help.yml` есть — справка для ассистента (`specs/help.md`, 6.4) | Нет мобильных приложений и пользовательских картинок; показ справки на сайте — `tech-debt/help-client.md` |
+| Ни `X-Client-Version`, ни проверки минимальной версии клиента (раздел 7) | Второго клиента нет |
+| Имена `dapi`, `pettemplate-api`, `pettemplatedb` | `dotnet new` заменяет `pettemplate` на имя проекта сам |
+| `net10.0`, `aspnet:10.0` | Текущий LTS .NET |
 
 ## 13. Решения и вопросы
 
 Решено:
 
 - **Физически `src/` и `tests/`**, клиент — `src/PetTemplate.Web` (2.1).
-- **Выкатка — по кнопке**, как в Lad и ASU; автодеплоя с `main` нет.
+- **Выкатка — по кнопке**; автодеплоя с `main` нет (раздел 1).
 - **База — PostgreSQL**, имена в базе snake_case, регистр логина и почты — `citext`,
   конкуренция — `xmin` (3.1).
 - **Пользователь приложения в Postgres** — владелец своей базы без атрибутов суперпользователя,
   заводится init-скриптом тома `IaC/postgres/init/01-app-user.sh` (8).
 - **Формат дампа** — custom (`pg_dump -Fc`), проверка `pg_restore -f /dev/null` (11).
-- **Доставка тревог в Telegram выключена по умолчанию** (10), как в ASU:
+- **Доставка тревог в Telegram выключена по умолчанию** (10):
   `telegram.yml` лежит в `IaC/grafana/on-hold/`, вне провижининга. Без токена бота и id группы
   Grafana с ним в provisioning не стартует вовсе, а у свежего проекта из шаблона их нет — значит,
   включённая по умолчанию доставка роняла бы Grafana на первом же `docker compose up`. Тревоги
   срабатывают и видны в Alerting; включить — `IaC/DEPLOYMENT.md`, «Тревоги в Telegram»
   (переложить файл в `provisioning/alerting/`, `chatid`, `TELEGRAM_BOT_TOKEN` в `.env`).
-- **Личные рабочие файлы не коммитятся:** `.gitignore` по образцу Lad/ASU — `/plan/`, `out/`,
+- **Личные рабочие файлы не коммитятся:** `.gitignore` — `/plan/`, `out/`,
   `.idea/`, `.claude/settings.local.json`, `.claude/worktrees/`, `*.DotSettings.user`, `.DS_Store`.
   В проект из шаблона они не попадают и через `dotnet new` (`exclude` в `.template.config/template.json`).
 - **Домен — символ шаблона `domain`:** `dotnet new pet -n Имя --domain мой-домен.ru` заменяет
@@ -534,22 +516,17 @@ IaC/
   клиент, письма, документация и тесты; поддомены `adminka.` и `grafana.` меняются вместе с ним,
   адреса почты (`info@…`) — тоже: это домен проекта.
 - **`specs/`, `tech-debt/`, `help/` и `.claude/skills/` попадают в проект из шаблона:** это
-  документация механизмов ядра и skill, который её правит; в Lad и ASU они живут в проекте.
+  документация механизмов ядра и skill, который её правит; дальше их ведёт сам проект.
   `plan/` — нет.
 - **Хуки после `dotnet new` не включаются сами** — строка `git config core.hooksPath .githooks`
   в `README.md`, «Новый проект из шаблона». `postActions` с `run script` спрашивают подтверждение
   и по-разному ведут себя на разных платформах, а `git init` в новой папке ещё не сделан.
-- **Чек-лист «что настроить в новом проекте»** (домен, хуки, `Init`, секреты и переменные
+- **Чек-лист «что настроить в новом проекте»** (домен, хуки, секреты и переменные
   GitHub, `NUGET_GITHUB_TOKEN`) — `README.md`, «Новый проект из шаблона».
 
 Не реализовано:
 
-1. **Первая миграция `Init` под PostgreSQL.** Старая `Init` под MySQL исключена из сборки (3.1);
-   пока она не пересобрана, `MigrateAsync` на проде накатывать нечего и на пустой боевой базе
-   схема не появится — выкатить проект из шаблона на чистый сервер нельзя. После пересборки
-   тесты переходят с `EnsureCreated` на `Migrate()` (`PostgresServer.cs`), чтобы прогон ловил
-   сломанную миграцию. Шаги — `src/PetTemplate.Db/README.md`, «Первая миграция `Init`».
-2. **Заглушки ключей подписи не отвергаются.** Длину обоих ключей и их несовпадение API
+1. **Заглушки ключей подписи не отвергаются.** Длину обоих ключей и их несовпадение API
    проверяет на старте (9), но известное всем значение-заглушку из `appsettings.json` пропускает.
 
 Открыто:

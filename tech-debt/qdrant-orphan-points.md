@@ -1,7 +1,5 @@
 # Точки Qdrant удалённого пространства остаются
 
-Перенесено из Lad (`tech-debt/qdrant-orphan-points.md`).
-
 Суточная чистка удаляет заброшенное пространство (`WorkspaceService.PurgeContents`,
 `specs/authorization.md`, 8) строками в PostgreSQL одной транзакцией, а векторы его сущностей
 в Qdrant не трогает. По спецификации это забота раздела: подключая поиск, он в

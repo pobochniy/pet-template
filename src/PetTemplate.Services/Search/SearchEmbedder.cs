@@ -15,8 +15,8 @@ namespace PetTemplate.Services.Search;
 /// к внешнему поставщику — текст остаётся у нас.
 ///
 /// Префиксы e5 (<c>query: </c> / <c>passage: </c>) ставит сам, по знаку
-/// <see cref="EmbeddingPurpose"/> в опциях вызова: в Lad и ASU их не было, шаблон
-/// их включил (спец. search, 3; <c>tech-debt/embeddings-model.md</c>)
+/// <see cref="EmbeddingPurpose"/> в опциях вызова
+/// (спец. search, 3; <c>tech-debt/embeddings-model.md</c>)
 /// </summary>
 public sealed class SearchEmbedder(HttpClient http, IOptions<SearchOptions> settings)
     : IEmbeddingGenerator<string, Embedding<float>>

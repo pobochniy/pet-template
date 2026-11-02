@@ -26,6 +26,3 @@ Tempo без аутентификации нельзя.
 - **Своя докер-сеть для телеметрии** вместо общей `nginx-proxy-man`: сейчас любой
   контейнер этой сети может писать в Prometheus и читать из него. Отдельная сеть уже есть
   только у шлюза Grafana (`grafana-gateway`, адреса nginx и Grafana закреплены).
-
-Перенесено из `Lad/tech-debt/telemetry-single-host.md` через ASU; `mysqld-exporter` →
-`postgres-exporter`.

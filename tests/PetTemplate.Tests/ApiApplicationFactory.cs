@@ -22,9 +22,8 @@ public class ApiApplicationFactory<TStartup>(bool withQueueWorker = false) : Web
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Явно, а не по умолчанию WebApplicationFactory: вне Development Program.cs
-        // зовёт MigrateAsync(), а схему тестам раскатывает PostgresServer — миграций
-        // до пересборки Init нет (src/PetTemplate.Db/README.md, «Первая миграция Init»),
-        // и пустая история миграций не дала бы EnsureCreated создать таблицы
+        // зовёт MigrateAsync(), а схема у тестов уже есть — база каждого теста скопирована
+        // из шаблонной, которую один раз мигрировал PostgresServer
         builder.UseEnvironment("Development");
 
         builder.ConfigureServices(services =>

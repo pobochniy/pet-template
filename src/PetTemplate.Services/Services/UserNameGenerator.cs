@@ -20,7 +20,7 @@ namespace PetTemplate.Services.Services;
 /// <c>_3</c> и дальше (<see cref="Fallback"/>).
 ///
 /// Логин сравнивается без учёта регистра — колонка <c>citext</c> (4.1), отдельного
-/// нормализованного столбца, как в Lad и ASU, нет
+/// нормализованного столбца нет
 /// </summary>
 public class UserNameGenerator(ApplicationContext db)
 {

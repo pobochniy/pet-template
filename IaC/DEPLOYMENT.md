@@ -350,16 +350,15 @@ curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<адрес сервера>
 ### 9. Пользователь приложения
 
 API ходит в базу не суперпользователем `postgres`, а своей ролью `APP_DB_USER`
-(`pettemplate_app`) — аналог `user_write` в Lad/ASU (`specs/infrastructure.md`, 8 и 13).
+(`pettemplate_app`) (`specs/infrastructure.md`, 8 и 13).
 
 **Как заводится.** Скрипт `postgres/init/01-app-user.sh` смонтирован в
 `/docker-entrypoint-initdb.d`: образ postgres запускает его сам один раз — при первом старте
 на пустом томе `db-data`, сразу после создания базы `POSTGRES_DB`. Скрипт создаёт роль
 с паролем `APP_DB_PASSWORD` и делает её **владельцем базы**.
 
-**Какие права и почему.** В ASU `user_write` — это `MYSQL_USER` образа mysql: `ALL PRIVILEGES`
-на свою базу и ничего за её пределами. Postgres-аналог того же — владелец базы без атрибутов
-суперпользователя:
+**Какие права и почему.** Нужны все права на свою базу и ничего за её пределами — это владелец
+базы без атрибутов суперпользователя:
 
 - может: всё со своей схемой `public` (в Postgres 15+ она принадлежит `pg_database_owner`,
   то есть владельцу базы) — таблицы, индексы, `ALTER` и `DROP` в миграциях; `create extension

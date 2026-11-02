@@ -50,7 +50,7 @@ services.AddOpenTelemetry()
         // assistant, 13.1); обращения к модели пишет обёртка UseOpenTelemetry клиента
         // модели — без текстов, пока выключен TelemetrySensitiveData (13.3).
         // Появится хаб SignalR — его соединение живёт часами и одной трассой ничего
-        // не говорит: отфильтровать, как чат в ASU (o.Filter)
+        // не говорит: отфильтровать его (o.Filter)
         b.AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddSource(AssistantMetrics.ActivitySourceName)

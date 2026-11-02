@@ -27,5 +27,3 @@ cookie-схемы, antiforgery, серверной сессии и `IDataProtect
 2. `PersistKeysToDbContext<ApplicationContext>` — кольцо едет с базой и попадает в `pg_dump`;
    цена — сущность и миграция.
 3. `SetApplicationName` в любом варианте: по умолчанию имя берётся из пути сборки.
-
-Перенесено из `Lad/tech-debt/data-protection-keys.md` через ASU — ситуация та же.

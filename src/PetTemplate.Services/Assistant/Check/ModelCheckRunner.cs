@@ -28,7 +28,7 @@ namespace PetTemplate.Services.Assistant.Check;
 /// приложение не публикует; спаны — под корневым спаном сверки. Наружу идёт только
 /// запрос к модели — ради него сверка и делается.
 ///
-/// База в памяти — <c>Microsoft.EntityFrameworkCore.InMemory</c>, как в Lad: Postgres
+/// База в памяти — <c>Microsoft.EntityFrameworkCore.InMemory</c>: Postgres
 /// ради одной фразы не нужен, а атомарные <c>UPDATE</c> размыкателя в мире сверки
 /// не случаются (копия модели замкнута) или глотаются им же (запись отказа).
 ///

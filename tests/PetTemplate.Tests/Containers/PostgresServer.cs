@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PetTemplate.Db.Entity;
@@ -65,7 +66,7 @@ internal static class PostgresServer
             .WithDatabase("pettemplatedb")
             // Данные живут один прогон: каталог данных в памяти и без сброса на диск.
             // Каждая команда схемы и каждый коммит в Postgres по умолчанию ждут fsync,
-            // а надёжность после сбоя тестовой базе не нужна — аналог «MySQL в tmpfs без fsync» у Lad и ASU
+            // а надёжность после сбоя тестовой базе не нужна
             .WithTmpfsMount("/var/lib/postgresql/data")
             .WithCommand(
                 "-c", "fsync=off",
@@ -83,9 +84,8 @@ internal static class PostgresServer
 
     /// <summary>
     /// Схема раскатывается тем же приложением, что и в тестах, — с его настройками
-    /// контекста (snake_case, расширения), а не их копией здесь. До пересборки <c>Init</c>
-    /// это <c>EnsureCreated</c>; после — <c>Migrate()</c>, чтобы прогон ловил сломанную миграцию
-    /// (<c>src/PetTemplate.Db/README.md</c>, «Первая миграция Init»)
+    /// контекста (snake_case, расширения), а не их копией здесь. Миграциями, а не
+    /// <c>EnsureCreated</c>, — чтобы прогон ловил сломанную миграцию
     /// </summary>
     private static async Task CreateTemplateAsync(PostgreSqlContainer server)
     {
@@ -97,7 +97,7 @@ internal static class PostgresServer
         {
             using var scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationContext>();
-            await db.Database.EnsureCreatedAsync();
+            await db.Database.MigrateAsync();
         }
 
         // Копировать базу можно, только пока к ней никто не подключён: пул после

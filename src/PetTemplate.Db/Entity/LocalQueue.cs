@@ -9,7 +9,7 @@ namespace PetTemplate.Db.Entity;
 /// ложится сюда тем же <c>SaveChanges</c>, что и доменное изменение (outbox), а разбирает
 /// её <c>CommandQueueWorker</c>.
 ///
-/// Колонки — те же, что у таблицы пакета <c>LocalQueue</c> (Lad, ASU): когда появится
+/// Колонки — те же, что у таблицы пакета <c>LocalQueue</c>: когда появится
 /// <c>LocalQueue.PostgreSql</c>, воркер заменится пакетом, а таблица и постановка
 /// (<c>CommandQueue.Enqueue</c>) останутся как есть. Id — родной <c>uuid</c> Postgres,
 /// без двоичного представления, которое понадобилось MySQL

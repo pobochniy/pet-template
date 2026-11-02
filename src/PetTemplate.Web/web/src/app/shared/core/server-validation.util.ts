@@ -11,8 +11,7 @@ import { FormGroup } from '@angular/forms';
  *
  * Сырые объекты и **хранятся** в `errors.serverError` формы. Резолвить их в строку
  * при прикреплении нельзя: уже показанные ошибки остались бы на старом языке
- * после переключения — переводит их `form-validation` при каждой отрисовке.
- * Как в Lad и ASU
+ * после переключения — переводит их `form-validation` при каждой отрисовке
  */
 
 export interface ServerValidationError {

@@ -29,7 +29,7 @@ public class InvitationCreateDto : IValidatableObject
 
     /// <summary>
     /// Приглашение без прав не даёт даже войти в пространство. Видно из самого
-    /// запроса — <c>422</c> у поля, а не <c>400</c> из сервиса (как ASU <c>d4c86fc</c>)
+    /// запроса — <c>422</c> у поля, а не <c>400</c> из сервиса
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

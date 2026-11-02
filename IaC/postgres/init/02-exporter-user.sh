@@ -1,6 +1,6 @@
 #!/bin/bash
 # Пользователь postgres-exporter (спец. infrastructure, 10; IaC/DEPLOYMENT.md, «Метрики
-# PostgreSQL и машины») — аналог `exporter` у mysqld-exporter в Lad/ASU: только служебная
+# PostgreSQL и машины»): только служебная
 # статистика, к данным доступа нет.
 #
 # Права — встроенная роль `pg_monitor`: читает pg_stat_* и pg_settings целиком (в том числе

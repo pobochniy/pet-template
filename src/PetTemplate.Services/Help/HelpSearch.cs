@@ -23,7 +23,7 @@ public record HelpSearchResult(string? Commit, IReadOnlyList<HelpHit> Hits)
 /// области на каждую сборку и каждый поиск, а не держится здесь.
 ///
 /// Метрики (доля пустых поисков, версия справки, спец. help, 10) живут в метриках
-/// ассистента, как в Lad: в справку ходит <c>search_help</c>
+/// ассистента: в справку ходит <c>search_help</c>
 /// </summary>
 public class HelpSearch(
     IServiceScopeFactory scopeFactory,

@@ -79,10 +79,6 @@ public static class SetupApplicationExt
                 using var scope = sp.CreateScope();
                 var scopedServices = scope.ServiceProvider;
                 var db = scopedServices.GetRequiredService<ApplicationContext>();
-                // Схема уже есть — база скопирована из шаблона. Вызов остаётся
-                // подстраховкой и стоит одного запроса к каталогу
-                db.Database.EnsureCreated();
-
                 if (dbArrange != null) dbArrange(db);
                 db.SaveChanges();
                 rootServices = sp;

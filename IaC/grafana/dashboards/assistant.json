@@ -6,7 +6,7 @@
   "assistant"
  ],
  "timezone": "browser",
- "description": "По образцу строк «Ассистент» и «Деньги» дашборда Lad без кошельков; метрики — AssistantMetrics и BillingMetrics (AddMeter в Program.cs)",
+ "description": "Строки «Ассистент» и «Деньги»; метрики — AssistantMetrics и BillingMetrics (AddMeter в Program.cs)",
  "schemaVersion": 39,
  "version": 1,
  "editable": true,

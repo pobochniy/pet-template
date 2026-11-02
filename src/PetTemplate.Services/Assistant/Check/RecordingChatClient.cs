@@ -5,7 +5,7 @@ namespace PetTemplate.Services.Assistant.Check;
 /// <summary>
 /// Клиент модели, который заодно запоминает, что она ответила (спец. admin, 15.3):
 /// какие инструменты позвала и сколько токенов это стоило. Сверке из админки он даёт
-/// токены и вызовы фразы; в Lad его же записи уезжали в фикстуры фейкового клиента
+/// токены и вызовы фразы
 /// </summary>
 public class RecordingChatClient(IChatClient inner) : IChatClient
 {

@@ -2,8 +2,8 @@
 
 API ходит в Postgres ролью `pettemplate_app` (`APP_DB_USER`), и эта роль — владелец базы
 `pettemplatedb` (`IaC/postgres/init/01-app-user.sh`; `specs/infrastructure.md`, 8;
-`IaC/DEPLOYMENT.md`, «Пользователь приложения»). Это ровно то, что было у `user_write`
-в Lad/ASU (`ALL` на свою базу), но не минимально нужное приложению.
+`IaC/DEPLOYMENT.md`, «Пользователь приложения»). Это `ALL` на свою базу —
+больше, чем минимально нужно приложению.
 
 Почему так: миграции накатывает сам API при старте (`Program.cs`, `MigrateAsync`) одной и той же
 строкой подключения. Роли только с `SELECT/INSERT/UPDATE/DELETE` миграции не пройдут —

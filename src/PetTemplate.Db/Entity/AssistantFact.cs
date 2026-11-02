@@ -95,8 +95,8 @@ public class AssistantFactConfiguration : IEntityTypeConfiguration<AssistantFact
             .OnDelete(DeleteBehavior.Cascade);
 
         // Дедупликация идёт по четвёрке «пространство, владелец, вид, ключ» (12.5).
-        // NULLS NOT DISTINCT: у общего факта UserId пуст, и без него Postgres, как и MySQL
-        // в Lad, пропустил бы две общие строки с одним ключом. Основная проверка всё равно
+        // NULLS NOT DISTINCT: у общего факта UserId пуст, и без него Postgres
+        // пропустил бы две общие строки с одним ключом. Основная проверка всё равно
         // в коде (MemoryService.Remember), индекс ловит гонку двух ходов
         builder
             .HasIndex(x => new { x.WorkspaceId, x.UserId, x.Kind, x.Key })

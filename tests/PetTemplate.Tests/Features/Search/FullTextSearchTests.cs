@@ -48,7 +48,7 @@ public class FullTextSearchTests
     }
 
     /// <summary>
-    /// «Любое из слов», как natural language у MySQL в Lad и ASU: запись с одним словом
+    /// «Любое из слов»: запись с одним словом
     /// из запроса находится, а не отсеивается, как при «все слова сразу»
     /// </summary>
     [Fact]

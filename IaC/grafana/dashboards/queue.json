@@ -6,7 +6,7 @@
     "localqueue"
   ],
   "timezone": "browser",
-  "description": "По образцу Command Queue из другого проекта; метрики очереди — CommandQueueMetrics (AddCommandQueueInstrumentation в Program.cs), имена как у LocalQueue.OpenTelemetry",
+  "description": "Метрики очереди — CommandQueueMetrics (AddCommandQueueInstrumentation в Program.cs), имена как у LocalQueue.OpenTelemetry",
   "schemaVersion": 39,
   "version": 1,
   "editable": true,

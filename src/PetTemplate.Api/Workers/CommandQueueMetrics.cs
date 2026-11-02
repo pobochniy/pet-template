@@ -7,8 +7,8 @@ namespace PetTemplate.Api.Workers;
 /// раз бралась самая упрямая, сколько команда ждала до выполнения и сколько выполнялась.
 ///
 /// Имена инструментов, единицы, метка <c>commandType</c> и границы гистограмм — ровно
-/// как у пакета <c>LocalQueue.OpenTelemetry</c> в Lad и ASU (<c>LocalQueueMetrics</c>):
-/// дашборд «Очередь команд» (<c>IaC/grafana/dashboards/queue.json</c>) взят оттуда как есть,
+/// как у пакета <c>LocalQueue.OpenTelemetry</c> (<c>LocalQueueMetrics</c>):
+/// дашборд «Очередь команд» (<c>IaC/grafana/dashboards/queue.json</c>) ложится на них как есть,
 /// и когда воркер заменится пакетом (<c>tech-debt/localqueue-postgres.md</c>), графики
 /// не прервутся. Свой метр, а не статический, как у пакета: у каждого хоста в тестах
 /// свой экземпляр, и чужие команды в его измерения не попадают

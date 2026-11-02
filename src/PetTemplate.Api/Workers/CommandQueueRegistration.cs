@@ -8,8 +8,7 @@ namespace PetTemplate.Api.Workers;
 public static class CommandQueueRegistration
 {
     /// <summary>
-    /// Повтор упавшей команды по умолчанию — через минуту, как у письма в Lad
-    /// (<c>RetryPolicyOptions.BackoffInterval</c>)
+    /// Повтор упавшей команды по умолчанию — через минуту
     /// </summary>
     private static readonly TimeSpan DefaultRetryAfterFailure = TimeSpan.FromMinutes(1);
 
@@ -66,7 +65,7 @@ public static class CommandQueueRegistration
 
     /// <summary>
     /// Метрики очереди в OpenTelemetry — замена <c>AddDodoLocalCommandQueueInstrumentation</c>
-    /// пакета <c>LocalQueue.OpenTelemetry</c> (Lad, ASU) с теми же границами гистограмм:
+    /// пакета <c>LocalQueue.OpenTelemetry</c> с теми же границами гистограмм:
     /// без них задержку в минуты гистограмма по умолчанию свалила бы в одну корзину
     /// </summary>
     public static MeterProviderBuilder AddCommandQueueInstrumentation(this MeterProviderBuilder builder) =>

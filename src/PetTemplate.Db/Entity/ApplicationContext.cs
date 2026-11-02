@@ -39,8 +39,8 @@ public class ApplicationContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
-        // Логин и почта сравниваются без учёта регистра (спец. infrastructure, 3.1): у MySQL это
-        // давала collation по умолчанию, у Postgres — тип citext. Расширение ставит миграция
+        // Логин и почта сравниваются без учёта регистра (спец. infrastructure, 3.1):
+        // это даёт тип citext. Расширение ставит миграция
         builder.HasPostgresExtension("citext");
 
         builder.ApplyConfiguration(new UserConfiguration());

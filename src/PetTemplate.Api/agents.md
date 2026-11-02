@@ -121,7 +121,7 @@
 
 - `422` у поля — отказ виден из самого запроса (пустой набор прав): `IValidatableObject.Validate`
   у DTO, `new ValidationResult(Messages.X.Code, [nameof(Поле)])` — в `ModelState` уезжает код,
-  клиент переводит его своим словарём (как ASU `d4c86fc`). Наружу он едет той же формой
+  клиент переводит его своим словарём. Наружу он едет той же формой
   `{поле: [{code, params, text}]}`, что и коды атрибутов (`ValidationError.Parse`)
 - `400` — для отказа нужна база или состояние: `throw new BadRequestException(Messages.X)`,
   где `Messages.X` — `ErrorMessage(code, text)` в `PetTemplate.Shared/Constants`. Нет сущности —
@@ -259,20 +259,19 @@
 Решения — `specs/infrastructure.md`, 3.1.
 
 - **Уникальность.** Нарушение уникального индекса ловим по `PostgresException` с
-  `SqlState == PostgresErrorCodes.UniqueViolation` (`"23505"`, а не MySQL 1062) и различаем
+  `SqlState == PostgresErrorCodes.UniqueViolation` (`"23505"`) и различаем
   по `ConstraintName` — имени в snake_case, как его дал `UseSnakeCaseNamingConvention`
-  (`ix_profiles_user_name`, `pk_users`), а не по тексту сообщения и не по именам из ASU/Lad.
+  (`ix_profiles_user_name`, `pk_users`), а не по тексту сообщения.
   Разбор держим в одном месте — `DbErrors` (`PetTemplate.Services/Services`).
 - **Регистр.** Колонки, сравниваемые без учёта регистра (логин, почта), — `citext`
   (`.HasColumnType("citext")`); в коде `ToLower()`/`ILike` для них не нужны.
 - **Время.** Все `DateTime`, идущие в базу, — `DateTime.UtcNow`/`Kind = Utc`: Npgsql не пишет
   `Kind = Local` в `timestamptz` и падает.
 - **Конкуренция.** Токен на всю строку — системная колонка `xmin`: свойство
-  `public uint Version { get; set; }` и `builder.Property(x => x.Version).IsRowVersion();`,
-  вместо `ON UPDATE CURRENT_TIMESTAMP` и `[Timestamp]` из MySQL. Конфликт —
+  `public uint Version { get; set; }` и `builder.Property(x => x.Version).IsRowVersion();`.
+  Конфликт —
   `DbUpdateConcurrencyException`. Токен по своему полю (`IsConcurrencyToken()`) тоже допустим.
-- MySQL-типов (`longtext`, `longblob`, `datetime(6)`, `json`), `HasCharSet` и collation в модели нет:
-  `text`, `bytea`, `jsonb`.
+- Типы — `text`, `bytea`, `jsonb`; `HasCharSet` и collation в модели нет.
 
 ## Style Guide
 
@@ -282,8 +281,7 @@
 
 ## Соглашение о кодировании
 
-Перенесено из ASU (`Api/agents.md`, там — из «Соглашения о кодировании C# и JavaScript»):
-то, чего выше нет и что код не опровергает. Код чаще читается, чем пишется.
+То, чего выше нет и что код не опровергает. Код чаще читается, чем пишется.
 
 ### Имена
 

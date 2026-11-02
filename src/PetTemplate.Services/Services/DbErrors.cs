@@ -11,7 +11,7 @@ namespace PetTemplate.Services.Services;
 /// а не 500.
 ///
 /// Единственное место, где разбирается ошибка базы: код уникальности и имена индексов
-/// зависят от СУБД (в Lad и ASU — MySQL, номер 1062 и текст сообщения), здесь — Postgres
+/// зависят от СУБД, здесь — Postgres
 /// </summary>
 public static class DbErrors
 {
@@ -78,7 +78,7 @@ public static class DbErrors
     /// <summary>
     /// Запись упала на уникальном индексе <paramref name="index"/>: Postgres отвечает
     /// <c>23505</c> (<see cref="PostgresErrorCodes.UniqueViolation"/>) и называет
-    /// ограничение по имени — разбирать текст сообщения, как в MySQL, не нужно
+    /// ограничение по имени — разбирать текст сообщения не нужно
     /// </summary>
     public static bool IsDuplicate(DbUpdateException ex, string index) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg

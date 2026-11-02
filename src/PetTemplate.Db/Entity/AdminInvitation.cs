@@ -84,7 +84,7 @@ public class AdminInvitationConfiguration : IEntityTypeConfiguration<AdminInvita
         // Под суточную чистку
         builder.HasIndex(x => x.CreatedUtc);
 
-        // Как в Lad: одно поле — токен конкуренции, а не вся строка (`xmin`) — гонка здесь одна,
+        // Одно поле — токен конкуренции, а не вся строка (`xmin`) — гонка здесь одна,
         // за статус (спец. admin, 5; infrastructure, 3.1)
         builder.Property(x => x.Status).IsConcurrencyToken();
     }

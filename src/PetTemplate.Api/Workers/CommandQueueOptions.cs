@@ -2,7 +2,7 @@ namespace PetTemplate.Api.Workers;
 
 /// <summary>
 /// Разбор очереди команд (<see cref="CommandQueueWorker"/>). Значения — те, что у пакета
-/// <c>LocalQueue</c> в Lad и ASU, кроме опроса: у пакета он 3 секунды, здесь 2 —
+/// <c>LocalQueue</c> по умолчанию, кроме опроса: у пакета он 3 секунды, здесь 2 —
 /// письмо подтверждения человек ждёт, глядя в почту
 /// </summary>
 public class CommandQueueOptions

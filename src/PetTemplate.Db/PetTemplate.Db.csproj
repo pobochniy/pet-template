@@ -22,12 +22,4 @@
         <Folder Include="Extensions\" />
     </ItemGroup>
 
-    <!-- Старая миграция Init собрана под MySQL (Pomelo) и без него не компилируется.
-         Исключена из сборки до пересборки Init под PostgreSQL (README.md, «Первая миграция Init»):
-         вместе с пересборкой этот блок убрать -->
-    <ItemGroup>
-        <Compile Remove="Migrations/**" />
-        <None Include="Migrations/**" />
-    </ItemGroup>
-
 </Project>

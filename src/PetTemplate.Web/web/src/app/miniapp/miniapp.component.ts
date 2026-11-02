@@ -15,7 +15,7 @@ import { AuthenticationResultModel } from '../shared/models/authentication-resul
 import { ExternalProofModel, ExternalProvider } from '../shared/models/external-login.model';
 
 /**
- * Вход из mini-app (спец. accounts, 5.6) — как у Lad: `/miniapp` — Telegram, `/vk` — VK.
+ * Вход из mini-app (спец. accounts, 5.6): `/miniapp` — Telegram, `/vk` — VK.
  * Площадку называет маршрут (`data.provider`), вход — подписанные параметры запуска,
  * которые снял скрипт `index.html` (`launch-params.ts`); SDK площадок не грузятся.
  *

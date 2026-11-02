@@ -9,7 +9,7 @@ namespace PetTemplate.Services.Search;
 /// (<c>AddSearchSource&lt;T&gt;()</c>) — нарезка, эмбеддинг, точки в Qdrant, удаление
 /// и полный реиндекс остаются общими, в <c>SearchIndexCommandHandler</c>.
 ///
-/// В Lad и ASU это был <c>switch</c> по типу внутри обработчика; в шаблоне сущностей
+/// Не <c>switch</c> по типу внутри обработчика: в шаблоне сущностей
 /// нет, и знание о них приходит регистрацией, а не правкой ядра
 /// </summary>
 public interface ISearchSource

@@ -20,8 +20,8 @@ namespace PetTemplate.Api.Workers;
 /// эмбеддингов — это новое имя коллекции и полный реиндекс.
 ///
 /// Работа — в <c>StartAsync</c>: Qdrant обязателен, как база (спец. infrastructure, 6),
-/// и без него API не поднимается. В Lad здесь фоновая служба с повторами — шаблон,
-/// как и ASU, решил иначе
+/// и без него API не поднимается — фоновая служба с повторами здесь
+/// не нужна
 /// </summary>
 public sealed class QdrantInitializer(
     IOptions<QdrantOptions> qdrantOptions,

@@ -18,7 +18,7 @@ import { serverValidationErrors, serverValidationText } from './server-validatio
  *   сеть, прокси, 500 без тела.
  *
  * Переводчик передаётся **параметром**, а не инжектится: утилита остаётся функцией
- * без инжектора. Как в Lad и ASU; ошибки 422 у поля — `server-validation.util.ts`
+ * без инжектора. Ошибки 422 у поля — `server-validation.util.ts`
  * и `serverFieldErrors` ниже
  */
 export interface ErrorTranslator {

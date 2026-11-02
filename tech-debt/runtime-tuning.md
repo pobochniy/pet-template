@@ -20,5 +20,3 @@ MVC-контроллеры, EF Core на Npgsql, Swashbuckle, Qdrant.Client, Sig
    на виртуалке с PostgreSQL и Qdrant рядом серверный GC держит кучу на каждое ядро.
 3. **Chiseled-образ** — `aspnet:10.0-noble-chiseled`: без оболочки, процесс не от root;
    `docker exec … sh` перестанет работать.
-
-Перенесено из `Lad/tech-debt/runtime-tuning.md` через ASU.

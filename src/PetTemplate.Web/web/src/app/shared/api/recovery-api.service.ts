@@ -5,7 +5,7 @@ import { AuthenticationResultModel } from '../models/authentication-result.model
 
 /**
  * Восстановление доступа и подтверждение почты (спец. accounts, 8.2 и 8.4) — анонимные
- * вызовы `AuthController`. Отдельно от `AuthApiService` (в ASU они там): тот лежит
+ * вызовы `AuthController`. Отдельно от `AuthApiService`: тот лежит
  * в initial-бандле, а эти нужны только трём ленивым экранам — `auth/recover`,
  * `auth/reset`, `auth/confirm-email` (`tech-debt/bundle.md`)
  */

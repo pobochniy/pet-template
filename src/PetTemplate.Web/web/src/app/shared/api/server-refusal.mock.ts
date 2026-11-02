@@ -5,7 +5,7 @@
  *
  * Моки отказывают этим, а не голым `Error`: из тела экран достаёт текст
  * (`serverErrorMessage`), и на `Error` он показал бы запасную фразу — спека про
- * «показываем текст сервера» прошла бы, ничего не проверив. Как в ASU
+ * «показываем текст сервера» прошла бы, ничего не проверив
  */
 export function serverRefusal(status: number, message: string, code?: string, params?: Record<string, unknown>) {
   return { status, error: { error: message, code, params, statusCode: status } };

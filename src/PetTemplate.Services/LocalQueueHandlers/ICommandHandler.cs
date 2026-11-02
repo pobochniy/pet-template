@@ -2,7 +2,7 @@ namespace PetTemplate.Services.LocalQueueHandlers;
 
 /// <summary>
 /// Обработчик команды очереди — та же сигнатура, что у <c>LocalQueue.Processing.ICommandHandler&lt;T&gt;</c>
-/// пакета <c>localqueue</c> (Lad, ASU). Свой интерфейс — потому что пакета очереди под
+/// пакета <c>localqueue</c>. Свой интерфейс — потому что пакета очереди под
 /// PostgreSQL пока нет и команды разбирает внутренний <c>CommandQueueWorker</c>
 /// (<c>tech-debt/localqueue-postgres.md</c>); с пакетом поменяется только <c>using</c>.
 ///
