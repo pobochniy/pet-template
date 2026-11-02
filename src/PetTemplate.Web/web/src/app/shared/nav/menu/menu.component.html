@@ -1,0 +1,21 @@
+<nav [class.active]="isExpanded()" id="sidebar">
+  <div class="sidebar-header">
+    <h3>{{ i18n.t('core.app.title') }}</h3>
+  </div>
+
+  <ul class="list-unstyled components">
+    <li routerLinkActive="link-active" [routerLinkActiveOptions]="{ exact: true }">
+      <a routerLink="/" (click)="onItemClick()"><i-lucide name="house"></i-lucide>{{ i18n.t('core.nav.home') }}</a>
+    </li>
+    @if (userService.isAuthenticated) {
+      <li routerLinkActive="link-active">
+        <a routerLink="/profile" (click)="onItemClick()"><i-lucide name="circle-user"></i-lucide>{{ i18n.t('core.nav.profile') }}</a>
+      </li>
+    }
+    @if (canSeeMembers()) {
+      <li routerLinkActive="link-active">
+        <a routerLink="/workspace/members" (click)="onItemClick()"><i-lucide name="users"></i-lucide>{{ i18n.t('core.nav.members') }}</a>
+      </li>
+    }
+  </ul>
+</nav>

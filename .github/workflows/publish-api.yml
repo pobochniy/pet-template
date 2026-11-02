@@ -1,0 +1,153 @@
+name: Publish Api
+
+# Выкатка — только по кнопке (спец. infrastructure, 1): push в main ничего не выкатывает
+on:
+  workflow_dispatch:
+
+env:
+  PUBLISH_DIR: publishfolder
+  TEST_ARTIFACTS_DIR: .artifacts-tests
+  TEST_TIMEOUT_TICKS: 600 # по 2 секунды — 20 минут на фоновые тесты
+  # Как TargetFramework (net10.0): SDK старше net10.0 не собирает (спец. infrastructure, 6)
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted]
+    steps:
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+        env:
+          DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
+
+      # Справка с ошибкой линтера останавливает выкатку сразу (спец. help, 6.4), а не
+      # после того, как новый контейнер уже поднят и остался со старой справкой.
+      # В ПР линтер уже прошёл — здесь это страховка для ветки, не прошедшей ПР
+      - name: help lint 📖
+        run: dotnet run --project tools/HelpCheck -c Release -- lint
+
+      # restore tests + test уезжают в фон и идут параллельно restore/build апи.
+      # Свой ArtifactsPath обязателен: тесты ссылаются на PetTemplate.Api/Db/Services/Shared,
+      # и без раздельных obj/bin два dotnet-а пишут в одни и те же файлы.
+      # Тесты (спец. infrastructure, 5) — одной командой по решению:
+      # ArtifactsPath тогда на всё решение, а API собирается ниже по своему csproj.
+      # verbosity=minimal — в логе только упавшие тесты и итог: прошедшие не печатаются.
+      # Одинарные кавычки у bash -c намеренно: $PWD и $? раскрывает фоновый bash,
+      # а ${{ env.* }} Actions подставляет ещё до запуска (shellcheck SC2016)
+      - name: start tests 🧪
+        run: |
+          rm -rf "${{ env.TEST_ARTIFACTS_DIR }}" tests.log tests.exit
+          # shellcheck disable=SC2016
+          nohup bash -c '
+            dotnet restore PetTemplate.slnx \
+              -p:ArtifactsPath="$PWD/${{ env.TEST_ARTIFACTS_DIR }}" \
+            && dotnet test PetTemplate.slnx --no-restore -c Release \
+              -p:ArtifactsPath="$PWD/${{ env.TEST_ARTIFACTS_DIR }}" \
+              --logger "console;verbosity=minimal"
+            echo $? > tests.exit.tmp && mv tests.exit.tmp tests.exit
+          ' > tests.log 2>&1 < /dev/null &
+          echo "тесты запущены в фоне, pid $!"
+        env:
+          NUGET_GITHUB_USER: pobochniy
+          NUGET_GITHUB_TOKEN: ${{ secrets.NUGET_GITHUB_TOKEN || github.token }}
+
+      # localqueue — из закрытого фида pobhub (nuget.config): учётные данные — переменными.
+      # Токен остаётся на раннере: в образ и в аргументы docker build он не попадает —
+      # сборки внутри образа нет (Dockerfile)
+      - name: restore
+        run: dotnet restore src/PetTemplate.Api/PetTemplate.Api.csproj
+        env:
+          NUGET_GITHUB_USER: pobochniy
+          NUGET_GITHUB_TOKEN: ${{ secrets.NUGET_GITHUB_TOKEN || github.token }}
+
+      - name: build 🏗️
+        run: dotnet build src/PetTemplate.Api/PetTemplate.Api.csproj --no-restore -c Release
+
+      - name: publish
+        run: dotnet publish src/PetTemplate.Api/PetTemplate.Api.csproj --no-build -c Release -o ${{ env.PUBLISH_DIR }}
+
+      - name: copy Dockerfile
+        run: cp src/PetTemplate.Api/Dockerfile ${{ env.PUBLISH_DIR }}/Dockerfile
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y_%m_%d__%H_%M_%S')" >> "$GITHUB_OUTPUT"
+
+      # Ворота деплоя: упали тесты — образ не собирается и контейнер не трогается.
+      # Testcontainers поднимает PostgreSQL на время прогона — докер тот же,
+      # которым ниже собирается образ. Часть времени тестов уже прошла под сборку.
+      - name: wait tests 🧪
+        run: |
+          for _ in $(seq 1 ${{ env.TEST_TIMEOUT_TICKS }}); do
+            if [ -f tests.exit ]; then break; fi
+            sleep 2
+          done
+          cat tests.log
+          if [ ! -f tests.exit ]; then
+            echo "::error::тесты не завершились за отведённое время"
+            exit 1
+          fi
+          exit "$(cat tests.exit)"
+
+      - name: build docker image
+        run: docker build --tag pettemplate-api:${{ steps.date.outputs.date }} ${{ env.PUBLISH_DIR }}
+
+      - name: remove old container
+        run: docker rm -f dapi 2>/dev/null || true
+
+      # Переменные — по таблице спец. infrastructure, 9 (полный список — IaC/DEPLOYMENT.md, 6);
+      # тот же набор — в rollback-api.yml. Новый секрет — строкой --env в обоих.
+      # Адреса соседних контейнеров — не секреты: appsettings.Release.json. Исключение —
+      # OTEL_* (спец. infrastructure, 10): их по стандартным именам читает сам экспортёр OTLP,
+      # без них API телеметрию не шлёт
+      - name: run new container
+        run: |
+          # Справка (спец. help, 6.4): весь ~/pettemplate-help только на чтение — ссылка current
+          # в нём относительная и ведёт в releases/ рядом. Каталог заводим сами: иначе
+          # докер создаст его от root, и публикация справки не сможет в него писать
+          mkdir -p "$HOME/pettemplate-help"
+          # Порт — только на 127.0.0.1: снаружи API достижим лишь через nginx, иначе
+          # замок админки по адресу (спец. admin, 7) обходится прямым заходом на порт,
+          # а X-Forwarded-For, по которому лимит входа считает адреса, подделывается
+          docker run --restart unless-stopped -p 127.0.0.1:5000:8080 -d --name dapi --network nginx-proxy-man \
+            --env ASPNETCORE_ENVIRONMENT=Release \
+            --env ConnectionStrings__AppConnection="${{ secrets.API_DB_CONNECTION_STRING }}" \
+            --env JwtOptions__SigningKey="${{ secrets.JWT_SIGNING_KEY }}" \
+            --env AdminOptions__SigningKey="${{ secrets.ADMIN_JWT_SIGNING_KEY }}" \
+            --env Telegram__BotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --env TelegramLoginOptions__BotId="${{ vars.TELEGRAM_BOT_ID }}" \
+            --env VkIdOptions__AppId="${{ vars.VK_ID_APP_ID }}" \
+            --env VkOptions__PrivateKey="${{ secrets.VK_MINIAPP_PRIVATE_KEY }}" \
+            --env MailOptions__Password="${{ secrets.SMTP_PASSWORD }}" \
+            --env AssistantOptions__Providers__main__Endpoint="${{ vars.ASSISTANT_ENDPOINT }}" \
+            --env AssistantOptions__Providers__main__ApiKey="${{ secrets.ASSISTANT_API_KEY }}" \
+            --env AssistantOptions__SeedModels__0__Key="${{ vars.ASSISTANT_MODEL }}" \
+            --env AssistantOptions__Transcription__Model="${{ vars.ASSISTANT_TRANSCRIPTION_MODEL }}" \
+            --env OTEL_EXPORTER_OTLP_ENDPOINT="http://otelcollectorcontainer:4317" \
+            --env OTEL_SERVICE_NAME="pettemplate-api" \
+            -v "$HOME/pettemplate-help:/app/help:ro" \
+            pettemplate-api:${{ steps.date.outputs.date }}
+
+      - name: tag as latest
+        run: docker tag pettemplate-api:${{ steps.date.outputs.date }} pettemplate-api:latest
+
+  # Справка того же коммита, что и код (спец. help, 6.4): упала выкатка — справка
+  # не меняется. Условия на ветку нет — на проде код этой ветки, и описывать его должна
+  # её справка
+  publish-help:
+    needs: build-and-deploy
+    uses: ./.github/workflows/publish-help.yml
+    secrets: inherit
+
+  cleanup:
+    needs: build-and-deploy
+    uses: ./.github/workflows/cleanup-old-images.yml
+    with:
+      image_name: pettemplate-api
+      keep_versions: 5
+      container_name: dapi

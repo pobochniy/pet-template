@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PetTemplate</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <script>
+    // Параметры запуска mini-app Telegram и VK (спец. accounts, 5.6) снимаются до старта
+    // Angular, как у Lad: роутер, нормализуя адрес, выкидывает и фрагмент с `tgWebAppData`,
+    // и строку запроса с `vk_*` — к моменту, когда проснулся бы экран входа, их уже нет.
+    // Кладутся в память страницы и в `sessionStorage` (после перезагрузки адрес уже другой).
+    // Хранилище — под `try`: стороннему фрейму VK его могут не дать. Читает это
+    // `launch-params.ts`. SDK площадок не грузятся: подписи из адреса входу достаточно
+    (function () {
+      var launch = {};
+      try {
+        var path = location.pathname;
+        if (path === '/miniapp' || path.indexOf('/miniapp/') === 0) {
+          var tg = new URLSearchParams(location.hash.slice(1)).get('tgWebAppData');
+          if (tg) launch.tg = tg;
+        }
+        if (path === '/vk' || path.indexOf('/vk/') === 0) {
+          var query = new URLSearchParams(location.search);
+          if (query.has('vk_user_id') && query.has('sign')) {
+            launch.vk = location.search.slice(1);
+            // Фрагмент `vk.com/app<id>#inv_…` — приглашение
+            launch.vkHash = location.hash.slice(1);
+          }
+        }
+      } catch (e) { /* без параметров — обычный сайт */ }
+      window.__pettemplateLaunch = launch;
+      try {
+        for (var key in launch) sessionStorage.setItem('pettemplateLaunch.' + key, launch[key]);
+      } catch (e) { /* хранилища нет — остаётся память страницы */ }
+    })();
+  </script>
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

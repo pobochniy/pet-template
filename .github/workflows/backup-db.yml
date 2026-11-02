@@ -1,0 +1,64 @@
+name: Backup Db
+
+# Дамп боевой базы в ~/db-backups на той же VM, что и база (раннер self-hosted).
+# Скачать: scp user@<ip-вм>:<путь из лога шага> ~/pettemplate-backups/
+# Спец. infrastructure, 11; руками то же самое и восстановление — IaC/DEPLOYMENT.md, раздел 10.
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Сколько последних дампов оставить на VM'
+        required: true
+        default: '14'
+
+jobs:
+  backup:
+    runs-on: [self-hosted]
+    steps:
+      - name: dump 💾
+        env:
+          KEEP: ${{ github.event.inputs.keep }}
+        run: |
+          set -euo pipefail
+
+          case "$KEEP" in
+            ''|*[!0-9]*|0) echo "::error::keep — целое число больше нуля"; exit 1 ;;
+          esac
+
+          dir="$HOME/db-backups"
+          mkdir -p "$dir"
+          chmod 700 "$dir"
+          name="pettemplatedb-$(date +'%Y_%m_%d__%H_%M_%S').dump"
+          part="$dir/$name.part"
+          trap 'rm -f "$part"' EXIT
+
+          # pg_dump — тот, что в контейнере: той же версии, что сервер. Суперпользователем
+          # по сокету внутри контейнера: вход там доверенный, пароль не нужен и ни в
+          # аргументы (видно в ps), ни в лог не попадает — секрета DB_ROOT_PASSWORD нет
+          # (спец. infrastructure, 9). Формат custom (-Fc) сжат сам: без конвейера | gzip,
+          # в котором код возврата pg_dump теряется. Без -t: иначе stderr склеивается
+          # с дампом.
+          docker exec dbcontainer pg_dump -U postgres -d pettemplatedb -Fc > "$part"
+
+          if [ ! -s "$part" ]; then
+            echo "::error::дамп пустой"
+            exit 1
+          fi
+
+          # Оборванный дамп проверяем по факту, а не по коду возврата: pg_restore прочитывает
+          # весь архив и падает на обрезанном (аналог строки «Dump completed» у mysqldump).
+          # Оглавление (-l) заодно даёт число таблиц для лога: строки «TABLE», без «TABLE DATA».
+          docker exec -i dbcontainer pg_restore -f /dev/null < "$part"
+          tables=$(docker exec -i dbcontainer pg_restore -l < "$part" \
+            | awk '$4 == "TABLE" && $5 != "DATA"' | wc -l | tr -d ' ')
+
+          mv "$part" "$dir/$name"
+          chmod 600 "$dir/$name"
+
+          # ls, а не find (SC2012): имена — свои, без пробелов, а ls -t сортирует по времени
+          # shellcheck disable=SC2012
+          ls -1t "$dir"/pettemplatedb-*.dump | tail -n +$((KEEP + 1)) | xargs -r rm -f --
+
+          echo "дамп: $dir/$name ($(du -h "$dir/$name" | cut -f1), таблиц: $tables)"
+          echo "на VM лежит:"
+          ls -lh "$dir"

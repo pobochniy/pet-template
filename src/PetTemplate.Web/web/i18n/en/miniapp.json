@@ -1,0 +1,22 @@
+{
+  "page": {
+    "connecting": "Connecting to {platform}…",
+    "authErrorTitle": "Sign-in error"
+  },
+  "error": {
+    "connectFailed": "Could not connect to {platform}",
+    "authFailed": "Could not sign in",
+    "reopen": "Could not connect to {platform}. Open the app through {platform} again",
+    "invalidCredentials": "Wrong login or password"
+  },
+  "fork": {
+    "title": "Welcome",
+    "hint": "We have not met this {platform} yet",
+    "start": "Start",
+    "haveAccount": "I already have an account",
+    "loginTitle": "Sign in to your account",
+    "loginHint": "Sign in with your login and password — this {platform} will be linked, and next time you will be in right away",
+    "login": "Login, email or phone",
+    "loginSubmit": "Sign in and link {platform}"
+  }
+}

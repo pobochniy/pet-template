@@ -1,0 +1,93 @@
+name: Publish Angular
+
+on:
+  workflow_dispatch:
+
+env:
+  ANGULAR_PROJECT_PATH: src/PetTemplate.Web/web
+  # outputPath в angular.json не задан — dist/<проект>, проект `pet-template` (`dotnet new`
+  # его не переименовывает); application-билдер кладёт сайт в browser/
+  BUILD_OUTPUT_PATH: src/PetTemplate.Web/web/dist/pet-template/browser
+  DEPLOY_DIR: ~/frontend
+  BACKUP_DIR: ~/frontend-backup
+
+jobs:
+  # Ворота деплоя: словари и юнит-тесты клиента — на облачном раннере, где есть
+  # Chrome для karma (спец. infrastructure, 5). Упали — ни сборки, ни бэкапа, ни чистки
+  # `~/frontend` не случилось. Бюджет бандла стережёт сборка ниже: `maximumError` её роняет.
+  tests:
+    uses: ./.github/workflows/web-tests.yml
+
+  build-and-deploy:
+    needs: tests
+    runs-on: [self-hosted]
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ env.ANGULAR_PROJECT_PATH }}/package-lock.json
+
+      # `npm ci`, а не `npm install`: ставит ровно то, что записано
+      # в `package-lock.json`, и падает при расхождении с `package.json`.
+      # `npm install` вправе подтянуть другой граф и переписать lock-файл —
+      # собранное на раннере тогда отличалось бы от собранного локально,
+      # а правка lock-файла осталась бы в рабочей копии раннера и никуда
+      # не доехала. По этому же lock-файлу кеширует `actions/setup-node` выше.
+      - name: Install dependencies 📦
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm ci
+
+      - name: Build Angular for production 🏗️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm run build -- --configuration production
+
+      - name: Backup previous version 💾
+        run: |
+          # Очищаем папку бэкапа
+          if [ -d "${{ env.BACKUP_DIR }}" ]; then
+            rm -rf ${{ env.BACKUP_DIR }}/*
+            echo "Cleared ${{ env.BACKUP_DIR }}"
+          else
+            mkdir -p ${{ env.BACKUP_DIR }}
+            echo "Created ${{ env.BACKUP_DIR }}"
+          fi
+
+          # Копируем текущую версию в бэкап, если она существует
+          if [ -d "${{ env.DEPLOY_DIR }}" ] && [ "$(ls -A ${{ env.DEPLOY_DIR }})" ]; then
+            cp -r ${{ env.DEPLOY_DIR }}/* ${{ env.BACKUP_DIR }}/
+            echo "Backed up current version to ${{ env.BACKUP_DIR }}"
+          else
+            echo "No previous version to backup"
+          fi
+
+      - name: Clear frontend directory 🧹
+        run: |
+          if [ -d "${{ env.DEPLOY_DIR }}" ]; then
+            rm -rf ${{ env.DEPLOY_DIR }}/*
+            echo "Cleared ${{ env.DEPLOY_DIR }}"
+          else
+            mkdir -p ${{ env.DEPLOY_DIR }}
+            echo "Created ${{ env.DEPLOY_DIR }}"
+          fi
+
+      - name: Deploy built files 🚀
+        run: |
+          # `/.` а не `/*`: звёздочка не берёт скрытые файлы сборки
+          cp -r ${{ env.BUILD_OUTPUT_PATH }}/. ${{ env.DEPLOY_DIR }}/
+          echo "Deployed files to ${{ env.DEPLOY_DIR }}"
+
+      - name: Verify deployment ✅
+        run: |
+          echo "Files in ${{ env.DEPLOY_DIR }}:"
+          ls -la ${{ env.DEPLOY_DIR }}
+          echo ""
+          echo "Backup files in ${{ env.BACKUP_DIR }}:"
+          ls -la ${{ env.BACKUP_DIR }}
+          echo ""
+          echo "ℹ️  To rollback to previous version, run:"
+          echo "   rm -rf ${{ env.DEPLOY_DIR }}/* && cp -r ${{ env.BACKUP_DIR }}/* ${{ env.DEPLOY_DIR }}/"

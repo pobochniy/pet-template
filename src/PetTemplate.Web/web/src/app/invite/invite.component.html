@@ -1,0 +1,81 @@
+<div class="invite-page container py-4">
+  @if (loading()) {
+    <p class="text-muted" id="invite-loading">{{ i18n.t('invite.page.loading') }}</p>
+  } @else if (unavailable()) {
+    <div class="alert alert-secondary" id="invite-unavailable">{{ i18n.t(unavailableKey) }}</div>
+    <button type="button" id="invite-retry" class="btn btn-primary" (click)="retry()">
+      {{ i18n.t('core.action.retry') }}
+    </button>
+  } @else if (refusal(); as message) {
+    <div class="alert alert-warning" id="invite-refusal">{{ i18n.t(message) }}</div>
+    <a class="btn btn-outline-secondary" routerLink="/">{{ i18n.t('invite.page.toHome') }}</a>
+  } @else if (preview(); as invitation) {
+    <h1 class="h4" id="invite-greeting">
+      @if (invitation.inviteeName) {
+        {{ i18n.t('invite.page.greetingName', { name: invitation.inviteeName }) }}
+      }
+      @if (invitation.inviterName) {
+        {{ i18n.t('invite.page.greeting', { inviter: invitation.inviterName, workspace: invitation.workspaceName }) }}
+      } @else {
+        {{ i18n.t('invite.page.greetingNoInviter', { workspace: invitation.workspaceName }) }}
+      }
+    </h1>
+
+    @if (isAuth) {
+      <button type="button" id="invite-accept" class="btn btn-primary mt-3" [disabled]="busy()" (click)="accept()">
+        {{ i18n.t('invite.page.accept') }}
+      </button>
+    } @else if (hasAccount()) {
+      <form class="mt-3" [formGroup]="loginForm" (ngSubmit)="login()">
+        <div class="mb-3">
+          <label class="form-label" for="invite-login">{{ i18n.t('invite.field.login') }}</label>
+          <input class="form-control" id="invite-login" type="text" formControlName="login" autocomplete="username" />
+          <form-validation [model]="loginForm.controls.login" fieldKey="invite.field.login"></form-validation>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="invite-login-password">{{ i18n.t('core.field.password') }}</label>
+          <input class="form-control" id="invite-login-password" type="password" formControlName="password"
+                 autocomplete="current-password" />
+          <form-validation [model]="loginForm.controls.password" fieldKey="core.field.password"></form-validation>
+        </div>
+        <button type="submit" id="invite-login-submit" class="btn btn-primary" [disabled]="busy()">
+          {{ i18n.t('invite.page.loginSubmit') }}
+        </button>
+        <button type="button" class="btn btn-link" (click)="hasAccount.set(false)">
+          {{ i18n.t('invite.page.notRegistered') }}
+        </button>
+      </form>
+      <!-- Telegram и VK: вход вернёт сюда же, и лендинг предложит принять приглашение (спец. accounts, 5.4) -->
+      <auth-external-buttons [returnUrl]="returnUrl()"></auth-external-buttons>
+    } @else {
+      <form class="mt-3" [formGroup]="registerForm" (ngSubmit)="register()">
+        <div class="mb-3">
+          <label class="form-label" for="invite-username">{{ i18n.t('core.field.userName') }}</label>
+          <input class="form-control" id="invite-username" type="text" formControlName="userName" autocomplete="username" />
+          <form-validation [model]="registerForm.controls.userName" fieldKey="core.field.userName"></form-validation>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="invite-password">{{ i18n.t('core.field.password') }}</label>
+          <input class="form-control" id="invite-password" type="password" formControlName="password"
+                 autocomplete="new-password" />
+          <form-validation [model]="registerForm.controls.password" fieldKey="core.field.password"></form-validation>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="invite-password-confirm">{{ i18n.t('core.field.passwordConfirm') }}</label>
+          <input class="form-control" id="invite-password-confirm" type="password" formControlName="passwordConfirm"
+                 autocomplete="new-password" />
+          @if (registerForm.hasError('PassNotSame') && registerForm.controls.passwordConfirm.touched) {
+            <div class="text-danger">{{ i18n.t('core.validation.passwordsDoNotMatch') }}</div>
+          }
+        </div>
+        <button type="submit" id="invite-register-submit" class="btn btn-primary" [disabled]="busy()">
+          {{ i18n.t('invite.page.registerSubmit') }}
+        </button>
+        <button type="button" id="invite-has-account" class="btn btn-link" (click)="hasAccount.set(true)">
+          {{ i18n.t('invite.page.haveAccount') }}
+        </button>
+      </form>
+      <auth-external-buttons [returnUrl]="returnUrl()"></auth-external-buttons>
+    }
+  }
+</div>

@@ -1,0 +1,100 @@
+<div class="workspace-settings container py-4">
+  <h2 class="mb-1"><i-lucide name="users" class="me-2"></i-lucide>{{ i18n.t('workspace.settings.title') }}</h2>
+  <p class="text-muted">{{ i18n.t('workspace.settings.subtitle') }}</p>
+
+  @if (workspaces().length > 0) {
+    <ul class="list-group mb-4">
+      @for (ws of workspaces(); track ws.id) {
+        <li class="list-group-item workspace-row">
+          @if (renaming() === ws.id) {
+            <form class="d-flex flex-wrap align-items-start gap-2" [formGroup]="renameForm" (ngSubmit)="rename(ws.id)">
+              <div class="flex-grow-1">
+                <input class="form-control form-control-sm" type="text" formControlName="name"
+                       [attr.aria-label]="i18n.t('core.field.name')" />
+                <form-validation [model]="renameForm.controls.name" fieldKey="core.field.name"></form-validation>
+              </div>
+              <button type="submit" class="btn btn-sm btn-primary rename-save" [disabled]="busy()">
+                {{ i18n.t('core.action.save') }}
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="cancelRename()">
+                {{ i18n.t('core.action.cancel') }}
+              </button>
+            </form>
+          } @else {
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <span class="fw-semibold workspace-name">{{ ws.name }}</span>
+              <span class="d-flex flex-wrap align-items-center gap-2">
+                @if (ws.id === primaryWorkspaceId()) {
+                  <span class="badge bg-secondary primary-badge">
+                    <i-lucide name="star" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.primaryBadge') }}
+                  </span>
+                } @else {
+                  <button type="button" class="btn btn-sm btn-outline-secondary make-primary" (click)="setPrimary(ws.id)">
+                    {{ i18n.t('workspace.settings.makePrimary') }}
+                  </button>
+                }
+
+                @if (canRename(ws)) {
+                  <button type="button" class="btn btn-sm btn-outline-secondary rename" (click)="startRename(ws)">
+                    <i-lucide name="pencil" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.rename') }}
+                  </button>
+                }
+
+                @if (showMembersButton(ws)) {
+                  <button type="button" class="btn btn-sm btn-outline-primary members-button" (click)="openMembers(ws.id)">
+                    <i-lucide name="users" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.members') }}
+                  </button>
+                }
+
+                @if (leaving() === ws.id) {
+                  <span class="text-danger leave-confirm-text">
+                    {{ i18n.t(isLastMember(ws) ? 'workspace.settings.leaveLastConfirm' : 'workspace.settings.leaveConfirm') }}
+                  </span>
+                  <button type="button" class="btn btn-sm btn-danger leave-confirm" [disabled]="busy()" (click)="leave(ws.id)">
+                    {{ i18n.t('workspace.settings.leave') }}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="cancelLeave()">
+                    {{ i18n.t('core.action.cancel') }}
+                  </button>
+                } @else {
+                  <button type="button" class="btn btn-sm btn-outline-danger leave" (click)="confirmLeave(ws.id)">
+                    <i-lucide name="log-out" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.leave') }}
+                  </button>
+                }
+              </span>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  } @else if (loaded()) {
+    <p class="text-muted" id="no-workspaces">{{ i18n.t('workspace.settings.empty') }}</p>
+  }
+
+  <section>
+    @if (createOpen()) {
+      <h3 class="fs-5">{{ i18n.t('workspace.settings.createTitle') }}</h3>
+      <form class="bg-body-secondary border rounded p-3" [formGroup]="form" (ngSubmit)="create()">
+        <div class="mb-3">
+          <label class="form-label" for="workspace-name">{{ i18n.t('core.field.name') }}</label>
+          <input class="form-control" id="workspace-name" type="text" formControlName="name"
+                 [placeholder]="i18n.t('workspace.settings.namePlaceholder')" />
+          <div class="form-text">{{ i18n.t('workspace.settings.createHint') }}</div>
+          <form-validation [model]="form.controls.name" fieldKey="core.field.name"></form-validation>
+        </div>
+        <button type="submit" id="create-workspace" class="btn btn-primary" [disabled]="busy()">
+          {{ i18n.t('workspace.settings.createSubmit') }}
+        </button>
+      </form>
+    } @else if (loaded()) {
+      <button type="button" id="open-create-workspace" class="btn btn-outline-primary" (click)="openCreate()">
+        <i-lucide name="folder-plus" class="me-2"></i-lucide>{{ i18n.t('workspace.settings.createOpen') }}
+      </button>
+    }
+  </section>
+
+  @if (membersInline()) {
+    <hr class="my-4" />
+    <workspace-members [embedded]="true"></workspace-members>
+  }
+</div>

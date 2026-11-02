@@ -1,0 +1,101 @@
+<div class="container py-4" style="max-width: 960px">
+  <h3 class="fw-bold mb-2">{{ i18n.t('profile.merge.title') }}</h3>
+
+  @if (preview()) {
+    <p class="text-body-secondary" id="merge-hint">{{ i18n.t('profile.merge.hint') }}</p>
+
+    <div class="row g-3">
+      @for (card of accounts(); track card.userId) {
+        <div class="col-md-6">
+          <label class="card h-100" [class.border-primary]="keepId() === card.userId" [attr.for]="'keep-' + card.userId">
+            <div class="card-body">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="keep" [id]="'keep-' + card.userId"
+                       [checked]="keepId() === card.userId" [disabled]="!canKeep(card)" (change)="choose(card.userId)" />
+                <span class="form-check-label fw-bold fs-5">{{ card.userName }}</span>
+              </div>
+              @if (!card.canBeRemoved) {
+                <div class="small text-warning-emphasis mb-2 only-stays">{{ i18n.t('profile.merge.onlyStays') }}</div>
+              }
+              @if (isYoungOther(card)) {
+                <div class="small text-warning-emphasis mb-2 young-account">{{ i18n.t('profile.merge.youngAccount') }}</div>
+              }
+              <div class="small text-body-secondary mb-2">
+                {{ i18n.t('profile.merge.logins', { logins: logins(card) }) }} ·
+                {{ i18n.t('profile.merge.registered', { date: registered(card) }) }}
+              </div>
+              <ul class="list-unstyled small mb-0">
+                @for (workspace of card.workspaces; track workspace.id) {
+                  <li class="mb-2">
+                    <div class="fw-semibold">«{{ workspace.name }}» ·
+                      {{ workspace.isOwner ? i18n.t('profile.merge.owner') : i18n.t('profile.merge.member') }} ·
+                      {{ i18n.t('profile.merge.others', { count: n(workspace.otherMembers.length) }) }}
+                    </div>
+                    <div [class.text-danger]="workspace.isSolo" class="workspace-fate">
+                      {{ i18n.t('profile.merge.ifDeleted') }} {{ fate(workspace) }}
+                    </div>
+                  </li>
+                } @empty {
+                  <li class="text-body-secondary">{{ i18n.t('profile.merge.noWorkspaces') }}</li>
+                }
+              </ul>
+            </div>
+          </label>
+        </div>
+      }
+    </div>
+
+    @if (kept(); as keptCard) {
+      @if (removed(); as removedCard) {
+        @if (!confirming()) {
+          <button type="button" class="btn btn-primary mt-3" id="merge-next" (click)="confirming.set(true)">
+            {{ i18n.t('profile.merge.next') }}
+          </button>
+        } @else {
+          <div class="card border-danger mt-3" id="merge-confirmation">
+            <div class="card-body">
+              <p class="mb-1"><b>{{ i18n.t('profile.merge.stays') }}</b> {{ keptCard.userName }}
+                @for (workspace of keptCard.workspaces; track workspace.id) {
+                  — «{{ workspace.name }}», {{ i18n.t('profile.merge.members', { count: n(workspace.otherMembers.length + 1) }) }}
+                }
+              </p>
+              <p class="mb-1"><b>{{ i18n.t('profile.merge.goesForever') }}</b> {{ removedCard.userName }}.</p>
+              @for (workspace of removedCard.workspaces; track workspace.id) {
+                @if (workspace.isSolo) {
+                  <p class="mb-1 text-danger">{{ i18n.t('profile.merge.soloGoes', { name: workspace.name }) }}</p>
+                } @else {
+                  <p class="mb-1">{{ i18n.t('profile.merge.membershipMoves', { name: workspace.name, kept: keptCard.userName }) }}</p>
+                }
+              }
+              <p class="mb-1">{{ i18n.t('profile.merge.notMoved', { removed: removedCard.userName }) }}</p>
+              @for (login of movingLogins(); track login) {
+                <p class="mb-1">{{ i18n.t('profile.merge.loginMoves', { login: login, kept: keptCard.userName }) }}</p>
+              }
+              @for (login of droppedLogins(); track login) {
+                <p class="mb-1 login-dropped">{{ i18n.t('profile.merge.loginDropped', { login: login, removed: removedCard.userName, kept: keptCard.userName }) }}</p>
+              }
+              <p class="mb-3 fw-semibold">{{ i18n.t('profile.merge.irreversible') }}</p>
+
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-danger" id="merge-confirm" [disabled]="busy()" (click)="merge()">
+                  {{ i18n.t('profile.merge.submit', { removed: removedCard.userName, kept: keptCard.userName }) }}
+                </button>
+                <button type="button" class="btn btn-outline-secondary" (click)="confirming.set(false)">{{ i18n.t('core.action.back') }}</button>
+              </div>
+            </div>
+          </div>
+        }
+      }
+    }
+  } @else {
+    <p class="text-body-secondary" id="merge-empty">{{ i18n.t('profile.merge.empty') }}</p>
+  }
+
+  @if (error()) {
+    <div class="alert alert-danger mt-3" id="merge-error">{{ error() }}</div>
+  }
+
+  <div class="mt-3">
+    <a [routerLink]="['/profile/edit']">{{ i18n.t('profile.merge.backToProfile') }}</a>
+  </div>
+</div>

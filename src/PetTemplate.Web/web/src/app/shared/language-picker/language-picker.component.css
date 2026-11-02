@@ -1,0 +1,109 @@
+/*
+ * Маленькая модалка со своей разметкой, а не bootstrap-модалка на JS (в проекте
+ * подключены только стили). Список в столбик, а не сеткой: у пункта есть подпись,
+ * и в клетке 2×2 см она не поместилась бы.
+ */
+
+.language-picker__backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Подложка светлее, чем у больших модалок: окно маленькое, и гасить весь
+     экран ради выбора языка — слишком */
+  background-color: rgba(0, 0, 0, 0.25);
+  z-index: 1040;
+}
+
+.language-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1050;
+  width: 16rem;
+  max-width: 92vw;
+  padding: 0.5rem;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.language-picker__head {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.language-picker__title {
+  flex: 1 1 auto;
+  font-weight: 500;
+}
+
+.language-picker__search {
+  position: relative;
+  flex: 1 1 auto;
+}
+
+.language-picker__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.5rem;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  pointer-events: none;
+}
+
+.language-picker__search .form-control {
+  padding-left: 1.75rem;
+}
+
+.language-picker__close {
+  flex: 0 0 auto;
+  color: var(--bs-secondary-color);
+}
+
+/* Высота ограничена: список длиннее экрана прокручивается внутри окна,
+   а не растягивает его за края */
+.language-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.language-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: none;
+  color: var(--bs-body-color);
+  text-align: left;
+}
+
+.language-picker__item:hover,
+.language-picker__item:focus-visible {
+  background-color: var(--bs-secondary-bg);
+}
+
+.language-picker__item--selected {
+  border-color: var(--bs-primary);
+  color: var(--bs-primary);
+}
+
+.language-picker__name {
+  flex: 1 1 auto;
+}
+
+.language-picker__empty {
+  padding: 0.75rem 0.25rem;
+  text-align: center;
+}

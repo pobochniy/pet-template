@@ -1,0 +1,37 @@
+name: List Api Versions
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list-versions:
+    runs-on: [self-hosted]
+    steps:
+      - name: List available Docker images
+        run: |
+          echo "📦 Available pettemplate-api versions:"
+          echo "=================================="
+          docker images pettemplate-api --format "table {{.Tag}}\t{{.CreatedAt}}\t{{.Size}}" | head -20
+
+          echo ""
+          echo "🏃 Currently running container:"
+          echo "=================================="
+          if docker ps | grep -q "dapi"; then
+            CURRENT_IMAGE=$(docker inspect dapi --format='{{.Config.Image}}')
+            echo "Container: dapi"
+            echo "Image: $CURRENT_IMAGE"
+            docker ps | grep "dapi" | awk '{print "Status:", $7, $8, $9}'
+          else
+            echo "⚠️  No container is currently running"
+          fi
+
+          echo ""
+          echo "💾 Total images: $(docker images pettemplate-api | tail -n +2 | wc -l)"
+
+  cleanup:
+    needs: list-versions
+    uses: ./.github/workflows/cleanup-old-images.yml
+    with:
+      image_name: pettemplate-api
+      keep_versions: 5
+      container_name: dapi

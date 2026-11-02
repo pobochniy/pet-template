@@ -1,0 +1,200 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "pet-template": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/bootstrap.scss",
+              "src/styles.css"
+            ],
+            "stylePreprocessorOptions": {
+              "includePaths": [
+                "node_modules"
+              ],
+              "sass": {
+                // Bootstrap 5.3 не модульный: @use не работает, см. tech-debt/sass-import.md.
+                // Снять, когда bootstrap.scss уйдёт — к Sass 3.0 (план — там же).
+                "silenceDeprecations": [
+                  "import"
+                ]
+              }
+            }
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  // Замер после поштучного Bootstrap — 398.00 КБ (история — tech-debt/bundle.md);
+                  // порог — замер плюс запас, а не круглое число: на 500/1MB бюджет не значил ничего, бандл мог вырасти вдвое молча.
+                  // 410 — это `maximumError`, а не предупреждение: сборка падает,
+                  // и раздутый бандл не выкатывается (ворота publish-angular.yml).
+                  // Предупреждение на 405 — знак, что запас кончается. Подняли
+                  // порог — запишите в tech-debt/bundle.md, за что
+                  "type": "initial",
+                  "maximumWarning": "405kB",
+                  "maximumError": "410kB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.development.ts"
+                }
+              ]
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "pet-template:build:production"
+            },
+            "development": {
+              "buildTarget": "pet-template:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "extract-i18n": {
+          "builder": "@angular/build:extract-i18n"
+        },
+        "test": {
+          "builder": "@angular/build:karma",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/bootstrap.scss",
+              "src/styles.css"
+            ],
+            "stylePreprocessorOptions": {
+              "includePaths": [
+                "node_modules"
+              ],
+              "sass": {
+                "silenceDeprecations": [
+                  "import"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "projects/admin",
+      "sourceRoot": "projects/admin/src",
+      "prefix": "adm",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist/admin",
+            "browser": "projects/admin/src/main.ts",
+            "tsConfig": "projects/admin/tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "favicon.ico",
+                "input": "public"
+              }
+            ],
+            // Полный bootstrap.min.css, а не поштучный src/bootstrap.scss продукта: таблицы
+            // и формы без своего дизайна, урезать под интерфейс на двоих незачем (спец. admin, 4)
+            "styles": [
+              "node_modules/bootstrap/dist/css/bootstrap.min.css",
+              "projects/admin/src/styles.css"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  // Свой бюджет, продуктовый (tech-debt/bundle.md) сюда не распространяется.
+                  // Больше половины — bootstrap.min.css целиком (≈230 КБ). Замер, когда бюджет
+                  // заводили, — 522.80 КБ; 600 — ошибка, как и у продукта, а не предупреждение
+                  "type": "initial",
+                  "maximumWarning": "575kB",
+                  "maximumError": "600kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            // 4201 — его пускает CORS API (ConfigureCors), рядом с продуктом на 4200
+            "port": 4201,
+            "proxyConfig": "proxy.conf.json"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "admin:build:production"
+            },
+            "development": {
+              "buildTarget": "admin:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:karma",
+          "options": {
+            "tsConfig": "projects/admin/tsconfig.spec.json",
+            "styles": [
+              "node_modules/bootstrap/dist/css/bootstrap.min.css"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

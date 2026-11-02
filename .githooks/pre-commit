@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# Проверки до коммита — только те, что стоят секунды: коммитов за день много.
+# Долгое (тесты) висит на pre-push. Спец. infrastructure, 4.
+#
+#   i18n:check   — сгенерированные словари совпадают с закоммиченными;
+#   i18n:lint    — в шаблонах нет текста мимо `t()`, в `*.ts` нет строк с кириллицей;
+#   i18n:codes   — у каждого кода отказа сервера есть ключ в словаре, а словарь
+#                  с кодами грузится хотя бы одним маршрутом. Гоняется и на правку
+#                  `*.cs` (новый код заводят на сервере, а забывают на клиенте),
+#                  и на правку `*.routes.ts` (из них берутся маршруты);
+#   dotnet build — бэкенд компилируется, включая проект тестов.
+#
+# Все три i18n-проверки — ворота `publish-angular.yml` (через `web-tests.yml`),
+# `dotnet build` повторяет сборку из `publish-api.yml`, то есть хук говорит то же,
+# что сказал бы деплой, но до пуша.
+#
+# Включается один раз на клон: `git config core.hooksPath .githooks`.
+#
+# Проверяется рабочее дерево, а не индекс: при частичном `git add` хук увидит
+# файл целиком. Для этих проверок так и надо — словари, ключи и сборка живут
+# файлами, а не строками.
+#
+# Обойти на один коммит: `git commit --no-verify`.
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if printf '%s\n' "$staged" | grep -q '^src/PetTemplate\.Web/web/\(src\|i18n\|tools\)/'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/i18n-codegen.mjs --check
+  node tools/i18n-lint.mjs
+  cd "$root"
+fi
+
+# Коды отказов живут по обе стороны: объявлены в `*.cs`, переводятся словарями.
+# Поэтому проверка цепляется и к правке бэкенда, и к правке словарей.
+# `*.routes.ts` — третий вход: из них выводится, каким маршрутом грузится словарь,
+# а на этом стоит проверка достижимости
+if printf '%s\n' "$staged" | grep -q '\.cs$\|^src/PetTemplate\.Web/web/\(i18n\|tools\)/\|^src/PetTemplate\.Web/web/src/.*\.routes\.ts$'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/i18n-server-codes.mjs
+  cd "$root"
+fi
+
+# `-v q` — только ошибки: анализаторы дают пачку предупреждений, и в хуке
+# они утопили бы то единственное, ради чего он запущен
+if printf '%s\n' "$staged" | grep -q '\.\(cs\|csproj\|props\|slnx\)$'; then
+  dotnet build "$root/PetTemplate.slnx" -v q --nologo
+fi

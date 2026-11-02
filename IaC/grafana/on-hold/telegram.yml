@@ -1,0 +1,40 @@
+# ВНЕ ПРОВИЖИНИНГА (спец. infrastructure, 13): доставку тревог проект включает сам, когда
+# заведёт бота и группу. Файл лежит вне grafana/provisioning, и Grafana его не читает:
+# тревоги срабатывают и видны в Alerting, но никуда не уходят. Включить — переложить
+# в grafana/provisioning/alerting/, вписать chatid ниже и TELEGRAM_BOT_TOKEN в .env
+# (IaC/DEPLOYMENT.md, «Тревоги в Telegram»). Без токена Grafana с этим файлом не стартует
+# вовсе — поэтому по умолчанию он здесь, а не там.
+#
+# Куда приходят тревоги: группа в Telegram. Токен бота — из .env на сервере
+# (TELEGRAM_BOT_TOKEN), docker-compose.yml передаёт его Grafana; id группы — ниже.
+# Grafana подставляет переменные окружения во все файлы provisioning, поэтому знак
+# доллара в значениях здесь и в rules.yml — только для подстановки; буквальный — $$
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: telegram
+    receivers:
+      - uid: telegram
+        type: telegram
+        settings:
+          bottoken: "${TELEGRAM_BOT_TOKEN}"
+          # id группы «тревоги» — прямо здесь, не из .env: подставленное из переменной
+          # Grafana читает числом даже в кавычках, а ждёт строку. Не секрет — без токена
+          # бота писать по нему нельзя. Сменили группу — поменять здесь.
+          # Пока группы нет — заглушка: Grafana стартует, но тревоги не уходят
+          # (DEPLOYMENT.md, «Тревоги в Telegram»)
+          chatid: "-100"
+          parse_mode: HTML
+        # «Всё прошло» тоже приходит — видно, что тревога не забыта, а закрылась
+        disableResolveMessage: false
+
+policies:
+  - orgId: 1
+    receiver: telegram
+    group_by: [alertname]
+    # Первое сообщение — через полминуты после срабатывания, повтор той же
+    # незакрытой тревоги — раз в 4 часа, чтобы канал не превращался в шум
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

@@ -1,0 +1,73 @@
+{
+  "title": "Assistant",
+  "clear": "Clear",
+  "clearConfirm": "Erase the conversation? Everything the assistant has already done for you stays.",
+  "clearYes": "Erase",
+  "clearNo": "Keep",
+  "stop": "Stop",
+  "thinking": "Thinking…",
+  "step": "step {step} of {total}",
+  "activity": {
+    "search_help": "searching the help",
+    "ask_user": "phrasing a question",
+    "apply_plan": "doing it",
+    "remember_fact": "remembering"
+  },
+  "input": {
+    "home": "Ask the assistant",
+    "chat": "Message…",
+    "send": "Send"
+  },
+  "empty": {
+    "title": "Write what you need in plain words",
+    "hint1": "how do I invite a colleague to the space",
+    "hint2": "how do I change the language",
+    "hint3": "who can see my conversation with the assistant"
+  },
+  "plan": {
+    "done": "Done",
+    "draft": "Collected so far:",
+    "more": "… {count} more"
+  },
+  "trace": {
+    "show": "Show reasoning",
+    "hide": "Hide reasoning",
+    "expired": "The details are no longer stored",
+    "model": "thinking",
+    "seconds": "{value} s"
+  },
+  "limit": {
+    "title": "The assistant’s limit in this space is used up",
+    "shared": "The limit is shared by all members of the space: everything the assistant did for each of them counts.",
+    "dismiss": "Got it"
+  },
+  "memory": {
+    "remembered": "Remembered: {text}",
+    "forget": "Remove",
+    "forgetConfirm": "Remove this fact?",
+    "title": "Assistant memory",
+    "hint": "The assistant only remembers what you said yourself. Each space has its own memory; “Clear” in the chat does not erase it.",
+    "back": "Back to profile",
+    "shared": "About the space",
+    "personal": "About me",
+    "empty": "Nothing remembered yet",
+    "source": "Where it came from"
+  },
+  "voice": {
+    "record": "Dictate",
+    "stop": "Finish recording",
+    "cancel": "Cancel recording",
+    "denied": "The microphone is blocked — allow it in the browser settings",
+    "tooLong": "Recording stopped: one minute at most"
+  },
+  "error": {
+    "dailyLimitReached": "The assistant’s daily limit in the space “{workspace}” is used up — it is shared by all members. New requests can be sent tomorrow",
+    "monthlyLimitReached": "The assistant’s monthly limit in the space “{workspace}” is used up — it is shared by all members. New requests can be sent next month",
+    "modelUnavailable": "The assistant is unavailable right now, please try again later",
+    "transcriptionFailed": "Couldn’t recognize the recording",
+    "transcriptionUnavailable": "Speech recognition is not set up",
+    "audioTooLarge": "The recording is too large",
+    "audioTooLong": "The recording is too long — one minute at most",
+    "unknown": "Couldn’t reach the assistant, please try again"
+  }
+}

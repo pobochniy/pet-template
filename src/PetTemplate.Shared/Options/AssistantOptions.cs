@@ -1,0 +1,222 @@
+namespace PetTemplate.Shared.Options;
+
+/// <summary>
+/// Настройки ассистента (спец. assistant, раздел 17) — один набор на все ходы,
+/// без деления по режимам: «коротко» и «длинно» различаются числами
+/// <see cref="StepsSoft"/> и <see cref="StepsHard"/>, а не отдельными секциями.
+///
+/// Умолчания стоят инициализаторами свойств, чтобы приложение поднималось и с пустой
+/// секцией: без поставщика ассистент просто не сделает хода, но остальная система работает.
+/// В <c>appsettings.json</c> лежат примеры структуры, боевые значения приезжают
+/// переменными окружения (см. <c>src/PetTemplate.Api/agents.md</c>, «Конфигурация и секреты»).
+/// </summary>
+public class AssistantOptions
+{
+    /// <summary>
+    /// Поставщики по коду (раздел 16): адрес, ключ и провайдер-специфичные поля.
+    /// Какой моделью ходить, здесь не решается — это порядок в справочнике
+    /// <c>ai_models</c>, а строка справочника находит свою секцию по коду поставщика.
+    /// Секреты поэтому остаются в окружении и не попадают в базу.
+    ///
+    /// Коды сравниваются без учёта регистра: переменные окружения регистр не держат.
+    /// </summary>
+    public Dictionary<string, AssistantProviderOptions> Providers { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Стартовый справочник моделей (раздел 16.2): заводится в пустую таблицу
+    /// <c>ai_models</c> при старте API (<c>AiModelSeeder</c>). Экран «Модели» в админке
+    /// (спец. admin, 15) ждёт админа с ролью — без этой строки свежая база до него
+    /// жила бы с ассистентом, которому некуда идти. Справочник не пуст — список
+    /// не читается вовсе: дальше моделями владеет админка
+    /// </summary>
+    public List<AssistantSeedModel> SeedModels { get; set; } = [];
+
+    /// <summary>
+    /// Расшифровка голоса (раздел 6) — тот же поставщик, что у моделей: адрес и ключ
+    /// берутся из его секции в <see cref="Providers"/>, своя здесь только модель.
+    /// Пустая модель — голос в установке выключен
+    /// </summary>
+    public AssistantTranscriptionOptions Transcription { get; set; } = new();
+
+    /// <summary>
+    /// Сколько фактов памяти держим на владельца — общих на пространство и личных на
+    /// человека в нём; сверх лимита вытесняются те, что не пригодились (12.5). Столько же
+    /// фактов едет в промпт: тридцать модель ещё различает, триста — уже нет
+    /// </summary>
+    public int MemoryFactsLimit { get; set; } = 30;
+
+    /// <summary>
+    /// Сколько последних сообщений треда едет в модель рядом с резюме (12.4)
+    /// </summary>
+    public int HistoryMessages { get; set; } = 20;
+
+    /// <summary>
+    /// Сколько сообщений отдаёт страница ленты (раздел 14)
+    /// </summary>
+    public int HistoryPageSize { get; set; } = 30;
+
+    /// <summary>
+    /// Порог компакции в символах истории: набралось больше — после хода ставится
+    /// команда на сжатие (12.4). Считаем консервативно и в символах, а не в токенах:
+    /// токенизатор у каждого поставщика свой, а символы одинаковы у всех.
+    /// </summary>
+    public int CompactionThreshold { get; set; } = 40_000;
+
+    /// <summary>
+    /// Шагов до эскалации: на этом шаге в ленте появляется плашка «идёт длинный ход»
+    /// (раздел 3, таблица раздела 8)
+    /// </summary>
+    public int StepsSoft { get; set; } = 8;
+
+    /// <summary>
+    /// Шагов всего: на этом ход обрывается и сдаёт частичный результат (раздел 8).
+    /// Равенство <see cref="StepsHard"/> и <see cref="StepsSoft"/> выключает длинные
+    /// ходы целиком, не выключая ассистента — поэтому отдельного выключателя нет.
+    /// </summary>
+    public int StepsHard { get; set; } = 30;
+
+    /// <summary>
+    /// После какого возраста вопрос или план считается несвежим (5.4). На сверку плана
+    /// с базой не влияет — она делается всегда; порог только про подачу текстом.
+    /// </summary>
+    public TimeSpan StaleAfter { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Сколько сущностей план создаёт и правит, оставаясь пересказом фразы, — потолок
+    /// немедленного применения (5.1). Что именно он ограничивает, решает
+    /// <c>PlanConsent</c>; число здесь, потому что подбирается на живых людях,
+    /// как <see cref="StaleAfter"/>.
+    ///
+    /// Ноль выключает немедленное применение целиком: каждый план тогда идёт
+    /// через «делаем?», и отдельного выключателя для этого не нужно.
+    /// </summary>
+    public int ImmediateLimit { get; set; } = 5;
+
+    /// <summary>
+    /// Пускать ли в телеметрию содержимое сообщений и аргументы инструментов
+    /// (13.3). По умолчанию выключено: в трассу уехала бы переписка.
+    /// </summary>
+    public bool TelemetrySensitiveData { get; set; }
+
+    /// <summary>
+    /// Сколько дней живут шаги трассы, после чего их убирает суточная чистка (13.1).
+    /// Сам прогон остаётся — «показать ход мысли» на нём отвечает «подробности уже не хранятся»
+    /// </summary>
+    public int TraceRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Сколько ходов исполняется одновременно (раздел 3): столько циклов разбора
+    /// у дорожки ассистента в очереди команд
+    /// </summary>
+    public int Workers { get; set; } = 2;
+
+    /// <summary>
+    /// Сколько секунд держится долгий опрос ленты (раздел 14)
+    /// </summary>
+    public int LongPollSeconds { get; set; } = 20;
+
+    /// <summary>
+    /// Потолок токенов на один ход (раздел 8). Бюджета времени у хода нет:
+    /// от зацикливания защищают счётчики работы, а не секунды на стене.
+    /// </summary>
+    public int TokensPerRun { get; set; } = 60_000;
+
+    /// <summary>
+    /// Таймаут одного вызова инструмента — свой, короче общего: зависший запрос
+    /// к поиску не должен съедать весь ход (раздел 8).
+    /// </summary>
+    public int ToolTimeoutSeconds { get; set; } = 30;
+}
+
+/// <summary>
+/// Секция поставщика в <see cref="AssistantOptions.Providers"/>: клиент у всех
+/// OpenAI-совместимых один (раздел 16), различаются адрес и ключ, а модель
+/// приходит из справочника.
+/// </summary>
+public class AssistantProviderOptions
+{
+    /// <summary>
+    /// Адрес OpenAI-совместимого API вместе с версией пути (например <c>/v1</c>)
+    /// </summary>
+    public string Endpoint { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ключ доступа. В репозитории пусто — значение ставит окружение.
+    /// </summary>
+    public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Провайдер-специфичные поля запроса, которым нет места в паре «адрес, ключ»:
+    /// folder id и scope у российских поставщиков, лишние поля вроде <c>tool_stream</c>
+    /// (раздел 16). Плоской тройки «адрес, модель, ключ» хватает не всем, поэтому
+    /// место под них есть с самого начала.
+    /// </summary>
+    public Dictionary<string, string> ProviderOptions { get; set; } = new();
+}
+
+/// <summary>
+/// Подсекция <c>Transcription</c> (раздел 6.2). Выше <c>ITranscriptionService</c> про движок
+/// не знает никто; провод — OpenAI-совместимый <c>POST /audio/transcriptions</c>, и поставщик
+/// у него тот же, что у моделей: отдельного адреса и секрета нет
+/// </summary>
+public class AssistantTranscriptionOptions
+{
+    /// <summary>Код поставщика — секция в <see cref="AssistantOptions.Providers"/></summary>
+    public string Provider { get; set; } = "main";
+
+    /// <summary>
+    /// Модель распознавания у поставщика (<c>whisper-1</c>, <c>whisper-large-v3</c>).
+    /// Пусто — расшифровки нет, и голос отвечает внятным отказом (6.3)
+    /// </summary>
+    public string Model { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Язык надиктовки — явный, а не автоопределение: на коротких репликах («да»,
+    /// «нет, в июне») он надёжнее. С языком интерфейса не связан (6.1)
+    /// </summary>
+    public string Language { get; set; } = "ru";
+
+    /// <summary>
+    /// Потолок записи в байтах. Минута речи в opus или AAC — около мегабайта; четыре —
+    /// с запасом, и ниже <c>client_max_body_size</c> у nginx (спец. infrastructure, 8)
+    /// </summary>
+    public long MaxAudioBytes { get; set; } = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// Потолок длительности в секундах — тот же, что у клиента (6.3): дальше это уже
+    /// не реплика, а диктовка
+    /// </summary>
+    public int MaxSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Цена минуты записи в валюте учёта (<c>SpendOptions.Currency</c>, 13.5): распознавание
+    /// поставщики считают по времени, а не по токенам, и в справочнике <c>ai_models</c>
+    /// этой цены нет. Ноль — минуты считаются, деньги нет
+    /// </summary>
+    public decimal CostPerMinute { get; set; }
+}
+
+/// <summary>
+/// Строка стартового справочника моделей (<see cref="AssistantOptions.SeedModels"/>)
+/// </summary>
+public class AssistantSeedModel
+{
+    /// <summary>Код поставщика — ключ секции в <see cref="AssistantOptions.Providers"/></summary>
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>Идентификатор модели у поставщика — уезжает в запрос</summary>
+    public string Key { get; set; } = string.Empty;
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Порядок обращения: первая включённая — основная, дальше запасные (16.2)</summary>
+    public int Priority { get; set; }
+
+    /// <summary>Цена за 1000 входящих токенов в валюте учёта (13.5); без неё — ноль</summary>
+    public decimal CostIn { get; set; }
+
+    public decimal CostCached { get; set; }
+
+    public decimal CostOut { get; set; }
+}

@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PetTemplate.Api/PetTemplate.Api.csproj" />
+    <Project Path="src/PetTemplate.Db/PetTemplate.Db.csproj" />
+    <Project Path="src/PetTemplate.Help/PetTemplate.Help.csproj" />
+    <Project Path="src/PetTemplate.Services/PetTemplate.Services.csproj" />
+    <Project Path="src/PetTemplate.Shared/PetTemplate.Shared.csproj" />
+    <Project Path="src/PetTemplate.Web/PetTemplate.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PetTemplate.Tests/PetTemplate.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/HelpCheck/HelpCheck.csproj" />
+  </Folder>
+</Solution>

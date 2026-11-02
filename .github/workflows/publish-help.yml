@@ -1,0 +1,91 @@
+name: Publish Help
+
+# Справка ассистента (спец. help, 6.4): help/ этого коммита → ~/pettemplate-help/releases/<sha>,
+# ссылка ~/pettemplate-help/current переключается на него. API (dapi) смонтировал ~/pettemplate-help
+# только на чтение и раз в минуту перечитывает current/manifest.json: коммит сменился —
+# пересобирает индекс в памяти. К GitHub прод не ходит — справку приносит выкатка.
+#
+# По умолчанию его зовёт Publish Api последним job-ом: справка на проде того же коммита,
+# что и код. Ручной запуск — исключение: правка формулировки без выкатки API и откат.
+# Публикуется справка ветки, с которой запущен workflow, — если код на проде с другой
+# ветки, справка и код расходятся.
+#
+# Сверка карты (HelpCheck map) здесь не идёт: она про полноту и живёт в ПР
+# (help-check.yml). Линтер идёт: справка с техническими словами не уезжает ни с какой ветки.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  # Сколько выпусков держать: прежние нужны для ручного отката справки
+  KEEP_RELEASES: 5
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: [self-hosted]
+    steps:
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+        env:
+          DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
+
+      - name: lint 📖
+        run: dotnet run --project tools/HelpCheck -c Release -- lint
+
+      - name: publish 📚
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          root="$HOME/pettemplate-help"
+          release="$root/releases/$SHA"
+          mkdir -p "$root/releases"
+
+          # Тот же коммит уже публиковали — содержимое то же, копировать незачем.
+          # Каталог собирается рядом и переезжает целиком: полупустой выпуск API не увидит
+          if [ ! -d "$release" ]; then
+            tmp="$release.tmp"
+            rm -rf "$tmp"
+            cp -r help "$tmp"
+
+            articles=$(find "$tmp" -maxdepth 1 -name '*.md' ! -name '_*' -exec basename {} .md \; \
+              | LC_ALL=C sort | sed 's/.*/"&"/' | paste -sd, -)
+            hash=$(cd "$tmp" && find . -type f -name '*.md' | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+            printf '{"commit":"%s","publishedAt":"%s","articles":[%s],"hash":"%s"}\n' \
+              "$SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$articles" "$hash" > "$tmp/manifest.json"
+
+            mv "$tmp" "$release"
+          fi
+          # Свежесть выпуска — по времени публикации, а не копирования: по нему чистится хвост
+          touch "$release"
+
+          # Атомарно: новая ссылка рядом и rename поверх старой. Ссылка относительная —
+          # внутри контейнера ~/pettemplate-help смонтирован в /app/help, и абсолютный путь хоста
+          # там вёл бы в пустоту
+          ln -sfn "releases/$SHA" "$root/current.tmp"
+          mv -Tf "$root/current.tmp" "$root/current"
+          echo "current → releases/$SHA"
+          cat "$release/manifest.json"
+
+          # Хвост: последние KEEP_RELEASES по времени, текущий не удаляется никогда
+          current=$(readlink "$root/current" | sed 's|^releases/||')
+          # ls, а не глоб: нужен порядок по времени. Имена выпусков — sha коммита,
+          # без пробелов и спецсимволов, так что разбор вывода ls здесь безопасен
+          # shellcheck disable=SC2010
+          ls -1t "$root/releases" | grep -v '\.tmp$' | tail -n +$((KEEP_RELEASES + 1)) | while read -r old; do
+            if [ "$old" != "$current" ]; then
+              rm -rf "${root:?}/releases/$old"
+              echo "удалён выпуск $old"
+            fi
+          done

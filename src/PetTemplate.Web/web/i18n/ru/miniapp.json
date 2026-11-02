@@ -1,0 +1,22 @@
+{
+  "page": {
+    "connecting": "Подключение к {platform}…",
+    "authErrorTitle": "Ошибка входа"
+  },
+  "error": {
+    "connectFailed": "Не удалось подключиться к {platform}",
+    "authFailed": "Не удалось войти",
+    "reopen": "Не удалось подключиться к {platform}. Откройте приложение через {platform} ещё раз",
+    "invalidCredentials": "Неверный логин или пароль"
+  },
+  "fork": {
+    "title": "Добро пожаловать",
+    "hint": "Мы ещё не знакомы с этим {platform}",
+    "start": "Начать",
+    "haveAccount": "У меня уже есть аккаунт",
+    "loginTitle": "Вход в аккаунт",
+    "loginHint": "Войдите логином и паролем — этот {platform} привяжется к аккаунту, и дальше вход будет сразу",
+    "login": "Логин, почта или телефон",
+    "loginSubmit": "Войти и привязать {platform}"
+  }
+}

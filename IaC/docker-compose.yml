@@ -1,26 +1,33 @@
-# first run manually: docker network create nginx-proxy-man
+# first run manually: docker network create nginx-proxy-man (это делает setup-vm.sh)
 
-# вначале нужно запуститься без https, 
+# вначале нужно запуститься без https,
 # потом запустить certbot чтобы он создал сертификат в нужной папке
-# docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ -d durak-test.ru
-# только потом добавить блок для https
-
-version: '3'
+# docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
+# только потом добавить блок для https (IaC/DEPLOYMENT.md, раздел 4)
+#
+# API в compose не входит: контейнер dapi поднимают workflow выкатки (спец. infrastructure, 6).
+# Qdrant и эмбеддер (спец. infrastructure, 8; specs/search.md) — отдельными сервисами ниже:
+# Qdrant должен быть поднят до первого Publish Api — без него API не стартует
 
 services:
   webserver:
     image: nginx:latest
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     restart: always
     volumes:
       - ./frontend:/etc/nginx/html
+      # Сборка админки (спец. admin, 7) — рядом с основной, свой server-блок
+      - ./adminka:/etc/nginx/html-admin
       - ./nginx/conf:/etc/nginx/conf.d:ro
       - ./certbot/www:/var/www/certbot/:ro
       - ./certbot/conf/:/etc/nginx/ssl/:ro
     networks:
-      - nginx-proxy-man    # network outside
+      nginx-proxy-man: {}    # network outside
+      # Свой адрес в сети шлюза — его одного Grafana слушает в [auth.proxy] (ниже)
+      grafana-gateway:
+        ipv4_address: 172.30.255.2
 
   certbot:
     image: certbot/certbot:latest
@@ -28,26 +35,267 @@ services:
       - ./certbot/www/:/var/www/certbot/:rw
       - ./certbot/conf/:/etc/letsencrypt/:rw
 
+  # Данные — в именованном томе db-data: в анонимном их уносит `docker compose down -v`
+  # или пересоздание контейнера (спец. infrastructure, 8). Версия — та же, что в корневом
+  # docker-compose.yml для разработки и в Testcontainers.
+  #
+  # Порт на хост не публикуется вовсе: API ходит по сети nginx-proxy-man по имени
+  # dbcontainer, человек — `docker exec -it dbcontainer psql` на VM. Нужен клиент с
+  # локальной машины через SSH-туннель — раскомментировать `ports` ниже, и только на
+  # 127.0.0.1: ufw докеру не указ (README.md, «Доступ к БД: ufw здесь не работает»)
+  #
+  # POSTGRES_* — суперпользователь и имя базы: читаются только при первом старте на пустом
+  # томе. API под ним не ходит — у API своя роль APP_DB_USER, её заводит скрипт из
+  # postgres/init (IaC/DEPLOYMENT.md, «Пользователь приложения»)
   database:
-    image: mysql:8.0.30
+    image: postgres:17
     container_name: dbcontainer
     restart: always
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    ports:
-      - "${DB_PORT:-3320}:3306"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      # Пользователь postgres-exporter (postgres/init/02-exporter-user.sh, ниже)
+      POSTGRES_EXPORTER_USER: ${POSTGRES_EXPORTER_USER:-postgres_exporter}
+      POSTGRES_EXPORTER_PASSWORD: ${POSTGRES_EXPORTER_PASSWORD:-}
+    # ports:
+    #   - "127.0.0.1:${DB_PORT:-5432}:5432"
     networks:
       - nginx-proxy-man
     volumes:
-      - db-data:/var/lib/mysql
+      - db-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    # Через TCP, а не сокет: пока идёт первичная инициализация (initdb и скрипты
+    # postgres/init), образ поднимает временный сервер только на сокете — по сокету
+    # healthcheck сказал бы «готов» раньше, чем заведена роль приложения
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Векторный индекс поиска (спец. search, 3). Обязателен, как база: API на старте заводит
+  # в нём коллекции и без него не поднимается (спец. infrastructure, 6). Ходит API по
+  # gRPC на qdrantcontainer:6334 (appsettings.Release.json), Prometheus — за /metrics
+  # на 6333. Данные — в томе qdrant-data, но бэкапа нет: индекс восстанавливается
+  # реиндексом из админки (DEPLOYMENT.md, раздел 10). Порты — только на 127.0.0.1, для
+  # ручной проверки с самой VM: своей аутентификации у Qdrant здесь нет
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    container_name: qdrantcontainer
+    restart: always
+    ports:
+      - "127.0.0.1:${QDRANT_REST_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  # Эмбеддер поиска по смыслу (спец. search, 3): llama.cpp на процессоре рядом с API,
+  # multilingual-e5-small в Q8 — 126 МБ весов, ~0.5 ГБ памяти: на двух ядрах и 6 ГБ
+  # машины его не видно. Модель мелкая из-за этой машины (tech-debt/embeddings-model.md).
+  # Сервер — llama.cpp, а не TEI: у TEI нет образа под arm64, а разработка на Apple Silicon.
+  # Веса качает сам с Hugging Face при первом старте в том embeddings-cache — на весь
+  # /root/.cache: нынешние сборки кладут их в huggingface/, прежние — в llama.cpp/.
+  # Без доступа к Hugging Face с сервера — DEPLOYMENT.md, раздел 4 («Модель эмбеддера»).
+  # API находит его по имени контейнера (appsettings.Release.json); портов нет: ходит
+  # к нему только API по общей сети. Лежит — индексация повторяется очередью, а поиск
+  # отвечает тем, что нашёл по словам. Сменил модель — меняются размерность и имя
+  # коллекции в SearchOptions и нужен полный реиндекс из админки (спец. search, 5)
+  embeddings:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: embeddingscontainer
+    restart: always
+    command: >
+      --hf-repo ${EMBEDDINGS_REPO:-TwinSunsLLC/multilingual-e5-small-gguf}
+      --hf-file ${EMBEDDINGS_FILE:-multilingual-e5-small-q8_0.gguf}
+      --embeddings --pooling mean --host 0.0.0.0 --port 8080
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - embeddings-cache:/root/.cache
+
+  # Grafana за шлюзом (спец. admin, 3.3; infrastructure, 10): своих учёток нет, вход — тот же, что в админку.
+  # nginx спрашивает API, кто пришёл, и ставит X-WEBAUTH-USER и X-WEBAUTH-ROLE; Grafana
+  # им верит и заводит учётку сама. Поэтому портов нет вовсе, даже на 127.0.0.1:
+  # до неё доходят только через nginx, иначе заголовок подделал бы кто угодно.
+  #
+  # Своего выхода у Grafana нет: доступ кончается со сроком куки админки, через час,
+  # или выходом из админки — он гасит куку.
+  # Роль пересчитывается раз в SYNC_TTL минут, а не на каждом запросе.
+  # Версия закреплена, а не latest: [auth.proxy] и имена переменных менялись между
+  # мажорными версиями
+  #
+  # Портов нет, но в общей сети nginx-proxy-man до Grafana дотягивается любой контейнер
+  # и пришёл бы с X-WEBAUTH-ROLE: Admin. Поэтому заголовкам она верит только с одного
+  # адреса — nginx в отдельной сети grafana-gateway (WHITELIST), а nginx ходит к ней
+  # по имени grafana-gateway, которое есть только в этой сети. Из nginx-proxy-man
+  # запрос придёт с другого адреса и получит отказ, а не учётку
+  grafana:
+    image: grafana/grafana-oss:12.0.0
+    container_name: grafanacontainer
+    restart: always
+    environment:
+      GF_SERVER_ROOT_URL: https://grafana.example.com/
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_HEADERS: Role:X-WEBAUTH-ROLE
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_SYNC_TTL: "5"
+      GF_AUTH_PROXY_WHITELIST: 172.30.255.2
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_DISABLE_SIGNOUT_MENU: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # Версия закреплена (выше) — ходить на grafana.com за обновлениями незачем
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Токен бота тревог — из .env рядом. Доставка в Telegram по умолчанию выключена
+      # (grafana/on-hold/telegram.yml, спец. infrastructure, 13), пока пустой токен ничему
+      # не мешает. Включат — переложат файл в provisioning, и пустой токен уронит Grafana
+      # на старте: заполнить до запуска
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    networks:
+      nginx-proxy-man: {}
+      # Адрес закреплён и у Grafana: со свободным она при старте раньше nginx занимает
+      # первый адрес подсети — тот самый 172.30.255.2, — и nginx не поднимается
+      grafana-gateway:
+        ipv4_address: 172.30.255.3
+        aliases:
+          - grafana-gateway
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # Источники данных и дашборды — из репозитория, а не кликами (DEPLOYMENT.md, «Телеметрия»)
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+
+  # Телеметрия (спец. infrastructure, 10): API шлёт OTLP в коллектор,
+  # тот — метрики в Prometheus, трассы в Tempo, а смотрит на них Grafana. Портов нет ни
+  # у кого: своей аутентификации у них нет, и снаружи их видно только через Grafana.
+  # Версии закреплены — форматы конфигов меняются между версиями
+  otel-collector:
+    image: otel/opentelemetry-collector:0.162.0
+    container_name: otelcollectorcontainer
+    restart: always
+    command: --config=/etc/otelcol/config.yaml
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+
+  # Метрики хранятся 30 дней, но не больше 2 ГБ — что наступит раньше
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    container_name: prometheuscontainer
+    restart: always
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=2GB
+      - --web.enable-otlp-receiver
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  tempo:
+    image: grafana/tempo:2.10.8
+    container_name: tempocontainer
+    restart: always
+    command: -config.file=/etc/tempo/tempo.yaml
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  # Экспортёры: выставляют /metrics, Prometheus забирает их сам (prometheus/prometheus.yml).
+  # Портов нет ни у кого — /metrics без аутентификации
+
+  # PostgreSQL сам метрик не отдаёт. Пользователь экспортёра — роль pg_monitor, только
+  # служебная статистика, без доступа к данным; заводит его postgres/init/02-exporter-user.sh
+  # (DEPLOYMENT.md, «Метрики PostgreSQL, Qdrant и машины»), пароль — POSTGRES_EXPORTER_PASSWORD
+  # в .env. sslmode=disable — ходит по сети докера, как и API. Время старта сервера
+  # (панель Start Time дашборда postgres) — отдельный коллектор, по умолчанию выключен
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    container_name: postgresexportercontainer
+    restart: always
+    command:
+      - --collector.postmaster
+    environment:
+      DATA_SOURCE_URI: dbcontainer:5432/${POSTGRES_DB}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:-postgres_exporter}
+      DATA_SOURCE_PASS: ${POSTGRES_EXPORTER_PASSWORD:-}
+    networks:
+      - nginx-proxy-man
+
+  # Виртуалка целиком: процессор, память, диск. Видит хост через смонтированный корень
+  # только на чтение. Сеть в его метриках — своя, контейнерная: сеть по контейнерам
+  # показывает cAdvisor
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: nodeexportercontainer
+    restart: always
+    pid: host
+    command:
+      - --path.rootfs=/host
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - /:/host:ro,rslave
+
+  # Каждый контейнер: память, процессор, диск, сеть. Имена контейнеров берёт у docker,
+  # поэтому видит его сокет — на чтение, но по сокету docker позволяет всё, так что
+  # портов наружу у него нет и не будет. Лишние группы метрик выключены: на машине в
+  # два ядра cAdvisor со всеми включёнными заметно ест процессор
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.57.0
+    container_name: cadvisorcontainer
+    restart: always
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+    networks:
+      - nginx-proxy-man
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
 
 networks:
   nginx-proxy-man:
     external: true
+  # Сеть шлюза к Grafana: в ней только nginx и Grafana. Подсеть закреплена, чтобы
+  # адрес nginx в GF_AUTH_PROXY_WHITELIST не менялся от пересоздания контейнеров.
+  # Если /29 занята на сервере (docker network ls / inspect) — сменить её здесь
+  # вместе с обоими ipv4_address и WHITELIST
+  grafana-gateway:
+    ipam:
+      config:
+        - subnet: 172.30.255.0/29
 
 volumes:
   db-data:
+  qdrant-data:
+  embeddings-cache:
+  grafana-data:
+  prometheus-data:
+  tempo-data:

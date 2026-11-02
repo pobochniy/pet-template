@@ -1,0 +1,10 @@
+{
+  "welcome": "Welcome, {name}!",
+  "register": "Sign up",
+  "logIn": "Log in",
+  "noWorkspace": {
+    "text": "You have no space yet. Create your own — or ask someone who already has a space for an invitation link.",
+    "create": "Create a space"
+  },
+  "inviteMembers": "Invite members"
+}

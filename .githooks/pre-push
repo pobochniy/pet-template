@@ -1,0 +1,67 @@
+#!/bin/sh
+#
+# Тесты до пуша. На коммит они не вешаются — секунды сборки и прогона на каждый
+# коммит, — а пушей за день единицы. Спец. infrastructure, 4.
+#
+#   npx ng test pet-template --watch=false --browsers=ChromeHeadless — тесты клиента.
+#              Не `npm test`: тот уходит в watch и открывает обычный Chrome.
+#              Проект назван явно: второй в `angular.json` — админка, а её спеки
+#              на пуш не вешаются (спец. admin, 4) — `npm run test:admin` руками.
+#              Те же тесты гоняет `web-tests.yml` перед выкаткой фронта;
+#              хук говорит то же самое раньше — до пуша, а не на выкатке.
+#
+# `dotnet test` здесь не стоит: тесты на настоящей базе через Testcontainers — это
+# докер под ними на каждый пуш, а те же тесты уже стоят воротами в `publish-api.yml`.
+# Держать их локально стоит руками: `dotnet test PetTemplate.slnx`.
+#
+# Гоняется только то, чего коснулись: правка одного бэкенда пуш не задерживает.
+#
+# Обойти на один пуш: `git push --no-verify`.
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+zero=$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')
+
+# stdin даёт по строке на каждую пушимую ветку:
+# `<local ref> <local oid> <remote ref> <remote oid>`
+run_web=0
+pushed=0
+
+while read -r _ local_oid _ remote_oid; do
+  # Удаление ветки — проверять нечего
+  [ "$local_oid" = "$zero" ] && continue
+  pushed=1
+
+  if [ "$remote_oid" = "$zero" ]; then
+    # Ветки на сервере ещё нет: сравниваем с тем, от чего она отошла
+    base=$(git merge-base origin/main "$local_oid" 2>/dev/null) || base=""
+  else
+    base=$remote_oid
+  fi
+
+  # Сравнить не с чем (нет origin/main) — гоняем всё, а не пропускаем молча
+  if [ -z "$base" ]; then
+    run_web=1
+    continue
+  fi
+
+  changed=$(git diff --name-only "$base" "$local_oid")
+
+  if printf '%s\n' "$changed" | grep -q '^src/PetTemplate\.Web/web/'; then run_web=1; fi
+done
+
+# В пуше одни удаления веток
+[ "$pushed" = 1 ] || exit 0
+
+if [ "$run_web" = 1 ]; then
+  cd "$root/src/PetTemplate.Web/web"
+
+  if [ ! -d node_modules ]; then
+    echo "pre-push: нет node_modules — тесты клиента не запустить."
+    echo '          npm ci в src/PetTemplate.Web/web либо git push --no-verify'
+    exit 1
+  fi
+
+  npx ng test pet-template --watch=false --browsers=ChromeHeadless
+fi

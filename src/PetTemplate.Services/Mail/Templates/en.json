@@ -1,0 +1,14 @@
+{
+  "passwordReset": {
+    "subject": "Reset your PetTemplate password",
+    "body": "Hello!\n\nTo set a new password, follow the link:\n{link}\n\nThe link works for {hours} h and only once.\n\nIf you did not ask for a reset, just ignore this email."
+  },
+  "emailConfirm": {
+    "subject": "Confirm your email in PetTemplate",
+    "body": "Hello!\n\nTo confirm this address in your PetTemplate account, follow the link:\n{link}\n\nThe link works for {hours} h. A confirmed email helps you restore a forgotten password.\n\nIf you did not add this email, just ignore this message."
+  },
+  "emailChanged": {
+    "subject": "The email in your PetTemplate account was changed",
+    "body": "Hello!\n\nThe email in your PetTemplate account was changed — this address is no longer linked to it.\n\nIf it was not you, restore access: {link}"
+  }
+}

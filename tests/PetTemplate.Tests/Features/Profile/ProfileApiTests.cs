@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using PetTemplate.Shared.Dto;
 using PetTemplate.Tests.Arranges;
 using PetTemplate.Tests.Asserts;
@@ -12,15 +13,13 @@ public class ProfileApiTests
     // ── Save ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Save_ValidProfile_ReturnsOk()
+    public async Task Save_ValidProfile_ReturnsSavedProfile()
     {
         var (token, profile) = new UserBuilder().Please();
-        var (client, db) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
+        var (client, _) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
 
         var dto = new ProfileDto
         {
-            UserName = "NewName",
-            Comment = "Hello",
             IsAdult = true,
             HasAcceptedTerms = true
         };
@@ -28,61 +27,34 @@ public class ProfileApiTests
         var response = await client.PostAsJsonAsync("/api/Profile/Save", dto);
 
         await response.ShouldBeSuccessful();
+        var saved = await response.Content.ReadFromJsonAsync<ProfileDto>();
+        Assert.True(saved!.IsAdult);
+        Assert.True(saved.HasAcceptedTerms);
     }
 
+    /// <summary>
+    /// Логин и контакты <c>Profile/Save</c> не пишет (спец. accounts, 4.3 и 6): у них свои
+    /// вызовы и отказы «занят». Раньше занятый логин здесь молча подменялся на логин с GUID
+    /// </summary>
     [Fact]
-    public async Task Save_UserNameTooShort_ReturnsUnprocessableEntity()
+    public async Task Save_DoesNotChangeUserNameOrContacts()
     {
-        var (token, profile) = new UserBuilder().Please();
-        var (client, _) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
-
-        var dto = new ProfileDto { UserName = "x" };
-
-        var response = await client.PostAsJsonAsync("/api/Profile/Save", dto);
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Save_UserNameTooLong_ReturnsUnprocessableEntity()
-    {
-        var (token, profile) = new UserBuilder().Please();
-        var (client, _) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
-
-        var dto = new ProfileDto { UserName = new string('a', 21) };
-
-        var response = await client.PostAsJsonAsync("/api/Profile/Save", dto);
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Save_UserNameWhitespaceOnly_ReturnsUnprocessableEntity()
-    {
-        var (token, profile) = new UserBuilder().Please();
-        var (client, _) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
-
-        var dto = new ProfileDto { UserName = "   " };
-
-        var response = await client.PostAsJsonAsync("/api/Profile/Save", dto);
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Save_UserNamePaddedWithWhitespace_TrimsAndSaves()
-    {
-        var (token, profile) = new UserBuilder().Please();
+        var (token, profile) = new UserBuilder("Oleg").WithContacts("oleg@example.com", "+79990000001").Please();
         var (client, db) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
 
-        var dto = new ProfileDto { UserName = "  ValidName  " };
-
-        var response = await client.PostAsJsonAsync("/api/Profile/Save", dto);
+        var response = await client.PostAsJsonAsync("/api/Profile/Save", new ProfileDto
+        {
+            UserName = "Vasya",
+            Email = "vasya@example.com",
+            Phone = "+79990000002",
+            IsAdult = true
+        });
 
         await response.ShouldBeSuccessful();
-        db.ChangeTracker.Clear();
-        var saved = await db.Profiles.FindAsync(profile.Id);
-        Assert.Equal("ValidName", saved!.UserName);
+        var saved = await db.Profiles.AsNoTracking().SingleAsync(x => x.Id == profile.Id);
+        Assert.Equal("Oleg", saved.UserName);
+        Assert.Equal("oleg@example.com", saved.Email);
+        Assert.Equal("+79990000001", saved.PhoneNumber);
     }
 
     [Fact]
@@ -90,7 +62,7 @@ public class ProfileApiTests
     {
         var (client, _) = await Given.ApiClient();
 
-        var response = await client.PostAsJsonAsync("/api/Profile/Save", new ProfileDto { UserName = "Alice" });
+        var response = await client.PostAsJsonAsync("/api/Profile/Save", new ProfileDto { IsAdult = true });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -142,6 +114,25 @@ public class ProfileApiTests
         await response.ShouldBeSuccessful();
         var json = await response.Content.ReadAsStringAsync();
         Assert.Contains("TestUser", json);
+    }
+
+    /// <summary>
+    /// Наружу едет <see cref="ProfileDto"/>, а не сущность: ни хеша, ни соли, ни связей
+    /// (<c>ProfileMapping</c>) — профиль клиент кладёт в <c>localStorage</c>
+    /// </summary>
+    [Fact]
+    public async Task Details_DoesNotLeakPasswordHash()
+    {
+        var (token, profile) = new UserBuilder("TestUser").Please();
+        var (client, _) = await Given.ApiClient(x => x.Profiles.Add(profile), token);
+
+        var response = await client.GetAsync("/api/Profile/Details");
+
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("passwordHash", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("securityStamp", json, StringComparison.OrdinalIgnoreCase);
+        var details = await response.Content.ReadFromJsonAsync<ProfileDto>();
+        Assert.True(details!.HasPassword);
     }
 
     [Fact]

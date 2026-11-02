@@ -1,0 +1,57 @@
+@if (isLoading()) {
+  <div id="loader-container">
+    <br />
+    <br />
+    <br />
+    <div class="lds-ring"><div></div><div></div><div></div><div></div></div>
+    <p>{{ i18n.t('miniapp.page.connecting', { platform }) }}</p>
+  </div>
+}
+
+@if (authError()) {
+  <div class="error-container">
+    <div class="error-message">
+      <h3>{{ i18n.t('miniapp.page.authErrorTitle') }}</h3>
+      <p>{{ i18n.t('miniapp.error.reopen', { platform }) }}</p>
+    </div>
+  </div>
+}
+
+<!-- Развилка первого запуска без приглашения (спец. accounts, 5.6) -->
+@if (fork() === 'choose') {
+  <div class="container py-4 text-center" id="miniapp-fork">
+    <h4 class="fw-bold mb-2">{{ i18n.t('miniapp.fork.title') }}</h4>
+    <p class="form-text mb-4">{{ i18n.t('miniapp.fork.hint', { platform }) }}</p>
+    <div class="d-grid gap-2">
+      <button type="button" class="btn btn-primary btn-lg" id="miniapp-start" [disabled]="busy()" (click)="start()">
+        {{ i18n.t('miniapp.fork.start') }}
+      </button>
+      <button type="button" class="btn btn-outline-primary" id="miniapp-have-account" (click)="fork.set('login')">
+        {{ i18n.t('miniapp.fork.haveAccount') }}
+      </button>
+    </div>
+  </div>
+}
+
+@if (fork() === 'login') {
+  <div class="container py-4" id="miniapp-login">
+    <h5 class="fw-bold mb-1">{{ i18n.t('miniapp.fork.loginTitle') }}</h5>
+    <p class="form-text mb-3">{{ i18n.t('miniapp.fork.loginHint', { platform }) }}</p>
+    <form [formGroup]="loginForm" (ngSubmit)="logInAndLink()">
+      <div class="mb-3">
+        <label class="form-label" for="miniapp-login-input">{{ i18n.t('miniapp.fork.login') }}</label>
+        <input class="form-control" id="miniapp-login-input" type="text" autocomplete="username" formControlName="login" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="miniapp-password">{{ i18n.t('core.field.password') }}</label>
+        <input class="form-control" id="miniapp-password" type="password" autocomplete="current-password" formControlName="password" />
+      </div>
+      <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary" id="miniapp-login-submit" [disabled]="busy()">
+          {{ i18n.t('miniapp.fork.loginSubmit', { platform }) }}
+        </button>
+        <button type="button" class="btn btn-link" (click)="fork.set('choose')">{{ i18n.t('core.action.back') }}</button>
+      </div>
+    </form>
+  </div>
+}

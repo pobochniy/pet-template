@@ -1,0 +1,35 @@
+<form class="bg-body-secondary border rounded p-3" [formGroup]="form" (ngSubmit)="create()">
+  <p class="form-text mt-0">{{ i18n.t('workspace.invite.hint') }}</p>
+
+  <div class="mb-3">
+    <label class="form-label" for="invitee-name">{{ i18n.t('workspace.invite.inviteeName') }}</label>
+    <input class="form-control" id="invitee-name" type="text" formControlName="inviteeName"
+           [placeholder]="i18n.t('workspace.invite.inviteeNamePlaceholder')" />
+    <div class="form-text">{{ i18n.t('workspace.invite.inviteeNameHint') }}</div>
+    <form-validation [model]="form.controls.inviteeName" fieldKey="workspace.field.inviteeName"></form-validation>
+  </div>
+
+  <fieldset class="mb-3" formGroupName="permissions">
+    <legend class="fs-6 fw-semibold">{{ i18n.t('workspace.invite.permissions') }}</legend>
+    @for (permission of availablePermissions(); track permission.permission) {
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox"
+               [id]="'permission-' + permission.permission"
+               [formControlName]="'' + permission.permission" />
+        <label class="form-check-label" [for]="'permission-' + permission.permission">
+          {{ i18n.t(permission.labelKey) }}
+        </label>
+      </div>
+    }
+    @if (form.controls.permissions.invalid) {
+      <div class="text-danger">{{ i18n.t('workspace.invite.permissionsRequired') }}</div>
+    }
+    @for (error of fieldErrors(); track error) {
+      <div class="text-danger permissions-field-error">{{ error }}</div>
+    }
+  </fieldset>
+
+  <button type="submit" id="create-invitation" class="btn btn-primary" [disabled]="busy() || form.invalid">
+    {{ i18n.t('workspace.invite.submit') }}
+  </button>
+</form>

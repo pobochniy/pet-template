@@ -1,0 +1,11 @@
+# Дашборды — JSON из IaC/grafana/dashboards. Поправил в интерфейсе — экспортируй JSON
+# сюда: при перезапуске Grafana версия из файла перезапишет правку
+apiVersion: 1
+
+providers:
+  - name: pettemplate
+    folder: PetTemplate
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards

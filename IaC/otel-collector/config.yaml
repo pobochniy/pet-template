@@ -1,0 +1,41 @@
+# Коллектор (спец. infrastructure, 10): API шлёт сюда OTLP одним адресом, а коллектор
+# раскладывает — метрики в Prometheus, трассы в Tempo. Без него у API было бы два
+# адреса на два сигнала, и замена приёмника трогала бы выкатку API
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Память машины общая с API и базой: при наплыве коллектор роняет данные, а не память
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 150
+    spike_limit_mib: 30
+  batch: {}
+
+exporters:
+  # Имена экспортёров — otlp_http и otlp_grpc: прежние otlphttp и otlp коллектор 0.162
+  # ещё понимает, но пишет в лог, что они устарели.
+  # Prometheus сам принимает OTLP (--web.enable-otlp-receiver), путь /v1/metrics
+  # коллектор допишет к адресу
+  otlp_http/prometheus:
+    endpoint: http://prometheuscontainer:9090/api/v1/otlp
+  otlp_grpc/tempo:
+    endpoint: tempocontainer:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/prometheus]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/tempo]

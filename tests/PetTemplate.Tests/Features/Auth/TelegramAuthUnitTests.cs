@@ -27,4 +27,47 @@ public class TelegramAuthUnitTests
         // Assert
         Assert.True(isValid);
     }
+
+    private const string BotToken = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
+
+    private static TelegramService Service(string botToken) => new(new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { ["Telegram:BotToken"] = botToken })
+        .Build());
+
+    /// <summary>
+    /// Пустой токен бота — отказ, как у VK (<c>VkService.IsSignValid</c>): подпись ключом из
+    /// пустой строки посчитает кто угодно
+    /// </summary>
+    [Fact]
+    public void RejectsAnySignatureWithoutBotToken()
+    {
+        var forged = new EntityBuilders.TelegramInitDataBuilder().WithBotToken("").Please();
+
+        Assert.False(Service("").ValidateInitData(forged));
+    }
+
+    [Fact]
+    public void AcceptsOwnSignature()
+    {
+        var initData = new EntityBuilders.TelegramInitDataBuilder().WithBotToken(BotToken).Please();
+
+        Assert.True(Service(BotToken).ValidateInitData(initData));
+    }
+
+    [Fact]
+    public void RejectsForeignSignature()
+    {
+        var initData = new EntityBuilders.TelegramInitDataBuilder().WithBotToken("654321:foreign-bot").Please();
+
+        Assert.False(Service(BotToken).ValidateInitData(initData));
+    }
+
+    /// <summary>Подпись не в шестнадцатеричном виде или не той длины — отказ, а не исключение</summary>
+    [Theory]
+    [InlineData("zz")]
+    [InlineData("abcd")]
+    public void RejectsMalformedHash(string hash)
+    {
+        Assert.False(Service(BotToken).ValidateInitData($"auth_date=1&user=%7B%22id%22%3A1%7D&hash={hash}"));
+    }
 }

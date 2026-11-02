@@ -1,0 +1,91 @@
+name: Rollback Api
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to rollback to (e.g., 2026_03_03__14_30_45 or "latest" or "previous")'
+        required: true
+        default: 'previous'
+
+jobs:
+  rollback:
+    runs-on: [self-hosted]
+    steps:
+      - name: Determine target version
+        id: version
+        # Ввод — переменной окружения, а не подстановкой в текст скрипта: строка
+        # из формы Run workflow не становится кодом
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$VERSION" == "previous" ]; then
+            # Get the second most recent image (first is current)
+            TARGET=$(docker images pettemplate-api --format "{{.Tag}}" | grep -v "latest" | sed -n '2p')
+            if [ -z "$TARGET" ]; then
+              echo "No previous version found!"
+              exit 1
+            fi
+          elif [ "$VERSION" == "latest" ]; then
+            TARGET="latest"
+          else
+            TARGET="$VERSION"
+          fi
+
+          # Verify image exists
+          if ! docker images "pettemplate-api:$TARGET" --format "{{.Tag}}" | grep -q "$TARGET"; then
+            echo "Image pettemplate-api:$TARGET not found!"
+            echo "Available versions:"
+            docker images pettemplate-api --format "{{.Tag}}"
+            exit 1
+          fi
+
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Rolling back to version: $TARGET"
+
+      - name: Stop current container
+        run: docker rm -f dapi 2>/dev/null || true
+
+      # Тот же docker run, что в publish-api.yml, с тем же набором переменных
+      # (спец. infrastructure, 6 и 9): у проекта из шаблона история образов начинается
+      # с publish-api.yml, и «старых имён» переменных для прежних образов нет
+      # Справку откат не трогает (спец. help, 6.4): в образе её нет, а версию отката
+      # мы знаем тегом — датой сборки, а не коммитом. Откатили через фичу — переключить
+      # ~/pettemplate-help/current на прежний releases/<sha> руками (IaC/DEPLOYMENT.md, «Справка»)
+      - name: Start rollback version
+        run: |
+          mkdir -p "$HOME/pettemplate-help"
+          # Порт — только на 127.0.0.1: снаружи API достижим лишь через nginx, иначе
+          # замок админки по адресу (спец. admin, 7) обходится прямым заходом на порт,
+          # а X-Forwarded-For, по которому лимит входа считает адреса, подделывается
+          docker run --restart unless-stopped -p 127.0.0.1:5000:8080 -d --name dapi --network nginx-proxy-man \
+            --env ASPNETCORE_ENVIRONMENT=Release \
+            --env ConnectionStrings__AppConnection="${{ secrets.API_DB_CONNECTION_STRING }}" \
+            --env JwtOptions__SigningKey="${{ secrets.JWT_SIGNING_KEY }}" \
+            --env AdminOptions__SigningKey="${{ secrets.ADMIN_JWT_SIGNING_KEY }}" \
+            --env Telegram__BotToken="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --env TelegramLoginOptions__BotId="${{ vars.TELEGRAM_BOT_ID }}" \
+            --env VkIdOptions__AppId="${{ vars.VK_ID_APP_ID }}" \
+            --env VkOptions__PrivateKey="${{ secrets.VK_MINIAPP_PRIVATE_KEY }}" \
+            --env MailOptions__Password="${{ secrets.SMTP_PASSWORD }}" \
+            --env AssistantOptions__Providers__main__Endpoint="${{ vars.ASSISTANT_ENDPOINT }}" \
+            --env AssistantOptions__Providers__main__ApiKey="${{ secrets.ASSISTANT_API_KEY }}" \
+            --env AssistantOptions__SeedModels__0__Key="${{ vars.ASSISTANT_MODEL }}" \
+            --env AssistantOptions__Transcription__Model="${{ vars.ASSISTANT_TRANSCRIPTION_MODEL }}" \
+            --env OTEL_EXPORTER_OTLP_ENDPOINT="http://otelcollectorcontainer:4317" \
+            --env OTEL_SERVICE_NAME="pettemplate-api" \
+            -v "$HOME/pettemplate-help:/app/help:ro" \
+            pettemplate-api:${{ steps.version.outputs.target }}
+          echo "✅ Rolled back to version: ${{ steps.version.outputs.target }}"
+
+      - name: Verify container is running
+        run: |
+          sleep 3
+          if docker ps | grep -q "dapi"; then
+            echo "✅ Container is running successfully"
+            docker ps | grep "dapi"
+          else
+            echo "❌ Container failed to start"
+            docker logs dapi
+            exit 1
+          fi

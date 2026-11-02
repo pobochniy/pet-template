@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Скрипт для подготовки виртуальной машины для проекта Durak
+# Скрипт для подготовки виртуальной машины для проекта PetTemplate
 # Запуск: chmod +x setup-vm.sh && ./setup-vm.sh
 
 set -e  # Остановка при ошибке
 
-echo "🚀 Начинаем подготовку виртуальной машины для проекта Durak..."
+echo "🚀 Начинаем подготовку виртуальной машины для проекта PetTemplate..."
 echo ""
 
 # Цвета для вывода
@@ -29,8 +29,32 @@ error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# Создаёт каталог, если его нет
+ensure_dir() {
+    if [ ! -d "$1" ]; then
+        mkdir -p "$1"
+        success "Создана директория: $1"
+    else
+        warning "Директория $1 уже существует"
+    fi
+}
+
+# Симлинк из IaC на каталог в домашней папке: туда пишут workflow выкатки,
+# а nginx видит его томом из docker-compose.yml
+ensure_link() {
+    local link="$1" target="$2"
+    if [ -L "$link" ]; then
+        warning "Симлинк $link уже существует"
+    elif [ -d "$link" ]; then
+        warning "Директория $link существует (не симлинк). Пропускаем создание симлинка."
+    else
+        ln -s "$target" "$link"
+        success "Создан симлинк: $link -> $target"
+    fi
+}
+
 # Проверка, что скрипт запущен не от root
-if [ "$EUID" -eq 0 ]; then 
+if [ "$EUID" -eq 0 ]; then
     error "Не запускайте этот скрипт от root. Используйте обычного пользователя."
     exit 1
 fi
@@ -48,19 +72,15 @@ else
 fi
 
 # Проверка Docker Compose
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    error "Docker Compose не установлен. Установите Docker Compose и повторите попытку."
+if ! docker compose version &> /dev/null; then
+    error "Docker Compose v2 не установлен. Установите плагин docker compose и повторите попытку."
     echo "Инструкция: https://docs.docker.com/compose/install/"
     exit 1
 else
-    if command -v docker-compose &> /dev/null; then
-        success "Docker Compose установлен: $(docker-compose --version)"
-    else
-        success "Docker Compose установлен: $(docker compose version)"
-    fi
+    success "Docker Compose установлен: $(docker compose version)"
 fi
 
-# Проверка прав на Docker
+# Проверка прав на Docker: workflow на раннере зовут docker без sudo
 if ! docker ps &> /dev/null; then
     error "У текущего пользователя нет прав на использование Docker."
     echo "Выполните: sudo usermod -aG docker $USER"
@@ -74,51 +94,27 @@ echo ""
 echo "📁 Шаг 2: Создание необходимых директорий..."
 echo ""
 
-# Создание директорий для фронтенда
-if [ ! -d "$HOME/frontend" ]; then
-    mkdir -p "$HOME/frontend"
-    success "Создана директория: $HOME/frontend"
-else
-    warning "Директория $HOME/frontend уже существует"
-fi
-
-if [ ! -d "$HOME/frontend-backup" ]; then
-    mkdir -p "$HOME/frontend-backup"
-    success "Создана директория: $HOME/frontend-backup"
-else
-    warning "Директория $HOME/frontend-backup уже существует"
-fi
-
-# Создание симлинка из IaC/frontend на ~/frontend
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-FRONTEND_LINK="$SCRIPT_DIR/frontend"
 
-if [ -L "$FRONTEND_LINK" ]; then
-    warning "Симлинк $FRONTEND_LINK уже существует"
-elif [ -d "$FRONTEND_LINK" ]; then
-    warning "Директория $FRONTEND_LINK существует (не симлинк). Пропускаем создание симлинка."
-else
-    ln -s "$HOME/frontend" "$FRONTEND_LINK"
-    success "Создан симлинк: $FRONTEND_LINK -> $HOME/frontend"
-fi
+# Сборки клиента и админки и их предыдущие версии (спец. infrastructure, 7)
+ensure_dir "$HOME/frontend"
+ensure_dir "$HOME/frontend-backup"
+ensure_dir "$HOME/adminka"
+ensure_dir "$HOME/adminka-backup"
+
+ensure_link "$SCRIPT_DIR/frontend" "$HOME/frontend"
+ensure_link "$SCRIPT_DIR/adminka" "$HOME/adminka"
 
 # Создание директорий для certbot
-if [ ! -d "$SCRIPT_DIR/certbot/www" ]; then
-    mkdir -p "$SCRIPT_DIR/certbot/www"
-    success "Создана директория: $SCRIPT_DIR/certbot/www"
-fi
-
-if [ ! -d "$SCRIPT_DIR/certbot/conf" ]; then
-    mkdir -p "$SCRIPT_DIR/certbot/conf"
-    success "Создана директория: $SCRIPT_DIR/certbot/conf"
-fi
+ensure_dir "$SCRIPT_DIR/certbot/www"
+ensure_dir "$SCRIPT_DIR/certbot/conf"
 
 echo ""
 echo "🌐 Шаг 3: Создание Docker сети..."
 echo ""
 
-# Создание Docker сети nginx-proxy-man
-if docker network ls | grep -q "nginx-proxy-man"; then
+# Создание Docker сети nginx-proxy-man: в ней nginx, база и контейнер API
+if docker network ls --format '{{.Name}}' | grep -qx "nginx-proxy-man"; then
     warning "Docker сеть 'nginx-proxy-man' уже существует"
 else
     docker network create nginx-proxy-man
@@ -145,25 +141,48 @@ else
     success "Найден файл: nginx/conf/nginx.conf"
 fi
 
+# Скрипт, который заводит пользователя приложения в Postgres на пустом томе db-data:
+# без него API останется без своей роли (IaC/DEPLOYMENT.md, «Пользователь приложения»)
+if [ ! -f "$SCRIPT_DIR/postgres/init/01-app-user.sh" ]; then
+    error "Файл postgres/init/01-app-user.sh не найден"
+    exit 1
+else
+    success "Найден файл: postgres/init/01-app-user.sh"
+fi
+
+# Второй скрипт пустого тома — пользователь postgres-exporter: без него метрики базы молчат
+# (спец. infrastructure, 10)
+if [ ! -f "$SCRIPT_DIR/postgres/init/02-exporter-user.sh" ]; then
+    error "Файл postgres/init/02-exporter-user.sh не найден"
+    exit 1
+else
+    success "Найден файл: postgres/init/02-exporter-user.sh"
+fi
+
 echo ""
 echo "🔐 Шаг 5: Настройка переменных окружения..."
 echo ""
 
-# Проверка/создание .env файла для docker-compose
+# Проверка/создание .env файла для docker-compose. Текст — тот же, что в .env.example:
+# правите одно — правьте и другое
 ENV_FILE="$SCRIPT_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" << 'EOF'
-# Database configuration
-MYSQL_ROOT_PASSWORD=change_me_root_password
-MYSQL_DATABASE=durakdb
-MYSQL_USER=user_write
-MYSQL_PASSWORD=change_me_user_password
+# Database configuration. Пароли читаются только при первом старте Postgres на пустом
+# томе db-data (IaC/DEPLOYMENT.md, раздел 2)
+POSTGRES_DB=pettemplatedb
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=change_me_postgres_password
+# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING)
+APP_DB_USER=pettemplate_app
+APP_DB_PASSWORD=change_me_app_password
 
 # Порты
-DB_PORT=3320
+# DB_PORT=5432   # только если раскомментирован ports у database (на 127.0.0.1)
 NGINX_HTTP_PORT=80
 NGINX_HTTPS_PORT=443
 EOF
+    chmod 600 "$ENV_FILE"
     success "Создан файл .env с дефолтными значениями"
     warning "ВАЖНО: Отредактируйте файл $ENV_FILE и установите безопасные пароли!"
 else
@@ -187,23 +206,22 @@ echo "✅ Подготовка виртуальной машины заверш�
 echo ""
 echo "📝 Следующие шаги:"
 echo ""
-echo "1. Отредактируйте файл $ENV_FILE и установите безопасные пароли"
-echo "2. Отредактируйте файл nginx/conf/nginx.conf и укажите ваш домен"
-echo "3. Отредактируйте файл docker-compose.yml если нужно изменить конфигурацию"
-echo "4. Запустите инфраструктуру: docker compose up -d"
-echo "5. Настройте GitHub Actions self-hosted runner с label 'teslowe'"
-echo "6. Добавьте секреты в GitHub (см. .github/workflows/SECRETS_SETUP.md)"
+echo "1. Отредактируйте файл $ENV_FILE и установите безопасные пароли (POSTGRES_PASSWORD, APP_DB_PASSWORD)"
+echo "2. Запустите инфраструктуру: docker compose up -d"
+echo "3. Получите сертификат (IaC/DEPLOYMENT.md, раздел 4)"
+echo "4. Настройте GitHub Actions self-hosted runner (IaC/DEPLOYMENT.md, раздел 5)"
+echo "5. Добавьте секреты в GitHub (см. IaC/DEPLOYMENT.md, раздел «Секреты GitHub Actions»)"
 echo ""
 echo "📚 Полезные команды:"
 echo ""
 echo "  # Запуск инфраструктуры"
-echo "  docker-compose up -d"
+echo "  docker compose up -d"
 echo ""
 echo "  # Просмотр логов"
-echo "  docker-compose logs -f"
+echo "  docker compose logs -f"
 echo ""
-echo "  # Остановка инфраструктуры"
-echo "  docker-compose down"
+echo "  # Остановка инфраструктуры (без -v: том базы db-data не трогать)"
+echo "  docker compose down"
 echo ""
 echo "  # Проверка статуса контейнеров"
 echo "  docker ps"

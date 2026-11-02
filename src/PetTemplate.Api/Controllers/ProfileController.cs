@@ -12,12 +12,17 @@ namespace PetTemplate.Api.Controllers;
 [ValidateRequest]
 public class ProfileController(ProfileService service) : ControllerBase
 {
+    /// <summary>
+    /// Сохранить профиль и ответить сохранённым — тем же, что отдаёт
+    /// <see cref="Details"/>. Логин и контакты здесь не пишутся: у них блок «Основное»
+    /// (<c>AccountController</c>, спец. accounts, 6)
+    /// </summary>
     [HttpPost]
+    [Produces(typeof(ProfileDto))]
     public async Task<IActionResult> Save([FromBody] ProfileDto profile)
     {
         profile.Id = User.GetUserId();
-        await service.Save(profile);
-        return Ok();
+        return Ok(await service.Save(profile));
     }
 
     [HttpPost]
@@ -28,11 +33,16 @@ public class ProfileController(ProfileService service) : ControllerBase
         return Ok();
     }
 
+    /// <summary>
+    /// Свой профиль целиком. Наружу едет <see cref="ProfileDto"/>, а не сущность:
+    /// почему — в <see cref="ProfileMapping"/>
+    /// </summary>
     [HttpGet]
+    [Produces(typeof(ProfileDto))]
     public async Task<IActionResult> Details(CancellationToken ct)
     {
         var userId = User.GetUserId();
         var res = await service.Get(userId, ct);
-        return Ok(res);
+        return Ok(res.ToDto());
     }
 }

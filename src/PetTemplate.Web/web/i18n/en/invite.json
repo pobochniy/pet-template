@@ -1,0 +1,29 @@
+{
+  "page": {
+    "loading": "Checking the invitation…",
+    "unavailable": "Could not check the invitation: the server did not respond. The link may still be valid — try again",
+    "toHome": "Home",
+    "greetingName": "Hi, {name}!",
+    "greeting": "{inviter} invites you to the space “{workspace}”",
+    "greetingNoInviter": "You are invited to the space “{workspace}”",
+    "accept": "Accept the invitation",
+    "loginSubmit": "Log in and accept",
+    "notRegistered": "I have not registered yet",
+    "registerSubmit": "Sign up and log in",
+    "haveAccount": "I already have an account",
+    "acceptFailed": "Could not accept the invitation"
+  },
+  "field": {
+    "login": "Username, email or phone"
+  },
+  "error": {
+    "expired": "The link is invalid or has expired. Ask for a new one",
+    "revoked": "The invitation has been revoked. Ask for a new link",
+    "accepted": "Someone has already signed up with this link. If it was you, log in with your username. If not, ask for a new link",
+    "alreadyMember": "You are already a member of this space",
+    "workspaceNotFound": "Space not found",
+    "emptyPermissions": "An invitation without permissions does not let anyone into the space",
+    "notFound": "Invitation not found",
+    "cannotRevokeAccepted": "An accepted invitation cannot be revoked"
+  }
+}
