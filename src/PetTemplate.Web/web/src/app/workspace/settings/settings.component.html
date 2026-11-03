@@ -1,5 +1,5 @@
 <div class="workspace-settings container py-4">
-  <h2 class="mb-1"><i-lucide name="users" class="me-2"></i-lucide>{{ i18n.t('workspace.settings.title') }}</h2>
+  <h2 class="mb-1"><svg [appIcon]="icons.Users" class="me-2"></svg>{{ i18n.t('workspace.settings.title') }}</h2>
   <p class="text-muted">{{ i18n.t('workspace.settings.subtitle') }}</p>
 
   @if (workspaces().length > 0) {
@@ -26,7 +26,7 @@
               <span class="d-flex flex-wrap align-items-center gap-2">
                 @if (ws.id === primaryWorkspaceId()) {
                   <span class="badge bg-secondary primary-badge">
-                    <i-lucide name="star" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.primaryBadge') }}
+                    <svg [appIcon]="icons.Star" class="me-1"></svg>{{ i18n.t('workspace.settings.primaryBadge') }}
                   </span>
                 } @else {
                   <button type="button" class="btn btn-sm btn-outline-secondary make-primary" (click)="setPrimary(ws.id)">
@@ -36,13 +36,13 @@
 
                 @if (canRename(ws)) {
                   <button type="button" class="btn btn-sm btn-outline-secondary rename" (click)="startRename(ws)">
-                    <i-lucide name="pencil" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.rename') }}
+                    <svg [appIcon]="icons.Pencil" class="me-1"></svg>{{ i18n.t('workspace.settings.rename') }}
                   </button>
                 }
 
                 @if (showMembersButton(ws)) {
                   <button type="button" class="btn btn-sm btn-outline-primary members-button" (click)="openMembers(ws.id)">
-                    <i-lucide name="users" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.members') }}
+                    <svg [appIcon]="icons.Users" class="me-1"></svg>{{ i18n.t('workspace.settings.members') }}
                   </button>
                 }
 
@@ -58,7 +58,7 @@
                   </button>
                 } @else {
                   <button type="button" class="btn btn-sm btn-outline-danger leave" (click)="confirmLeave(ws.id)">
-                    <i-lucide name="log-out" class="me-1"></i-lucide>{{ i18n.t('workspace.settings.leave') }}
+                    <svg [appIcon]="icons.LogOut" class="me-1"></svg>{{ i18n.t('workspace.settings.leave') }}
                   </button>
                 }
               </span>
@@ -88,7 +88,7 @@
       </form>
     } @else if (loaded()) {
       <button type="button" id="open-create-workspace" class="btn btn-outline-primary" (click)="openCreate()">
-        <i-lucide name="folder-plus" class="me-2"></i-lucide>{{ i18n.t('workspace.settings.createOpen') }}
+        <svg [appIcon]="icons.FolderPlus" class="me-2"></svg>{{ i18n.t('workspace.settings.createOpen') }}
       </button>
     }
   </section>

@@ -5,21 +5,21 @@
 
   <ul class="list-unstyled components">
     <li routerLinkActive="link-active" [routerLinkActiveOptions]="{ exact: true }">
-      <a routerLink="/" (click)="onItemClick()"><i-lucide name="house"></i-lucide>{{ i18n.t('core.nav.home') }}</a>
+      <a routerLink="/" (click)="onItemClick()"><svg [appIcon]="icons.House"></svg>{{ i18n.t('core.nav.home') }}</a>
     </li>
     @if (userService.isAuthenticated) {
       <li routerLinkActive="link-active">
-        <a routerLink="/profile" (click)="onItemClick()"><i-lucide name="circle-user"></i-lucide>{{ i18n.t('core.nav.profile') }}</a>
+        <a routerLink="/profile" (click)="onItemClick()"><svg [appIcon]="icons.CircleUser"></svg>{{ i18n.t('core.nav.profile') }}</a>
       </li>
     }
     @if (canSeeMembers()) {
       <li routerLinkActive="link-active">
-        <a routerLink="/workspace/members" (click)="onItemClick()"><i-lucide name="users"></i-lucide>{{ i18n.t('core.nav.members') }}</a>
+        <a routerLink="/workspace/members" (click)="onItemClick()"><svg [appIcon]="icons.Users"></svg>{{ i18n.t('core.nav.members') }}</a>
       </li>
     }
     <!-- Справка — всем, и гостю: статьи общие (спец. help, 6.5) -->
     <li routerLinkActive="link-active">
-      <a routerLink="/help" (click)="onItemClick()"><i-lucide name="circle-question-mark"></i-lucide>{{ i18n.t('core.nav.help') }}</a>
+      <a routerLink="/help" (click)="onItemClick()"><svg [appIcon]="icons.CircleQuestionMark"></svg>{{ i18n.t('core.nav.help') }}</a>
     </li>
   </ul>
 </nav>

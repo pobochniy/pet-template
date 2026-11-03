@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, Injector, computed, effect, inject, signal } from '@angular/core';
+import LogOut from 'lucide/dist/esm/icons/log-out.mjs';
+import Menu from 'lucide/dist/esm/icons/menu.mjs';
+import Settings from 'lucide/dist/esm/icons/settings.mjs';
+import User from 'lucide/dist/esm/icons/user.mjs';
 import { Router } from '@angular/router';
-import { LogOut, LucideAngularModule, Menu, Settings, User } from 'lucide-angular';
 import { MenuStateService } from '../menu-state.service';
 import { UserService } from '../../core/user.service';
 import { WorkspaceContextService } from '../../core/workspace-context.service';
@@ -8,18 +11,19 @@ import { WorkspaceModel } from '../../models/workspace.model';
 import { Lang, langMeta } from '../../i18n/lang';
 import { LangFlagComponent } from '../../i18n/flags/lang-flag.component';
 import { LanguagePickerComponent } from '../../language-picker/language-picker.component';
-import { provideIcons } from '../../icons/lucide-icons.provider';
+import { IconComponent } from '../../icons/icon.component';
 import { injectI18n } from '../../i18n/inject-i18n';
 
 @Component({
   selector: 'top-nav',
   templateUrl: './top-nav.component.html',
   styleUrls: ['./top-nav.component.css'],
-  imports: [LucideAngularModule, LangFlagComponent, LanguagePickerComponent],
-  providers: [provideIcons({ LogOut, Menu, Settings, User })],
+  imports: [IconComponent, LangFlagComponent, LanguagePickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TopNavComponent {
+  protected readonly icons = { LogOut, Menu, Settings, User };
+
   protected readonly i18n = injectI18n();
 
   protected readonly workspaceContext = inject(WorkspaceContextService);

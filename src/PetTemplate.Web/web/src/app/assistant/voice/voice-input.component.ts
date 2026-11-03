@@ -1,12 +1,13 @@
 import {
   ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, output, signal, viewChild
 } from '@angular/core';
-import { LucideAngularModule } from 'lucide-angular';
-import { Mic, Square, X } from 'lucide-angular/src/icons';
+import Mic from 'lucide/dist/esm/icons/mic.mjs';
+import Square from 'lucide/dist/esm/icons/square.mjs';
+import X from 'lucide/dist/esm/icons/x.mjs';
 import { AssistantApiService } from '../../shared/api/assistant-api.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
-import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import { IconComponent } from '../../shared/icons/icon.component';
 import { AssistantService } from '../assistant.service';
 import { injectI18n } from '../../shared/i18n/inject-i18n';
 import { ASSISTANT_SCOPES } from '../assistant.scopes';
@@ -30,15 +31,14 @@ const ALERT_MS = 5000;
 @Component({
   selector: 'app-voice-input',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LucideAngularModule],
-  providers: [provideIcons({ Mic, Square, X })],
+  imports: [IconComponent],
   template: `
     @if (supported) {
       <div class="voice d-flex align-items-center gap-1">
         @if (recording()) {
           <button type="button" id="voice-cancel" class="btn btn-sm btn-link text-body-secondary p-1"
                   [attr.aria-label]="i18n.t('assistant.voice.cancel')" (click)="cancel()">
-            <i-lucide name="x" [size]="16" aria-hidden="true"></i-lucide>
+            <svg [appIcon]="icons.X" [size]="16" aria-hidden="true"></svg>
           </button>
         }
 
@@ -51,12 +51,12 @@ const ALERT_MS = 5000;
           @if (busy()) {
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           } @else if (recording()) {
-            <i-lucide name="square" [size]="18" aria-hidden="true"></i-lucide>
+            <svg [appIcon]="icons.Square" [size]="18" aria-hidden="true"></svg>
             <!-- Уровень звука, а не просто «идёт запись»: человек должен видеть,
                  что его слышно (6.3). Ширину полоски ставит код кадром анимации -->
             <span #level class="voice__level"></span>
           } @else {
-            <i-lucide name="mic" [size]="18" aria-hidden="true"></i-lucide>
+            <svg [appIcon]="icons.Mic" [size]="18" aria-hidden="true"></svg>
           }
         </button>
       </div>
@@ -77,6 +77,8 @@ const ALERT_MS = 5000;
   `]
 })
 export class VoiceInputComponent implements OnDestroy {
+  protected readonly icons = { Mic, Square, X };
+
   /** Потолок записи — минута (6.3): дальше это уже не реплика. Сервер держит тот же */
   public static readonly MaxMs = 60_000;
 

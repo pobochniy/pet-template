@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { LucideAngularModule, Users } from 'lucide-angular';
-import { Copy, KeyRound, Link2, UserMinus, UserPlus } from 'lucide-angular/src/icons';
+import Copy from 'lucide/dist/esm/icons/copy.mjs';
+import KeyRound from 'lucide/dist/esm/icons/key-round.mjs';
+import Link2 from 'lucide/dist/esm/icons/link-2.mjs';
+import UserMinus from 'lucide/dist/esm/icons/user-minus.mjs';
+import UserPlus from 'lucide/dist/esm/icons/user-plus.mjs';
+import Users from 'lucide/dist/esm/icons/users.mjs';
 import { InvitationApiService } from '../../shared/api/invitation-api.service';
 import { UsersApiService } from '../users-api.service';
 import { WorkspaceApiService } from '../../shared/api/workspace-api.service';
@@ -12,7 +16,7 @@ import { WorkspaceContextService } from '../../shared/core/workspace-context.ser
 import { contextResource, contextSignal } from '../../shared/core/context-resource';
 import { InvitationStatusEnum } from '../../shared/enums/invitation-status.enum';
 import { PermissionEnum } from '../../shared/enums/permission.enum';
-import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import { IconComponent } from '../../shared/icons/icon.component';
 import { UserProfileModel } from '../../shared/models/user-profile.model';
 import { WorkspaceInvitationModel } from '../../shared/models/workspace-invitation.model';
 import { PermissionsService } from '../../shared/services/permissions.service';
@@ -39,10 +43,11 @@ import { WORKSPACE_SCOPES } from '../workspace.scopes';
   selector: 'workspace-members',
   templateUrl: './members.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LucideAngularModule, WorkspaceInviteFormComponent, WorkspaceMemberPermissionsComponent],
-  providers: [provideIcons({ Copy, KeyRound, Link2, UserMinus, UserPlus, Users })]
+  imports: [IconComponent, WorkspaceInviteFormComponent, WorkspaceMemberPermissionsComponent]
 })
 export class WorkspaceMembersComponent {
+  protected readonly icons = { Copy, KeyRound, Link2, UserMinus, UserPlus, Users };
+
   protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);
   private readonly usersApi = inject(UsersApiService);
   private readonly workspaceApi = inject(WorkspaceApiService);

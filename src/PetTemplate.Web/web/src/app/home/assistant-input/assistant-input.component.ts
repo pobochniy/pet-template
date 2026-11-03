@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import SendHorizontal from 'lucide/dist/esm/icons/send-horizontal.mjs';
+import Sparkles from 'lucide/dist/esm/icons/sparkles.mjs';
 import { Router } from '@angular/router';
-import { LucideAngularModule } from 'lucide-angular';
-import { SendHorizontal, Sparkles } from 'lucide-angular/src/icons';
 import { AssistantService } from '../../assistant/assistant.service';
 import { LimitReachedComponent } from '../../assistant/limit-reached/limit-reached.component';
 import { ASSISTANT_TEXT_STATE } from '../../assistant/assistant-text';
-import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import { IconComponent } from '../../shared/icons/icon.component';
 import { injectI18n } from '../../shared/i18n/inject-i18n';
 import { HOME_SCOPES } from '../home.scopes';
 
@@ -29,15 +29,14 @@ import { HOME_SCOPES } from '../home.scopes';
 @Component({
   selector: 'home-assistant-input',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LucideAngularModule, LimitReachedComponent],
-  providers: [provideIcons({ SendHorizontal, Sparkles })],
+  imports: [IconComponent, LimitReachedComponent],
   template: `
     @if (assistant.limitReached()) {
       <app-limit-reached class="home-assistant d-block p-2 mb-3 border rounded-3"
                          [text]="assistant.limitText()" (dismiss)="assistant.dismissLimit()" />
     } @else {
       <div class="home-assistant d-flex align-items-center gap-2 p-2 mb-3 border rounded-3">
-        <i-lucide name="sparkles" [size]="18" class="text-primary flex-shrink-0" aria-hidden="true"></i-lucide>
+        <svg [appIcon]="icons.Sparkles" [size]="18" class="text-primary flex-shrink-0" aria-hidden="true"></svg>
 
         <input id="home-assistant-input" class="form-control border-0 shadow-none"
                [attr.placeholder]="i18n.t('assistant.input.home')"
@@ -53,7 +52,7 @@ import { HOME_SCOPES } from '../home.scopes';
                 [disabled]="draft().trim().length === 0"
                 [attr.aria-label]="i18n.t('assistant.input.send')"
                 (click)="open()">
-          <i-lucide name="send-horizontal" [size]="18" aria-hidden="true"></i-lucide>
+          <svg [appIcon]="icons.SendHorizontal" [size]="18" aria-hidden="true"></svg>
           <span class="d-none d-sm-inline ms-2">{{ i18n.t('assistant.input.send') }}</span>
         </button>
       </div>
@@ -61,6 +60,8 @@ import { HOME_SCOPES } from '../home.scopes';
   `
 })
 export class HomeAssistantInputComponent {
+  protected readonly icons = { SendHorizontal, Sparkles };
+
   protected readonly i18n = injectI18n(...HOME_SCOPES);
   protected readonly assistant = inject(AssistantService);
   private readonly router = inject(Router);

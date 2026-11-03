@@ -1,14 +1,17 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import FolderPlus from 'lucide/dist/esm/icons/folder-plus.mjs';
+import LogOut from 'lucide/dist/esm/icons/log-out.mjs';
+import Pencil from 'lucide/dist/esm/icons/pencil.mjs';
+import Star from 'lucide/dist/esm/icons/star.mjs';
+import Users from 'lucide/dist/esm/icons/users.mjs';
 import { Router } from '@angular/router';
 import { ReactiveFormsModule } from '@angular/forms';
-import { LogOut, LucideAngularModule, Users } from 'lucide-angular';
-import { FolderPlus, Pencil, Star } from 'lucide-angular/src/icons';
 import { WorkspaceApiService } from '../../shared/api/workspace-api.service';
 import { UserService } from '../../shared/core/user.service';
 import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
-import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import { IconComponent } from '../../shared/icons/icon.component';
 import { WorkspaceModel } from '../../shared/models/workspace.model';
 import { createWorkspaceForm } from '../../shared/form-models/workspace-form.model';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
@@ -30,10 +33,11 @@ import { WORKSPACE_SCOPES } from '../workspace.scopes';
   selector: 'workspace-settings',
   templateUrl: './settings.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, FormValidationComponent, LucideAngularModule, WorkspaceMembersComponent],
-  providers: [provideIcons({ FolderPlus, LogOut, Pencil, Star, Users })]
+  imports: [ReactiveFormsModule, FormValidationComponent, IconComponent, WorkspaceMembersComponent]
 })
 export class WorkspaceSettingsComponent implements OnInit {
+  protected readonly icons = { FolderPlus, LogOut, Pencil, Star, Users };
+
   protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);
   private readonly workspaceApi = inject(WorkspaceApiService);
   private readonly userService = inject(UserService);

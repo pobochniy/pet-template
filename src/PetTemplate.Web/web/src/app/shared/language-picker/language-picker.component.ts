@@ -2,8 +2,9 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal,
   viewChild
 } from '@angular/core';
-import { LucideAngularModule, Search, X } from 'lucide-angular';
-import { provideIcons } from '../icons/lucide-icons.provider';
+import Search from 'lucide/dist/esm/icons/search.mjs';
+import X from 'lucide/dist/esm/icons/x.mjs';
+import { IconComponent } from '../icons/icon.component';
 import { LangFlagComponent } from '../i18n/flags/lang-flag.component';
 import { Lang, LangMeta, SUPPORTED_LANGUAGES } from '../i18n/lang';
 import { injectI18n } from '../i18n/inject-i18n';
@@ -21,8 +22,7 @@ import { injectI18n } from '../i18n/inject-i18n';
   templateUrl: './language-picker.component.html',
   styleUrl: './language-picker.component.css',
   standalone: true,
-  imports: [LucideAngularModule, LangFlagComponent],
-  providers: [provideIcons({ Search, X })],
+  imports: [IconComponent, LangFlagComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     // Escape закрывает окно из любого места — фокус к этому моменту стоит в поиске
@@ -30,6 +30,8 @@ import { injectI18n } from '../i18n/inject-i18n';
   }
 })
 export class LanguagePickerComponent {
+  protected readonly icons = { Search, X };
+
   protected readonly i18n = injectI18n();
 
   isOpen = input.required<boolean>();

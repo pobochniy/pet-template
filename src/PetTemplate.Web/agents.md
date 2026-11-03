@@ -83,31 +83,33 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 
 ### Иконки: lucide
 
-- `lucide-angular`; Font Awesome, Bootstrap Icons и CDN не подключаются.
-- Иконки регистрируются **в `providers` компонента** через `provideIcons({...})`
-  из `shared/icons/lucide-icons.provider.ts`. Это законное исключение из правила «не объявлять
-  providers» (см. ниже) — провайдер несёт данные, а не подменяет реализацию сервиса.
-- **Иконки ленивого экрана — из `'lucide-angular/src/icons'`**, компонент — из `'lucide-angular'`.
-  Пакет — один файл, esbuild режет по файлам: иконка, взятая из `'lucide-angular'` где угодно,
-  ложится в чанк initial рядом с компонентом оболочки, сколько бы её ни регистрировали в экране
-  (`tech-debt/lucide-icons-entry.md`). Исключение — иконки, которые уже показывает оболочка
-  (`Users`, `LogOut`…): их берите из `'lucide-angular'`, второй копии данных не нужно.
-  Предупреждение `NG0912` в тестах и `ng serve` — следствие этого правила, оно безвредно.
+- Данные иконок — ванильный пакет `lucide`, рисует их свой `IconComponent`
+  (`shared/icons/icon.component.ts`, `<svg [appIcon]>`). Обёртки для Angular (`lucide-angular`,
+  `@lucide/angular`), Font Awesome, Bootstrap Icons и CDN не подключаются.
+- **Иконка — поштучным импортом** `lucide/dist/esm/icons/<имя>.mjs`, не из `'lucide'`: у пакета
+  каждая иконка — свой модуль, и esbuild кладёт её в чанк экрана, который её показывает. Общий вход
+  `'lucide'` — barrel на все иконки: взятая через него иконка ленивого экрана уезжает в initial.
+  Типы поштучных модулей — `shared/icons/lucide-icons.d.ts`.
+- Почему не обёртка: обёртки — один файл (любая иконка из них — в initial рядом с оболочкой),
+  у `@lucide/angular` ещё ≈10 КБ ядра и по копии шаблона на каждый `LucideX` (≈3.3 КБ на иконку;
+  замер 2026-11-03 — `tech-debt/bundle.md`).
+- Иконки компонента — полем `icons`, без `providers` и без имён-строк: опечатка — ошибка сборки.
 
 ```ts
-import { LucideAngularModule } from 'lucide-angular';
-import { Plus } from 'lucide-angular/src/icons';
-import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import Plus from 'lucide/dist/esm/icons/plus.mjs';
+import { IconComponent } from '../../shared/icons/icon.component';
 
-@Component({
-  imports: [LucideAngularModule],
-  providers: [provideIcons({ Plus })]
-})
+@Component({ imports: [IconComponent] })
+export class SomeComponent {
+  protected readonly icons = { Plus };
+}
 ```
 ```html
-<i-lucide name="plus"></i-lucide>
+<svg [appIcon]="icons.Plus" [size]="18"></svg>
 ```
-- Имена — kebab-case, список — `node_modules/lucide-angular/icons/*.d.ts`.
+- Имя файла — kebab-case из каталога https://lucide.dev/icons (`send-horizontal`, `link-2`),
+  список — `node_modules/lucide/dist/esm/icons/`. По умолчанию иконка `aria-hidden`: она рядом с
+  текстом или в кнопке со своей `aria-label`.
 
 ### Размер бандла
 
@@ -325,7 +327,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - **Global provider configuration**: сервисы без `providedIn: 'root'` перечислены в
   `src/app/app.providers.ts` (`serviceCollection`), он подключён в `appConfig`.
 - **Never use local providers**: не добавляйте `providers: [SomeService]` в декоратор компонента —
-  это второй экземпляр мимо общей конфигурации. Исключение — `provideIcons(...)` (см. «Иконки»).
+  это второй экземпляр мимо общей конфигурации.
 - Интерцепторы — функции (`HttpInterceptorFn`) в `withInterceptors([...])`, а не классы.
 - **Подмены под запуск без бэкенда нет.** Раньше `environment.useMockApi` подставлял моки
   в сборку; убран: моки расходились с сервером и молча показывали не то, что покажет
@@ -570,7 +572,7 @@ npm run build:admin   # сборка со своим бюджетом
   Кодов отказов админка не заводит: ошибка сервера показывается текстом как есть (`apiErrorText`);
 - **адаптив** — только десктоп, таблицы и формы на полном `bootstrap.min.css`, без своего дизайна
   и без поштучного `src/bootstrap.scss`;
-- **`form-validation`, `provideIcons`, workspace-интерцептор** — не используются: формы
+- **`form-validation`, иконки, workspace-интерцептор** — не используются: формы
   на `FormsModule`, интерцептор один (`adminInterceptor`, только `Authorization`, без
   `X-Workspace-Id` — workspace у админских запросов нет, спец. admin, 3.5);
 - **бюджет продукта** — у админки свой `initial`, ошибка на 600 КБ: больше половины —

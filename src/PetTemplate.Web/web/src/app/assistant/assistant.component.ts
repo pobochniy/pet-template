@@ -1,8 +1,8 @@
 import {
   AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, effect, inject, signal, untracked, viewChild
 } from '@angular/core';
-import { LucideAngularModule } from 'lucide-angular';
-import { Brain, SendHorizontal } from 'lucide-angular/src/icons';
+import Brain from 'lucide/dist/esm/icons/brain.mjs';
+import SendHorizontal from 'lucide/dist/esm/icons/send-horizontal.mjs';
 import { AssistantService } from './assistant.service';
 import { ASSISTANT_TEXT_STATE } from './assistant-text';
 import { ScopedKey } from '../shared/i18n/generated/i18n-keys';
@@ -11,7 +11,7 @@ import { AssistantTraceComponent } from './trace/trace.component';
 import { LimitReachedComponent } from './limit-reached/limit-reached.component';
 import { VoiceInputComponent } from './voice/voice-input.component';
 import { MarkdownComponent } from '../shared/markdown/markdown.component';
-import { provideIcons } from '../shared/icons/lucide-icons.provider';
+import { IconComponent } from '../shared/icons/icon.component';
 import { AssistantMessage, AssistantMessageRole } from '../shared/models/assistant.model';
 import { injectI18n } from '../shared/i18n/inject-i18n';
 import { ASSISTANT_SCOPES } from './assistant.scopes';
@@ -28,13 +28,14 @@ import { ASSISTANT_SCOPES } from './assistant.scopes';
   selector: 'app-assistant',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    PlanBlockComponent, AssistantTraceComponent, LimitReachedComponent, VoiceInputComponent, MarkdownComponent, LucideAngularModule
+    PlanBlockComponent, AssistantTraceComponent, LimitReachedComponent, VoiceInputComponent, MarkdownComponent, IconComponent
   ],
-  providers: [provideIcons({ Brain, SendHorizontal })],
   templateUrl: './assistant.component.html',
   styleUrl: './assistant.component.css'
 })
 export class AssistantComponent implements AfterViewInit, OnDestroy {
+  protected readonly icons = { Brain, SendHorizontal };
+
   protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
   public readonly assistant = inject(AssistantService);
 

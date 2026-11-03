@@ -6,7 +6,7 @@
     <div class="language-picker__head">
       @if (showSearch) {
         <div class="language-picker__search">
-          <i-lucide name="search" class="language-picker__search-icon"></i-lucide>
+          <svg [appIcon]="icons.Search" class="language-picker__search-icon"></svg>
           <input
             #searchInput
             type="text"
@@ -28,7 +28,7 @@
         [attr.aria-label]="i18n.t('core.action.close')"
         (click)="onClose()"
       >
-        <i-lucide name="x"></i-lucide>
+        <svg [appIcon]="icons.X"></svg>
       </button>
     </div>
 

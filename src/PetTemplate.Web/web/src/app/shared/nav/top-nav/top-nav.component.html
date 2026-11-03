@@ -2,7 +2,7 @@
   <div class="top-navbar-left">
     <button type="button" id="sidebarCollapse" class="icon-button"
             [attr.aria-label]="i18n.t('core.nav.toggleMenu')" (click)="toggleMenu()">
-      <i-lucide name="menu"></i-lucide>
+      <svg [appIcon]="icons.Menu"></svg>
     </button>
   </div>
   <div class="top-navbar-content">
@@ -20,11 +20,11 @@
       }
       <button type="button" id="workspace-settings" class="icon-button" (click)="goToWorkspaceSettings()"
               [title]="i18n.t('core.nav.workspaceSettings')" [attr.aria-label]="i18n.t('core.nav.workspaceSettings')">
-        <i-lucide name="settings"></i-lucide>
+        <svg [appIcon]="icons.Settings"></svg>
       </button>
       <button type="button" class="icon-button" (click)="goToProfile()"
               [title]="i18n.t('core.nav.profile')" [attr.aria-label]="i18n.t('core.nav.profile')">
-        <i-lucide name="user"></i-lucide>
+        <svg [appIcon]="icons.User"></svg>
       </button>
     }
     <button type="button" id="language-picker-button" class="icon-button"
@@ -36,7 +36,7 @@
     @if (userService.isAuthenticated) {
       <button type="button" class="icon-button" (click)="logOut()"
               [title]="i18n.t('core.nav.logOut')" [attr.aria-label]="i18n.t('core.nav.logOut')">
-        <i-lucide name="log-out"></i-lucide>
+        <svg [appIcon]="icons.LogOut"></svg>
       </button>
     }
   </div>

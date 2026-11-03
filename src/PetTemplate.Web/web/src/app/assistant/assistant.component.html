@@ -55,7 +55,7 @@
                спустя (спец. assistant, 12.5) -->
           @for (fact of message.facts; track fact.id) {
             <div class="assistant__fact mt-2 d-flex flex-wrap align-items-center gap-2 small">
-              <i-lucide name="brain" [size]="14" class="text-body-secondary" aria-hidden="true"></i-lucide>
+              <svg [appIcon]="icons.Brain" [size]="14" class="text-body-secondary" aria-hidden="true"></svg>
               <span>{{ i18n.t('assistant.memory.remembered', { text: fact.text }) }}</span>
               @if (forgetting() === fact.id) {
                 <span class="text-danger">{{ i18n.t('assistant.memory.forgetConfirm') }}</span>
@@ -129,7 +129,7 @@
       <button type="submit" class="btn btn-primary flex-shrink-0"
               [disabled]="draft().trim().length === 0"
               [attr.aria-label]="i18n.t('assistant.input.send')">
-        <i-lucide name="send-horizontal" [size]="18" aria-hidden="true"></i-lucide>
+        <svg [appIcon]="icons.SendHorizontal" [size]="18" aria-hidden="true"></svg>
         <span class="d-none d-sm-inline ms-2">{{ i18n.t('assistant.input.send') }}</span>
       </button>
     </form>
