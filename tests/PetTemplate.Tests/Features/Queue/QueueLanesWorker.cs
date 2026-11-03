@@ -5,6 +5,7 @@ using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
 using PetTemplate.Tests.Arranges;
+using LocalQueue;
 
 namespace PetTemplate.Tests.Features.Queue;
 
@@ -108,20 +109,14 @@ public class QueueLanesWorker
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public class SlowCommand : ICommand
-    {
-        public static string QueueName => "test-lanes-slow";
-    }
+    [CommandType("test-lanes-slow")]
+    public class SlowCommand : ICommand;
 
-    public class FastCommand : ICommand
-    {
-        public static string QueueName => "test-lanes-fast";
-    }
+    [CommandType("test-lanes-fast")]
+    public class FastCommand : ICommand;
 
-    public class LeasingCommand : ICommand
-    {
-        public static string QueueName => "test-lanes-leasing";
-    }
+    [CommandType("test-lanes-leasing")]
+    public class LeasingCommand : ICommand;
 
     private sealed class SlowHandler(Gate gate) : ICommandHandler<SlowCommand>
     {

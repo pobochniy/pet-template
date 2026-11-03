@@ -1,3 +1,5 @@
+using LocalQueue;
+
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace PetTemplate.Services.Commands;
 /// либо индекс строится впервые поверх накопленных данных. Обработчик не индексирует
 /// сам, а ставит <see cref="SearchIndexCommand"/> на каждую сущность
 /// </summary>
+[CommandType("search-reindex")]
 public class SearchReindexCommand : ICommand
 {
-    public static string QueueName => "search-reindex";
 }

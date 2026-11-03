@@ -1,9 +1,9 @@
 <Project>
   <ItemGroup>
     <PackageVersion Include="libstemmer.net" Version="2.2.3" />
-    <PackageVersion Include="AsuTrack.LocalQueue" Version="3.0.0" />
-    <PackageVersion Include="AsuTrack.LocalQueue.OpenTelemetry" Version="3.0.0" />
-    <PackageVersion Include="AsuTrack.LocalQueue.PostgreSql" Version="3.0.0" />
+    <PackageVersion Include="AsuTrack.LocalQueue" Version="3.1.0" />
+    <PackageVersion Include="AsuTrack.LocalQueue.OpenTelemetry" Version="3.1.0" />
+    <PackageVersion Include="AsuTrack.LocalQueue.PostgreSql" Version="3.1.0" />
     <PackageVersion Include="MailKit" Version="4.18.2" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using LocalQueue.Diagnostics;
 using LocalQueue.Processing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,20 +9,21 @@ using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
 using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Tests.Arranges;
+using LocalQueue;
 
 namespace PetTemplate.Tests.Features.Queue;
 
 /// <summary>
-/// Хранилище воркера шаблона поверх пакетного (спец. infrastructure, 2.2): строки с устойчивым
-/// именем команды и строки под <c>FullName</c>, поставленные до перехода, разбираются одинаково,
-/// а команда, исчерпавшая попытки, откладывается насовсем, а не ходит по кругу
+/// Имена команд и предел попыток пакета на настоящей таблице шаблона (спец. infrastructure, 2.2):
+/// строки с устойчивым именем команды и строки под <c>FullName</c>, поставленные до перехода,
+/// разбираются одинаково, а команда, исчерпавшая попытки, откладывается насовсем, а не ходит по кругу
 /// </summary>
 public class QueueStorageWorker
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// Новая строка — под именем из <c>ICommand.QueueName</c>, старая — под именем класса:
+    /// Новая строка — под именем из <c>[CommandType]</c>, старая — под именем класса:
     /// обработчик один, и разобраны обе
     /// </summary>
     [Fact]
@@ -72,7 +74,7 @@ public class QueueStorageWorker
         var parked = await WaitParked(db, row.Id);
         Assert.Equal(3, parked.TryCount);
         Assert.Equal(0, calls.Count);
-        Assert.Equal(1, await gaveUp.WaitFor(typeof(ParkedCommand).FullName!));
+        Assert.Equal(1, await gaveUp.WaitFor(CommandQueue.TypeOf<ParkedCommand>()));
     }
 
     /// <summary>
@@ -141,20 +143,14 @@ public class QueueStorageWorker
         public void Add() => Interlocked.Increment(ref _count);
     }
 
-    public class NamedCommand : ICommand
-    {
-        public static string QueueName => "test-storage-named";
-    }
+    [CommandType("test-storage-named")]
+    public class NamedCommand : ICommand;
 
-    public class ParkedCommand : ICommand
-    {
-        public static string QueueName => "test-storage-parked";
-    }
+    [CommandType("test-storage-parked")]
+    public class ParkedCommand : ICommand;
 
-    public class PoisonCommand : ICommand
-    {
-        public static string QueueName => "test-storage-poison";
-    }
+    [CommandType("test-storage-poison")]
+    public class PoisonCommand : ICommand;
 
     private sealed class CountingHandler<T>(Calls calls) : ICommandHandler<T>
     {
@@ -177,22 +173,22 @@ public class QueueStorageWorker
     }
 
     /// <summary>
-    /// Счётчик брошенных команд шаблона. Метр — один на хост, а тесты идут параллельно,
+    /// Счётчик брошенных команд пакета. Метр — один на процесс, а тесты идут параллельно,
     /// поэтому измерения отбираются по типу команды теста
     /// </summary>
     private sealed class GaveUpListener : IDisposable
     {
         private readonly MeterListener _listener = new();
-        private readonly ConcurrentDictionary<string, long> _counts = new();
+        private readonly ConcurrentDictionary<string, int> _counts = new();
 
         public GaveUpListener()
         {
             _listener.InstrumentPublished = (instrument, listener) =>
             {
-                if (instrument.Meter.Name == CommandQueueMetrics.MeterName)
+                if (instrument.Meter.Name == Instruments.MeterName && instrument.Name == "local-command-queue-given-up")
                     listener.EnableMeasurementEvents(instrument);
             };
-            _listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            _listener.SetMeasurementEventCallback<int>((_, value, tags, _) =>
             {
                 foreach (var tag in tags)
                 {
@@ -203,7 +199,7 @@ public class QueueStorageWorker
             _listener.Start();
         }
 
-        public async Task<long> WaitFor(string commandType)
+        public async Task<int> WaitFor(string commandType)
         {
             var deadline = DateTime.UtcNow + Timeout;
             while (!_counts.ContainsKey(commandType))

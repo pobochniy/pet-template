@@ -117,7 +117,7 @@
 - **отказ эмбеддера или Qdrant** — команда падает и повторяется очередью: через минуту,
   дальше пауза удваивается до часа (повтор по умолчанию у `AddCommandQueueWorker`, `h.Add<…>()`).
   После `CommandQueueOptions.MaxAttempts` выдач (25 — около суток) команда бросается: ошибка
-  в лог, счётчик `pettemplate.queue.gave_up`, строка остаётся в `local_queue` отложенной
+  в лог, счётчик `local-command-queue-given-up`, строка остаётся в `local_queue` отложенной
   насовсем (`infrastructure.md`, 2.2). Чанк, который эмбеддер не возьмёт никогда (слишком
   плотный для окна модели, `tech-debt/embeddings-model.md`), так не ходит к нему вечно;
   эмбеддер вернул не столько векторов, сколько чанков, — тоже отказ, а не частичная запись;
@@ -284,7 +284,7 @@
 и GIN-индекс по ней. Пишет её база; в EF-модели ядра таких колонок нет — нет сущностей.
 
 **Команды** — строки общей очереди `LocalQueue` (`mail.md`, 4): `CommandType` — устойчивое
-имя команды (`ICommand.QueueName`, `infrastructure.md`, 2.2), `Data` — JSON тела.
+имя команды (`[CommandType]`, `infrastructure.md`, 2.2), `Data` — JSON тела.
 `SearchIndexCommand` (`search-index`) — `{"EntityType": <число>, "EntityId": "<id>"}`,
 `SearchReindexCommand` (`search-reindex`) — `{}`, `SearchPurgeWorkspaceCommand`
 (`search-purge-workspace`) — `{"WorkspaceId": "<id>"}`.

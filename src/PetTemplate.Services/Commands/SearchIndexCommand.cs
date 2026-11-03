@@ -1,4 +1,5 @@
 using PetTemplate.Shared.Enums;
+using LocalQueue;
 
 namespace PetTemplate.Services.Commands;
 
@@ -14,10 +15,9 @@ namespace PetTemplate.Services.Commands;
 /// завести и числовой, а команде важно только донести его до загрузчика
 /// (<c>ISearchSource.Load</c>)
 /// </summary>
+[CommandType("search-index")]
 public class SearchIndexCommand : ICommand
 {
-    public static string QueueName => "search-index";
-
     public SearchEntityType EntityType { get; set; }
 
     public string EntityId { get; set; } = string.Empty;

@@ -1,3 +1,5 @@
+using LocalQueue;
+
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -5,9 +7,8 @@ namespace PetTemplate.Services.Commands;
 /// по очереди, и после каждой запуск записывает, сколько сделано, — повтор после падения
 /// продолжает с той же фразы, а не с начала и не вторым счётом
 /// </summary>
+[CommandType("model-check")]
 public class ModelCheckCommand : ICommand
 {
-    public static string QueueName => "model-check";
-
     public Guid JobId { get; set; }
 }

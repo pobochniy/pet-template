@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PetTemplate.Api.Workers;
 using PetTemplate.Services.Commands;
+using LocalQueue;
 
 namespace PetTemplate.Tests.Features.Queue;
 
@@ -27,7 +28,7 @@ public class QueueRegistrationTests
     public void BackoffDoublesUpToCeiling(int attempt, int expectedMinutes)
     {
         // Arrange
-        var policy = new CommandQueueRegistration.BackoffRetryPolicy(TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
+        var policy = new CommandQueueRegistration.BackoffRetryPolicy(TimeSpan.FromMinutes(1), TimeSpan.FromHours(1), 25);
 
         // Act
         var delay = policy.RedeliverAfter(attempt);
@@ -36,6 +37,7 @@ public class QueueRegistrationTests
         Assert.Equal(TimeSpan.FromMinutes(expectedMinutes), delay);
         Assert.Equal(1, policy.MaxRetryCount);
         Assert.Equal(TimeSpan.Zero, policy.BackoffFor(1));
+        Assert.Equal(25, policy.MaxAttempts);
     }
 
     /// <summary>Первая пауза дольше потолка — берётся она: потолок не укорачивает заданный повтор</summary>
@@ -43,7 +45,7 @@ public class QueueRegistrationTests
     public void FirstDelayAboveCeilingIsKept()
     {
         // Arrange
-        var policy = new CommandQueueRegistration.BackoffRetryPolicy(TimeSpan.FromHours(2), TimeSpan.FromHours(1));
+        var policy = new CommandQueueRegistration.BackoffRetryPolicy(TimeSpan.FromHours(2), TimeSpan.FromHours(1), 25);
 
         // Act
         var delay = policy.RedeliverAfter(3);
@@ -94,9 +96,10 @@ public class QueueRegistrationTests
     }
 
     /// <summary>
-    /// Имена команд в <c>local_queue.command_type</c> не меняются никогда: строки ждут разбора
-    /// часами, и переименованная команда оставила бы их без обработчика. Новая команда —
-    /// новая строка списка; поменять имя существующей — только вместе с миграцией строк
+    /// Имена команд в <c>local_queue.command_type</c> не меняются: строки ждут разбора часами,
+    /// и переименованная команда оставила бы их без обработчика. Новая команда — новая строка
+    /// списка, и без <c>[CommandType]</c> она сюда не встанет: пакет запишет имя класса. Сменить
+    /// имя существующей — только оставив прежнее в атрибуте (<c>[CommandType("new", "old")]</c>)
     /// </summary>
     [Fact]
     public void QueueNamesAreStable()
@@ -107,7 +110,7 @@ public class QueueRegistrationTests
 
         // Act
         var names = commands
-            .ToDictionary(x => x.Name, x => (string)x.GetProperty(nameof(ICommand.QueueName))!.GetValue(null)!);
+            .ToDictionary(x => x.Name, CommandTypes.NameOf);
 
         // Assert
         Assert.Equal(new Dictionary<string, string>
@@ -128,11 +131,13 @@ public class QueueRegistrationTests
     public void DuplicateQueueNameBreaksRegistration()
     {
         // Arrange
-        var catalog = new CommandQueueCatalog();
-        catalog.Add("Roga.Kopyta.SendMail", "send-mail", 25);
+        var services = new ServiceCollection();
+        services.AddCommandQueueStorage(Config(enabled: true));
 
         // Act
-        var error = Record.Exception(() => catalog.Add("Shariki.Palochki.SendMail", "send-mail", 25));
+        var error = Record.Exception(() => services.AddCommandQueueWorker(h => h
+            .Add<LeaseCommand, LeaseHandler>()
+            .Add<SameNameCommand, SameNameHandler>()));
 
         // Assert
         Assert.IsType<InvalidOperationException>(error);
@@ -147,9 +152,15 @@ public class QueueRegistrationTests
             })
             .Build();
 
-    public class LeaseCommand : ICommand
+    [CommandType("test-registration-lease")]
+    public class LeaseCommand : ICommand;
+
+    [CommandType("test-registration-lease")]
+    public class SameNameCommand : ICommand;
+
+    public sealed class SameNameHandler : ICommandHandler<SameNameCommand>
     {
-        public static string QueueName => "test-registration-lease";
+        public Task Handle(SameNameCommand command, CancellationToken ct) => Task.CompletedTask;
     }
 
     public sealed class LeaseHandler(ICommandLease lease) : ICommandHandler<LeaseCommand>

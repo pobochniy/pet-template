@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LocalQueue;
 using Microsoft.EntityFrameworkCore;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
@@ -11,8 +12,8 @@ namespace PetTemplate.Services.LocalQueueHandlers;
 /// Отдельный <c>SaveChanges</c> на команду сломал бы всю затею: токен лёг бы, а письмо — нет.
 ///
 /// Тело и тип строки задаются только здесь: тело — JSON с умолчаниями <c>System.Text.Json</c>
-/// (их же ждёт десериализатор пакета), тип — <see cref="ICommand.QueueName"/>, а не имя
-/// класса (спец. infrastructure, 2.2)
+/// (их же ждёт десериализатор пакета), тип — имя из <c>[CommandType]</c> (<see cref="CommandTypes.NameOf{TCommand}"/>),
+/// а не имя класса (спец. infrastructure, 2.2)
 /// </summary>
 public static class CommandQueue
 {
@@ -34,7 +35,7 @@ public static class CommandQueue
     }
 
     /// <summary>Тип строки очереди у команды <typeparamref name="T"/></summary>
-    public static string TypeOf<T>() where T : ICommand => T.QueueName;
+    public static string TypeOf<T>() where T : ICommand => CommandTypes.NameOf<T>();
 
     private static Db.Entity.LocalQueue Row<T>(T command) where T : ICommand => new()
     {
@@ -43,6 +44,6 @@ public static class CommandQueue
         Id = Guid.CreateVersion7(),
         Data = JsonSerializer.Serialize(command),
         CreatedAtUtc = DateTime.UtcNow,
-        CommandType = T.QueueName
+        CommandType = TypeOf<T>()
     };
 }

@@ -1,3 +1,5 @@
+using LocalQueue;
+
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -5,9 +7,8 @@ namespace PetTemplate.Services.Commands;
 /// и реплика человека с прогоном (outbox); <see cref="RunId"/> — ключ идемпотентности:
 /// повтор команды на законченном ходе не делает ничего
 /// </summary>
+[CommandType("assistant-run")]
 public class AssistantRunCommand : ICommand
 {
-    public static string QueueName => "assistant-run";
-
     public Guid RunId { get; set; }
 }

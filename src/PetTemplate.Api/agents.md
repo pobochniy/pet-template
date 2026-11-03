@@ -170,8 +170,9 @@
 - Всё, что не должно ни теряться, ни выполняться в запросе (письмо), — **командой в очередь**:
   `db.Enqueue(command)` (`LocalQueueHandlers/CommandQueue`) до общего `SaveChanges` — команда
   ложится в `local_queue` той же транзакцией, что и доменное изменение (outbox). Отдельный
-  `SaveChanges` на команду не делаем. Команда — класс с `ICommand` и своим устойчивым
-  `QueueName` (kebab-case, новое имя — строкой в `QueueRegistrationTests.QueueNamesAreStable`);
+  `SaveChanges` на команду не делаем. Команда — класс с `ICommand` и атрибутом пакета
+  `[CommandType("kebab-case")]` (новое имя — строкой в `QueueRegistrationTests.QueueNamesAreStable`;
+  сменить имя — `[CommandType("new", "old")]`, прежнее не выбрасывать);
   тело сериализует `CommandQueue`, `ToString()` у команды не переопределяем
 - Обработчик — `LocalQueue.Processing.ICommandHandler<TCommand>` пакета, регистрация —
   `h.Add<TCommand, THandler>(retryAfterFailure)` внутри `AddCommandQueueWorker(h => …)`

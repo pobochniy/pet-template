@@ -38,7 +38,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(max by (commandType) ({__name__=~\"local_command_queue_length.*\", commandType=~\"$command\"}), \"command\", \"$1\", \"commandType\", \".*\\\\.([^.]+)\")",
+          "expr": "label_replace(max by (commandType) ({__name__=~\"local_command_queue_length.*\", commandType=~\"$command\"}), \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
           "legendFormat": "{{command}}",
           "range": true
         }
@@ -89,7 +89,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(sum by (commandType) (rate({__name__=~\"local_command_queue_completed.*\", commandType=~\"$command\"}[$__rate_interval])) * 60, \"command\", \"$1\", \"commandType\", \".*\\\\.([^.]+)\")",
+          "expr": "label_replace(sum by (commandType) (rate({__name__=~\"local_command_queue_completed.*\", commandType=~\"$command\"}[$__rate_interval])) * 60, \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
           "legendFormat": "{{command}}",
           "range": true
         }
@@ -267,7 +267,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(histogram_quantile(0.95, sum by (le, commandType) (rate({__name__=~\"local_command_queue_processing_lag.*_bucket\", commandType=~\"$command\"}[$__rate_interval]))), \"command\", \"$1\", \"commandType\", \".*\\\\.([^.]+)\")",
+          "expr": "label_replace(histogram_quantile(0.95, sum by (le, commandType) (rate({__name__=~\"local_command_queue_processing_lag.*_bucket\", commandType=~\"$command\"}[$__rate_interval]))), \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
           "legendFormat": "{{command}}",
           "range": true
         }
@@ -318,7 +318,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(histogram_quantile(0.95, sum by (le, commandType) (rate({__name__=~\"local_command_queue_processing_time.*_bucket\", commandType=~\"$command\"}[$__rate_interval]))), \"command\", \"$1\", \"commandType\", \".*\\\\.([^.]+)\")",
+          "expr": "label_replace(histogram_quantile(0.95, sum by (le, commandType) (rate({__name__=~\"local_command_queue_processing_time.*_bucket\", commandType=~\"$command\"}[$__rate_interval]))), \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
           "legendFormat": "{{command}}",
           "range": true
         }
@@ -369,7 +369,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace(max by (commandType) ({__name__=~\"local_command_queue_max_try_count.*\", commandType=~\"$command\"}), \"command\", \"$1\", \"commandType\", \".*\\\\.([^.]+)\")",
+          "expr": "label_replace(max by (commandType) ({__name__=~\"local_command_queue_max_try_count.*\", commandType=~\"$command\"}), \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
           "legendFormat": "{{command}}",
           "range": true
         }
@@ -398,6 +398,56 @@
         }
       },
       "description": "Максимум TryCount среди команд в очереди: больше 1 — команда падала и ждёт повтора"
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Брошено после всех попыток",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(sum by (commandType) (increase({__name__=~\"local_command_queue_given_up.*\", commandType=~\"$command\"}[$__rate_interval])), \"command\", \"$1\", \"commandType\", \"(?:.*\\\\.)?([^.]+)\")",
+          "legendFormat": "{{command}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Команды, которые очередь бросила после MaxAttempts выдач: они остались в local_queue запертыми насовсем, причина — в логе (given up). Вернуть в работу: locked_till_utc = null, try_count = 0"
     }
   ],
   "templating": {

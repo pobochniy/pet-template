@@ -5,7 +5,9 @@ using LocalQueue.Processing;
 using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Tests.Arranges;
+using LocalQueue;
 
 namespace PetTemplate.Tests.Features.Queue;
 
@@ -26,15 +28,15 @@ public class QueueMetricsWorker
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// Выполненная команда — в счётчике и обеих гистограммах; задержка считается
-    /// от постановки, а не от взятия в работу
+    /// Выполненная команда — в счётчике и обеих гистограммах под устойчивым именем команды
+    /// (метка <c>commandType</c> дашборда); задержка считается от постановки, а не от взятия в работу
     /// </summary>
     [Fact]
     public async Task RecordsCompletedCommand()
     {
         // Arrange
         using var listener = new QueueListener();
-        var commandType = typeof(PingCommand).FullName!;
+        var commandType = CommandQueue.TypeOf<PingCommand>();
         var row = new Db.Entity.LocalQueue
         {
             Id = Guid.CreateVersion7(),
@@ -93,10 +95,8 @@ public class QueueMetricsWorker
         TryCount = tryCount
     };
 
-    public class PingCommand : ICommand
-    {
-        public static string QueueName => "test-metrics-ping";
-    }
+    [CommandType("test-metrics-ping")]
+    public class PingCommand : ICommand;
 
     private class PingHandler : ICommandHandler<PingCommand>
     {

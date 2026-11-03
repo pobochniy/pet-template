@@ -36,10 +36,9 @@ services.AddOpenTelemetry()
             .AddMeter(AssistantMetrics.MeterName)
             .AddMeter(BillingMetrics.MeterName)
             // Очередь команд: длина, попытки, сколько команда ждала до выполнения
-            // и сколько выполнялась — метрики пакета AsuTrack.LocalQueue.OpenTelemetry;
-            // брошенные после исчерпания попыток — свой счётчик шаблона
-            .AddLocalCommandQueueInstrumentation()
-            .AddMeter(CommandQueueMetrics.MeterName);
+            // и сколько выполнялась, брошенные после исчерпания попыток — метрики пакета
+            // AsuTrack.LocalQueue.OpenTelemetry
+            .AddLocalCommandQueueInstrumentation();
 
         if (!string.IsNullOrWhiteSpace(otlp))
             b.AddOtlpExporter();

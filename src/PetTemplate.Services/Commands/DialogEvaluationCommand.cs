@@ -1,3 +1,5 @@
+using LocalQueue;
+
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -5,10 +7,9 @@ namespace PetTemplate.Services.Commands;
 /// (<c>DialogEvaluationService.Start</c>); команда на прогон, а не на пачку: упавшая
 /// оценка не тянет за собой уже оплаченных соседей, а запуск отмечает каждую
 /// </summary>
+[CommandType("dialog-evaluation")]
 public class DialogEvaluationCommand : ICommand
 {
-    public static string QueueName => "dialog-evaluation";
-
     public Guid RunId { get; set; }
 
     /// <summary>Запуск (<c>AdminJob</c>): в нём выбранный судья и счётчики</summary>

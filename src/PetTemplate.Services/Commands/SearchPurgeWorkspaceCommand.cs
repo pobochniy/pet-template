@@ -1,3 +1,5 @@
+using LocalQueue;
+
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -8,9 +10,8 @@ namespace PetTemplate.Services.Commands;
 ///
 /// Повтор безопасен: удаление по фильтру у пустого пространства ничего не находит
 /// </summary>
+[CommandType("search-purge-workspace")]
 public class SearchPurgeWorkspaceCommand : ICommand
 {
-    public static string QueueName => "search-purge-workspace";
-
     public Guid WorkspaceId { get; set; }
 }
