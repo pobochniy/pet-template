@@ -9,6 +9,7 @@ import { ExternalProofModel } from '../models/external-login.model';
 import { ExternalProviderEnum } from '../enums/external-provider.enum';
 import { serverRefusal, validationRefusal } from './server-refusal.mock';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, phoneValidator, userNameValidator } from '../form-models/account-rules';
+import { profileDto, sessionDto } from './dto.mock';
 
 /**
  * Подмена `AccountApiService` для спек. Повторяет правила сервера (`AccountService`,
@@ -39,6 +40,7 @@ export class AccountApiServiceMock implements IAccountApiService {
     telegramLinked: false,
     vkLinked: false,
     loginCount: 1,
+    canSetPasswordWithoutCurrent: false,
     // Подтверждено надолго: спекам, которые проверяют не подтверждение, оно не мешает
     freshLoginUntilUtc: '2999-01-01T00:00:00Z'
   };
@@ -193,7 +195,7 @@ export class AccountApiServiceMock implements IAccountApiService {
 
     // Вход чужого аккаунта — привязки нет, сразу просмотр слияния (7.1)
     if (this.takenExternal.has(proof.provider)) {
-      return { mergePreview: this.preview };
+      return { logins: null, mergePreview: this.preview };
     }
 
     const telegram = proof.provider === ExternalProviderEnum.Telegram;
@@ -207,7 +209,7 @@ export class AccountApiServiceMock implements IAccountApiService {
       vkLinked: this.account.vkLinked || !telegram,
       loginCount: this.account.loginCount + 1
     };
-    return { logins: { ...this.account } };
+    return { logins: { ...this.account }, mergePreview: null };
   }
 
   async unlink(provider: ExternalProviderEnum): Promise<AccountLoginsModel> {
@@ -342,9 +344,9 @@ export class AccountApiServiceMock implements IAccountApiService {
   private session(): AuthenticationResultModel {
     this.issuedSessions++;
 
-    return {
+    return sessionDto({
       token: `token-${this.issuedSessions}`,
-      profile: {
+      profile: profileDto({
         id: 'user-1',
         userName: this.account.userName,
         userNameIsGenerated: this.account.userNameIsGenerated,
@@ -356,9 +358,9 @@ export class AccountApiServiceMock implements IAccountApiService {
         comment: this.account.comment ?? null,
         isAdult: false,
         hasAcceptedTerms: false
-      },
+      }),
       permissionsByWorkspace: {}
-    };
+    });
   }
 
   private requireFresh(): void {

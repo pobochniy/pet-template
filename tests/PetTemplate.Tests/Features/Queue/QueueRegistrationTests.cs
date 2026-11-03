@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PetTemplate.Api.Workers;
+using PetTemplate.Services.Commands;
 
 namespace PetTemplate.Tests.Features.Queue;
 
@@ -92,6 +93,51 @@ public class QueueRegistrationTests
         Assert.Contains(services, d => d.ServiceType == typeof(IHostedService));
     }
 
+    /// <summary>
+    /// Имена команд в <c>local_queue.command_type</c> не меняются никогда: строки ждут разбора
+    /// часами, и переименованная команда оставила бы их без обработчика. Новая команда —
+    /// новая строка списка; поменять имя существующей — только вместе с миграцией строк
+    /// </summary>
+    [Fact]
+    public void QueueNamesAreStable()
+    {
+        // Arrange
+        var commands = typeof(ICommand).Assembly.GetTypes()
+            .Where(x => x is { IsClass: true, IsAbstract: false } && typeof(ICommand).IsAssignableFrom(x));
+
+        // Act
+        var names = commands
+            .ToDictionary(x => x.Name, x => (string)x.GetProperty(nameof(ICommand.QueueName))!.GetValue(null)!);
+
+        // Assert
+        Assert.Equal(new Dictionary<string, string>
+        {
+            [nameof(AssistantCompactionCommand)] = "assistant-compaction",
+            [nameof(AssistantRunCommand)] = "assistant-run",
+            [nameof(DialogEvaluationCommand)] = "dialog-evaluation",
+            [nameof(ModelCheckCommand)] = "model-check",
+            [nameof(SearchIndexCommand)] = "search-index",
+            [nameof(SearchPurgeWorkspaceCommand)] = "search-purge-workspace",
+            [nameof(SearchReindexCommand)] = "search-reindex",
+            [nameof(SendMailCommand)] = "send-mail"
+        }, names);
+    }
+
+    /// <summary>Одно имя у двух команд — ошибка регистрации: строки ушли бы не тому обработчику</summary>
+    [Fact]
+    public void DuplicateQueueNameBreaksRegistration()
+    {
+        // Arrange
+        var catalog = new CommandQueueCatalog();
+        catalog.Add("Roga.Kopyta.SendMail", "send-mail", 25);
+
+        // Act
+        var error = Record.Exception(() => catalog.Add("Shariki.Palochki.SendMail", "send-mail", 25));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(error);
+    }
+
     private static IConfiguration Config(bool enabled) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -101,7 +147,10 @@ public class QueueRegistrationTests
             })
             .Build();
 
-    public class LeaseCommand;
+    public class LeaseCommand : ICommand
+    {
+        public static string QueueName => "test-registration-lease";
+    }
 
     public sealed class LeaseHandler(ICommandLease lease) : ICommandHandler<LeaseCommand>
     {

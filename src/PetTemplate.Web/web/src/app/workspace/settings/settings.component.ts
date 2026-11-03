@@ -15,7 +15,8 @@ import { FormValidationComponent } from '../../shared/form-validation/form-valid
 import { PermissionEnum } from '../../shared/enums/permission.enum';
 import { WorkspaceMembersComponent } from '../members/members.component';
 import { MEMBERS_PAGE_PERMISSIONS } from '../workspace-permissions';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { WORKSPACE_SCOPES } from '../workspace.scopes';
 
 /**
  * Список своих пространств, основное, переименование, создание нового и выход
@@ -33,7 +34,7 @@ import { I18nService } from '../../shared/i18n/i18n.service';
   providers: [provideIcons({ FolderPlus, LogOut, Pencil, Star, Users })]
 })
 export class WorkspaceSettingsComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);
   private readonly workspaceApi = inject(WorkspaceApiService);
   private readonly userService = inject(UserService);
   private readonly workspaceContext = inject(WorkspaceContextService);

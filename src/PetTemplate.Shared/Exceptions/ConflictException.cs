@@ -7,7 +7,7 @@ namespace PetTemplate.Shared.Exceptions;
 /// пользователь — слияние аккаунтов (спец. accounts, 7.4): состав пространств
 /// поменялся между просмотром и подтверждением, человек подтверждал не то, что случится
 /// </summary>
-public class ConflictException(ErrorMessage message) : Exception(message.Text), ICodedError
+public class ConflictException(ErrorMessage message) : DomainException(message.Text), ICodedError
 {
     public string Code { get; } = message.Code;
 

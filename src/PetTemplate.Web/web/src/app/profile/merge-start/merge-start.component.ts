@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AccountApiService } from '../../shared/api/account-api.service';
@@ -6,10 +6,11 @@ import { ExternalLoginService } from '../../shared/core/external-login.service';
 import { MergeStateService } from '../../shared/core/merge-state.service';
 import { ExternalProvider } from '../../shared/models/external-login.model';
 import { MergeProofModel } from '../../shared/models/account.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
-import { createMergeProofForm } from '../../shared/form-models/merge-proof-form.model';
+import { createMergeProofForm } from '../form-models/merge-proof-form.model';
 import { FreshLoginService } from '../fresh-login/fresh-login.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * «Объединить с другим аккаунтом» в блоке «Основное» (спец. accounts, 7.1): владение
@@ -66,7 +67,7 @@ import { FreshLoginService } from '../fresh-login/fresh-login.service';
   `
 })
 export class ProfileMergeStartComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   /** Площадки, настроенные на сервере: без них кнопке вести некуда */
   readonly enabled = input<Record<ExternalProvider, boolean>>({ telegram: false, vk: false });
@@ -94,11 +95,13 @@ export class ProfileMergeStartComponent {
 
   protected async byPlatform(provider: ExternalProvider): Promise<void> {
     this.error.set(null);
-    if (!(await this.fresh.ensure())) return;
+    // Окно Telegram — в клике «Подтвердить», если подтверждение понадобится
+    const confirmed = await this.fresh.ensureBeforePlatform(provider, () => this.external.openPopup());
+    if (!confirmed) return;
 
     this.busy.set(true);
     try {
-      await this.external.start(provider, 'merge', '/profile/merge');
+      await this.external.start(provider, 'merge', '/profile/merge', confirmed.popup);
     } catch (e) {
       this.error.set(serverErrorMessage(e, this.i18n, this.i18n.t('profile.merge.failed')));
     } finally {

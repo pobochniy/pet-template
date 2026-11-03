@@ -4,9 +4,8 @@ namespace PetTemplate.Shared.Errors;
 /// Исключение, за которым стоит <see cref="ErrorMessage"/>: <c>GlobalExceptionHandler</c>
 /// кладёт его код и подстановки в тело ответа рядом с текстом.
 ///
-/// Интерфейс, а не общий базовый тип, потому что статус ответа выбирается
-/// по типу исключения (<see cref="Exceptions.NotFoundException"/> — 404,
-/// <see cref="Exceptions.BadRequestException"/> — 400), и наследование у них разное
+/// Интерфейс, а не общий базовый тип: корень у отказов один (<see cref="Exceptions.DomainException"/>),
+/// но код есть не у всех — у <see cref="Exceptions.AdminRejectionException"/> только текст
 /// </summary>
 public interface ICodedError
 {

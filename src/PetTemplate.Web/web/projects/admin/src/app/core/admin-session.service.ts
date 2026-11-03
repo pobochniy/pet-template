@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AdminRole } from './admin-role';
 import { Admin, AdminLoginResult } from './admin.model';
+import { safeStorage } from '../../../../../src/app/shared/core/safe-storage';
 
 const TOKEN_KEY = 'adminToken';
 const EXPIRES_KEY = 'adminTokenExpires';
@@ -9,7 +10,7 @@ const EXPIRES_KEY = 'adminTokenExpires';
 /**
  * Сессия админки (спец. admin, 3.3): токен своей схемы и его срок.
  *
- * Хранилище — `localStorage` поддомена: продукту на `example.com` оно физически
+ * Хранилище — `localStorage` поддомена (через `safeStorage`): продукту на `example.com` оно физически
  * недоступно, ради этого админка и вынесена отдельно.
  *
  * Токен живёт час и не продлевается: по истечении срока сессия заканчивается сама
@@ -26,22 +27,22 @@ export class AdminSessionService {
   readonly admin = signal<Admin | null>(null);
 
   get token(): string | null {
-    return this.isActive() ? localStorage.getItem(TOKEN_KEY) : null;
+    return this.isActive() ? safeStorage.get(TOKEN_KEY) : null;
   }
 
   get expiresAt(): Date | null {
-    const value = localStorage.getItem(EXPIRES_KEY);
+    const value = safeStorage.get(EXPIRES_KEY);
     return value ? new Date(value) : null;
   }
 
   isActive(): boolean {
     const expires = this.expiresAt;
-    return !!localStorage.getItem(TOKEN_KEY) && !!expires && expires.getTime() > Date.now();
+    return !!safeStorage.get(TOKEN_KEY) && !!expires && expires.getTime() > Date.now();
   }
 
   start(result: AdminLoginResult): void {
-    localStorage.setItem(TOKEN_KEY, result.token);
-    localStorage.setItem(EXPIRES_KEY, result.expiresUtc);
+    safeStorage.set(TOKEN_KEY, result.token);
+    safeStorage.set(EXPIRES_KEY, result.expiresUtc);
     this.admin.set(result.admin);
     this.scheduleEnd();
   }
@@ -54,8 +55,8 @@ export class AdminSessionService {
 
   end(): void {
     clearTimeout(this.timer);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(EXPIRES_KEY);
+    safeStorage.remove(TOKEN_KEY);
+    safeStorage.remove(EXPIRES_KEY);
     this.admin.set(null);
     void this.router.navigateByUrl('/login');
   }

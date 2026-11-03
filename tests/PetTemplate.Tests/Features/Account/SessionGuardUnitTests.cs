@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using PetTemplate.Services.Services;
+using PetTemplate.Shared.Enums;
 
 namespace PetTemplate.Tests.Features.Account;
 
@@ -26,7 +27,7 @@ public class SessionGuardUnitTests
 
         protected override Task<Entry> Load(Guid userId, CancellationToken ct)
         {
-            var entry = new Entry(true, ValidAfterUtc);
+            var entry = new Entry(true, ValidAfterUtc, new Dictionary<Guid, PermissionEnum[]>());
 
             var during = DuringNextLoad;
             DuringNextLoad = null;

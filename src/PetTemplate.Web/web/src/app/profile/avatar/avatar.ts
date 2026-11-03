@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { ProfileApiService } from '../../shared/api/profile-api.service';
+import { ProfileApiService } from '../profile-api.service';
 import { UserService } from '../../shared/core/user.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 @Component({
   selector: 'app-avatar',
@@ -13,7 +14,7 @@ import { I18nService } from '../../shared/i18n/i18n.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Avatar implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
   private readonly profileApi = inject(ProfileApiService);
   private readonly alerts = inject(AlertsService);
   readonly userService = inject(UserService);

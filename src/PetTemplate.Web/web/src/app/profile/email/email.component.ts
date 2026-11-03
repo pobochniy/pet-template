@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { AccountLoginsModel } from '../../shared/models/account.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * Состояние почты под полем «Почта» в блоке «Основное» (спец. accounts, 6 и 8.4):
@@ -38,7 +39,7 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   `
 })
 export class ProfileEmailComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   readonly logins = input.required<AccountLoginsModel>();
 

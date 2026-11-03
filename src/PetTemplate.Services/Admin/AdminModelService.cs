@@ -4,6 +4,7 @@ using PetTemplate.Db.Entity;
 using PetTemplate.Services.Assistant;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Admin;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 
 namespace PetTemplate.Services.Admin;
@@ -135,7 +136,7 @@ public class AdminModelService(
         // значит переписать историю, поэтому другая модель — это новая строка
         var replaced = model.Provider != dto.Provider.Trim() || model.Key != dto.Key.Trim();
         if (replaced && await Used(id, ct))
-            throw new ArgumentException("По этой модели уже ходили — поставщика и ключ не поменять. Заведите новую модель");
+            throw new AdminRejectionException("По этой модели уже ходили — поставщика и ключ не поменять. Заведите новую модель");
 
         var key = model.Key;
         Fill(model, dto, adminId);
@@ -148,7 +149,7 @@ public class AdminModelService(
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new ArgumentException("Модель уже поменялась — откройте справочник заново и повторите правку");
+            throw new AdminRejectionException("Модель уже поменялась — откройте справочник заново и повторите правку");
         }
 
         // Прибор состояния (спец. assistant, 13.4) знает модель по ключу: выключенная или
@@ -176,7 +177,7 @@ public class AdminModelService(
             .ToDictionaryAsync(x => x.Id, x => x.Priority, ct);
 
         if (ids.Length != current.Count || ids.Distinct().Count() != ids.Length || !Array.TrueForAll(ids, current.ContainsKey))
-            throw new ArgumentException(
+            throw new AdminRejectionException(
                 "Порядок должен перечислять все модели справочника ровно по разу — обновите экран: справочник уже поменялся");
 
         var now = DateTime.UtcNow;
@@ -267,14 +268,14 @@ public class AdminModelService(
         Require(dto.DisplayName, "Название", 128);
 
         if (dto.CostIn < 0 || dto.CostCached < 0 || dto.CostOut < 0)
-            throw new ArgumentException("Цена не может быть отрицательной");
+            throw new AdminRejectionException("Цена не может быть отрицательной");
     }
 
     private static void Require(string? value, string field, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException($"Не заполнено поле «{field}»");
+            throw new AdminRejectionException($"Не заполнено поле «{field}»");
         if (value.Trim().Length > maxLength)
-            throw new ArgumentException($"Поле «{field}» длиннее {maxLength} символов");
+            throw new AdminRejectionException($"Поле «{field}» длиннее {maxLength} символов");
     }
 }

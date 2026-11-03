@@ -67,6 +67,6 @@ describe('UserNameBannerComponent', () => {
 
     el.querySelector<HTMLButtonElement>('#user-name-banner-change')!.click();
 
-    expect(requested).toBeTrue();
+    expect(requested).toBe(true);
   });
 });

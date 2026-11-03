@@ -62,6 +62,9 @@ public class RunSpendConfiguration : IEntityTypeConfiguration<RunSpend>
         // Лимит пространства: расход за сутки и за месяц (13.6)
         builder.HasIndex(x => new { x.WorkspaceId, x.CreatedUtc });
 
+        // Суточный потолок человека — по всем его пространствам (13.6)
+        builder.HasIndex(x => new { x.UserId, x.CreatedUtc });
+
         // Сводка за период
         builder.HasIndex(x => x.CreatedUtc);
 

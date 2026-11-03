@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -7,7 +5,7 @@ namespace PetTemplate.Services.Commands;
 /// либо индекс строится впервые поверх накопленных данных. Обработчик не индексирует
 /// сам, а ставит <see cref="SearchIndexCommand"/> на каждую сущность
 /// </summary>
-public class SearchReindexCommand
+public class SearchReindexCommand : ICommand
 {
-    public override string ToString() => JsonSerializer.Serialize(this);
+    public static string QueueName => "search-reindex";
 }

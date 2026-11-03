@@ -5,14 +5,17 @@ using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Admin;
 using PetTemplate.Services.Assistant.Check;
+using PetTemplate.Services.Assistant.Sections;
 using PetTemplate.Services.Commands;
 using PetTemplate.Services.Search;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 using PetTemplate.Tests.Arranges;
 using PetTemplate.Tests.Asserts;
 using PetTemplate.Tests.EntityBuilders;
+using PetTemplate.Tests.Features.Assistant.TestPlan;
 using PetTemplate.Tests.Mocks;
 
 namespace PetTemplate.Tests.Features.Admin;
@@ -85,7 +88,7 @@ public class ModelCheckTests
         var refused = await Record.ExceptionAsync(() => service.Start(_seed.Id, _oleg.Id));
 
         // Assert
-        Assert.IsType<ArgumentException>(refused);
+        Assert.IsType<AdminRejectionException>(refused);
         Assert.Equal(1, await db.AdminJobs.CountAsync());
     }
 
@@ -318,11 +321,47 @@ public class ModelCheckTests
         Assert.True(lease.Extended >= Phrases);
     }
 
-    private static ModelCheckService Service(ApplicationContext db, FakeChatClient chat) =>
+    /// <summary>
+    /// Раздел проекта попадает в мир сверки сам (спец. assistant, 7.1): его фразы — в наборе
+    /// после фраз ядра, его инструменты и операции — в каталоге мира. План применяется
+    /// в транзакции мира точками сохранения и откатывается вместе с ней: в базе ни плана,
+    /// ни прогона
+    /// </summary>
+    [Fact]
+    public async Task SectionIsCheckedInWorld()
+    {
+        // Arrange
+        var db = await Db();
+        var store = new TestNoteStore();
+        var section = new TestNoteSection(store);
+        var core = ModelCheckPhrase.Embedded().Count;
+        var chat = new FakeChatClient();
+        for (var i = 0; i < core; i++) chat.Says("Готово.");
+        chat.Calling("create_test_note", new { title = "Купить хлеб" })
+            .Calling("apply_plan", new { })
+            .Says("Заметка заведена.");
+        var service = Service(db, chat, section);
+        var jobId = await service.Start(_seed.Id, _oleg.Id);
+
+        // Act
+        await service.Run(jobId, null);
+
+        // Assert
+        var result = Report(await db.AdminJobs.AsNoTracking().SingleAsync()).Results[core];
+        Assert.Equal((TestNoteSection.CheckPhrase, true, (string?)null), (result.Phrase, result.ToolHit, result.Error));
+        Assert.Equal(1, store.Writes);
+        Assert.False(await db.AssistantPlans.AnyAsync());
+        Assert.False(await db.AssistantRuns.AnyAsync());
+        Assert.Equal(_seed.Id, (await db.AiModels.AsNoTracking().SingleAsync()).Id);
+    }
+
+    private static ModelCheckService Service(ApplicationContext db, FakeChatClient chat,
+        params IAssistantSection[] sections) =>
         new(db, new FakeModelChatClients(chat), new AdminJobService(db), AssistantWorld.EmptyHelp(),
             new NullEmbedder(),
             Options.Create(new AssistantOptions()),
             Options.Create(new SearchOptions()),
+            sections,
             NullLogger<ModelCheckService>.Instance);
 
     private async Task<ApplicationContext> Db()

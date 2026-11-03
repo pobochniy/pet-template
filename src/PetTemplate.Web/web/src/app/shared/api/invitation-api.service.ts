@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BaseApiService } from './base-api.service';
-import { UserService } from '../core/user.service';
 import { AuthenticationResultModel } from '../models/authentication-result.model';
 import {
   InvitationCreateModel,
@@ -12,16 +11,13 @@ import {
 /**
  * Приглашения в пространство по ссылке (спец. authorization, 6).
  *
- * `register` и `accept` пускают пользователя внутрь, поэтому ответ раскладывает
- * тот же `UserService.applySession`, что и обычный вход, — с принятым пространством
- * активным: иначе токен и права остались бы только в возвращённом объекте
+ * `register` и `accept` пускают пользователя внутрь: ответ — сессия, и раскладывает её
+ * экран через `UserService.applyAcceptedInvitation` (принятое пространство — активным).
+ * Сам сервис сессию не трогает — только запросы
  */
 @Injectable({ providedIn: 'root' })
 export class InvitationApiService extends BaseApiService {
-  constructor(
-    http: HttpClient,
-    private userService: UserService
-  ) {
+  constructor(http: HttpClient) {
     super('Invitation', http);
   }
 
@@ -29,8 +25,8 @@ export class InvitationApiService extends BaseApiService {
     return this.post<WorkspaceInvitationModel>('Create', model);
   }
 
-  async getList(workspaceId: string): Promise<WorkspaceInvitationModel[]> {
-    return (await this.get<WorkspaceInvitationModel[]>(`GetList?workspaceId=${encodeURIComponent(workspaceId)}`)) ?? [];
+  async getList(workspaceId: string, signal?: AbortSignal): Promise<WorkspaceInvitationModel[]> {
+    return (await this.get<WorkspaceInvitationModel[]>(`GetList?workspaceId=${encodeURIComponent(workspaceId)}`, signal)) ?? [];
   }
 
   async revoke(id: string, workspaceId: string): Promise<void> {
@@ -43,21 +39,19 @@ export class InvitationApiService extends BaseApiService {
   }
 
   /** `language` — язык интерфейса, как у обычной регистрации (спец. accounts, 8.4) */
-  async register(token: string, userName: string, password: string, passwordConfirm: string, language: string): Promise<void> {
-    const result = await this.post<AuthenticationResultModel>('Register', {
+  register(token: string, userName: string, password: string, passwordConfirm: string, language: string): Promise<AuthenticationResultModel> {
+    return this.post<AuthenticationResultModel>('Register', {
       token,
       userName,
       password,
       passwordConfirm,
       language
     });
-
-    this.applyAccepted(result);
   }
 
   /** Принятие уже вошедшим: токен — в теле, query POST-запроса оседает в логах */
-  async accept(token: string): Promise<void> {
-    this.applyAccepted(await this.post<AuthenticationResultModel>('Accept', { token }));
+  accept(token: string): Promise<AuthenticationResultModel> {
+    return this.post<AuthenticationResultModel>('Accept', { token });
   }
 
   /**
@@ -66,16 +60,5 @@ export class InvitationApiService extends BaseApiService {
    */
   link(token: string): string {
     return `${window.location.origin}/invite/${token}`;
-  }
-
-  /**
-   * После принятия активным становится принятое пространство (спец. authorization, 6.3):
-   * оно единственное, которого не было в сессии до этого
-   */
-  private applyAccepted(result: AuthenticationResultModel): void {
-    const before = new Set(this.userService.workspaceIds());
-    const accepted = Object.keys(result.permissionsByWorkspace ?? {}).find(id => !before.has(id)) ?? null;
-
-    this.userService.applySession(result, accepted);
   }
 }

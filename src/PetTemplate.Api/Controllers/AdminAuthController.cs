@@ -27,7 +27,7 @@ public class AdminAuthController(
     AdminAccessService access,
     AdminInvitationService invitations,
     AdminTokenFactory tokens,
-    AdminLoginLimiter limiter,
+    LoginLimiter limiter,
     IOptions<AdminOptions> options)
     : ControllerBase
 {

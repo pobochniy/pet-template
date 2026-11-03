@@ -1,4 +1,5 @@
 using LocalQueue.Processing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;
@@ -28,7 +29,8 @@ public class SearchIndexCommandHandler(
     IEmbeddingGenerator<string, Embedding<float>> embedder,
     QdrantService qdrant,
     IOptions<SearchOptions> options) : ICommandHandler<SearchIndexCommand>,
-    ICommandHandler<SearchReindexCommand>
+    ICommandHandler<SearchReindexCommand>,
+    ICommandHandler<SearchPurgeWorkspaceCommand>
 {
     // Два источника на один тип — ошибка регистрации: падаем сразу, а не индексируем
     // каким-то одним из двух
@@ -41,10 +43,17 @@ public class SearchIndexCommandHandler(
     /// Полный реиндекс (спец. search, 5) — не проход по всей базе одним вызовом, а команда
     /// на каждую сущность. Так обрыв стоит одной сущности, а не всего прохода, эмбеддер
     /// разбирает их с той же скоростью, что и обычную индексацию, а «как индексируется
-    /// сущность» живёт в одном месте — в <see cref="Index"/>
+    /// сущность» живёт в одном месте — в <see cref="Index"/>.
+    ///
+    /// Сначала — сироты, которых пообъектная индексация не найдёт: точки типов без источника
+    /// (тип переименовали или убрали) и пространств, которых нет в базе (команда сноса
+    /// исчерпала попытки). Чистка идемпотентна: упадёт — повтор команды пройдёт её заново,
+    /// не поставив команд сущностям дважды
     /// </summary>
     public async Task Handle(SearchReindexCommand command, CancellationToken ct)
     {
+        await RemoveOrphans(ct);
+
         foreach (var source in _sources.Values)
         {
             foreach (var id in await source.AllIds(ct))
@@ -54,6 +63,36 @@ public class SearchIndexCommandHandler(
         }
 
         await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Снос пространства (спец. search, 4): его точки уходят по фильтру <c>workspaceId</c>,
+    /// какие бы сущности их ни положили. Эмбеддер для этого не нужен — чистится и индекс,
+    /// оставшийся от времён, когда он был настроен
+    /// </summary>
+    public async Task Handle(SearchPurgeWorkspaceCommand command, CancellationToken ct) =>
+        await qdrant.DeleteByWorkspace(options.Value.EmbeddingsCollection, command.WorkspaceId, ct);
+
+    /// <summary>
+    /// Эмбеддер не настроен — индекс не ведётся, и чистить его не нужно: так же молчит
+    /// <see cref="Index"/>
+    /// </summary>
+    private async Task RemoveOrphans(CancellationToken ct)
+    {
+        var settings = options.Value;
+        if (string.IsNullOrWhiteSpace(settings.EmbeddingsEndpoint)) return;
+
+        await qdrant.DeleteUnknownTypes(settings.EmbeddingsCollection, _sources.Keys, ct);
+
+        var indexed = await qdrant.IndexedWorkspaces(settings.EmbeddingsCollection, ct);
+        var alive = await context.Workspaces
+            .Where(x => indexed.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+        foreach (var gone in indexed.Except(alive))
+        {
+            await qdrant.DeleteByWorkspace(settings.EmbeddingsCollection, gone, ct);
+        }
     }
 
     private async Task Index(SearchEntityType type, string entityId, CancellationToken ct)

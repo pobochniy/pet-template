@@ -38,6 +38,12 @@ public class AccountDeletion(
     WorkspaceService workspaces,
     SessionGuard sessions)
 {
+    /// <summary>
+    /// Кому выход из общих пространств передал права: их отметки <see cref="SessionGuard"/>
+    /// сбрасываются только после коммита. Повтор стратегии начинает список заново
+    /// </summary>
+    private readonly List<Guid> _heirs = [];
+
     /// <param name="journal">
     /// Запись журнала, которая должна уйти той же транзакцией: слияние (7.4) и удаление
     /// из админки (8.5) пишут, кто и зачем удалил
@@ -69,7 +75,8 @@ public class AccountDeletion(
         }
 
         db.ChangeTracker.Clear();
-        sessions.Forget(userId);
+        // После коммита: и удалённого, и тех, кому выход передал права (спец. authorization, 8)
+        sessions.Forget([userId, .._heirs]);
     }
 
     /// <summary>
@@ -102,9 +109,10 @@ public class AccountDeletion(
             .Distinct()
             .ToListAsync(ct);
 
+        _heirs.Clear();
         foreach (var workspaceId in shared)
         {
-            await workspaces.Leave(userId, workspaceId, ct);
+            _heirs.AddRange(await workspaces.Leave(userId, workspaceId, ct));
         }
 
         foreach (var workspaceId in memberships.Except(shared))

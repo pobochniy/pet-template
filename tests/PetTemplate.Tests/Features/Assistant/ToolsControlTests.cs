@@ -239,7 +239,8 @@ public sealed class ToolsControlTests : IDisposable
         var collector = new PlanCollector(operations);
         var tools = new PetTemplate.Services.Assistant.Tools.AssistantTools(world.Help, world.Context, collector,
             new PlanExecutor(world.Db, operations, new AssistantPermissions(world.Db), world.Context),
-            operations, world.Outcome, world.Memory, [], Options.Create(world.Settings));
+            operations, world.Outcome, world.Memory, new AssistantPermissions(world.Db), [],
+            Options.Create(world.Settings));
 
         // Act
         var names = tools.Catalog().Select(x => x.Name).ToArray();
@@ -352,5 +353,64 @@ public sealed class ToolsControlTests : IDisposable
         await help.Refresh(CancellationToken.None);
 
         return help;
+    }
+
+    /// <summary>
+    /// Права читающего инструмента раздела проверяет ядро, а не тело инструмента (раздел 9):
+    /// без права раздела инструмент не зовётся, а модель получает строку отказа
+    /// </summary>
+    [Fact]
+    public async Task SectionToolWithoutPermissionIsDenied()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Тапки и Носки", PermissionEnum.WorkspaceMemberRead);
+        world.SeedNote("Секретная заметка");
+        var find = world.Tools.Catalog().OfType<Microsoft.Extensions.AI.AIFunction>()
+            .Single(x => x.Name == "find_test_notes");
+
+        // Act
+        var answer = await find.InvokeAsync(new Microsoft.Extensions.AI.AIFunctionArguments(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PetTemplate.Services.Assistant.Tools.PermittedFunction.Denied, answer?.ToString());
+    }
+
+    /// <summary>С правом раздела — тот же инструмент отвечает данными</summary>
+    [Fact]
+    public async Task SectionToolWithPermissionAnswers()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Тапки и Носки", PermissionEnum.WorkspaceInfoCrud);
+        world.SeedNote("Открытая заметка");
+        var find = world.Tools.Catalog().OfType<Microsoft.Extensions.AI.AIFunction>()
+            .Single(x => x.Name == "find_test_notes");
+
+        // Act
+        var answer = await find.InvokeAsync(new Microsoft.Extensions.AI.AIFunctionArguments(), CancellationToken.None);
+
+        // Assert
+        Assert.Contains("Открытая заметка", answer?.ToString());
+    }
+
+    /// <summary>
+    /// Право читается живым на каждом вызове: отобрали посреди хода — следующий вызов
+    /// уже отказ (раздел 9)
+    /// </summary>
+    [Fact]
+    public async Task RevokedSectionPermissionIsDeniedOnNextCall()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Тапки и Носки");
+        var find = world.Tools.Catalog().OfType<Microsoft.Extensions.AI.AIFunction>()
+            .Single(x => x.Name == "find_test_notes");
+        await world.Db.UserInPermissions
+            .Where(x => x.UserId == world.Author && x.PermissionId == PermissionEnum.WorkspaceInfoCrud)
+            .ExecuteDeleteAsync(CancellationToken.None);
+
+        // Act
+        var answer = await find.InvokeAsync(new Microsoft.Extensions.AI.AIFunctionArguments(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PetTemplate.Services.Assistant.Tools.PermittedFunction.Denied, answer?.ToString());
     }
 }

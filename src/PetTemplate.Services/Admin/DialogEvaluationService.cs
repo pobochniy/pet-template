@@ -13,6 +13,7 @@ using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 
 namespace PetTemplate.Services.Admin;
@@ -89,14 +90,14 @@ public class DialogEvaluationService(
     {
         var limit = Math.Max(Settings.BatchSize, 1);
         if (dto.BatchSize < 1 || dto.BatchSize > limit)
-            throw new ArgumentException($"Размер пачки — от 1 до {limit}");
+            throw new AdminRejectionException($"Размер пачки — от 1 до {limit}");
 
         // Выключенная годится: выключение убирает модель из ходов людей, а не из нашей
         // работы. Разомкнутая — нет: пачка отказов поставщика ничего бы не оценила
         var judge = await db.AiModels.AsNoTracking().SingleOrDefaultAsync(x => x.Id == dto.ModelId, ct)
-                    ?? throw new ArgumentException("Такой модели нет");
+                    ?? throw new AdminRejectionException("Такой модели нет");
         if (ModelBreaker.IsOpen(judge, DateTime.UtcNow))
-            throw new ArgumentException(
+            throw new AdminRejectionException(
                 $"«{judge.DisplayName}» разомкнута размыкателем — замкните её или выберите другого судью");
 
         var pending = db.AssistantRuns.Where(x =>

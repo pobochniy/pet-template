@@ -16,7 +16,7 @@ namespace PetTemplate.Services.Services;
 ///
 /// Ключ слияния живёт в памяти процесса на <see cref="AccountOptions.MergeTicketTtl"/>
 /// (10 минут) и одноразовый: перезапуск сервера между просмотром и подтверждением
-/// просто попросит просмотреть ещё раз
+/// просто попросит просмотреть ещё раз. API один (<c>tech-debt/single-instance.md</c>)
 /// </summary>
 public class AccountMergeService(
     ApplicationContext db,

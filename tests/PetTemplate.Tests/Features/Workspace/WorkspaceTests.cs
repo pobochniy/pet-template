@@ -17,8 +17,8 @@ namespace PetTemplate.Tests.Features.Workspace;
 public class WorkspaceTests
 {
     /// <summary>
-    /// Создатель получает все права, а ответ несёт новую сессию с ними: без перевыпуска
-    /// сервер считал бы создателя посторонним в его же пространстве (спец. authorization, 2.2)
+    /// Создатель получает все права, а ответ несёт новую сессию с ними — клиенту для меню;
+    /// сам токен прав не несёт (спец. authorization, 2.1 и 2.2)
     /// </summary>
     [Fact]
     public async Task CreateReturnsSessionWithOwnerPermissions()
@@ -33,9 +33,9 @@ public class WorkspaceTests
         var owner = created!.Authentication.PermissionsByWorkspace[created.WorkspaceId];
         Assert.Equal(Enum.GetValues<PermissionEnum>().Where(x => x != PermissionEnum.None), owner.Order());
 
+        // Прав в токене нет — сервер читает их из базы (спец. authorization, 2.1 и 2.3)
         var claims = new JwtSecurityTokenHandler().ReadJwtToken(created.Authentication.Token).Claims;
-        Assert.Contains(claims, x => x.Type == CustomClaimTypes.WorkspacePermission
-                                     && x.Value == $"{created.WorkspaceId}|{(int)PermissionEnum.PermissionManagement}");
+        Assert.DoesNotContain(claims, x => x.Type == "ws_permission");
     }
 
     /// <summary>

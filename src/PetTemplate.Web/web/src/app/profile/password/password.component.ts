@@ -1,13 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { UserService } from '../../shared/core/user.service';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
 import { createPasswordForm } from '../../shared/form-models/account-form.model';
 import { applyServerValidationErrors } from '../../shared/core/server-validation.util';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * Пароль в блоке «Основное» (спец. accounts, 6 и 8.1): «Задать пароль», если его нет,
@@ -18,10 +18,10 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
  * без старого — так восстанавливают забытый пароль через привязанный вход.
  *
  * Ответ сервера — новая сессия: отзыв завершил все прежние токены, и текущий тоже.
- * Токен из ответа уходит в `UserService.applySession` — без этого следующий запрос
+ * Токен из ответа уходит в `UserService.renewSession` — без этого следующий запрос
  * получил бы 401 и выкинул бы человека из аккаунта. Человек тот же, поэтому это
  * не выход: `SessionResetService` не зовётся. Активное пространство сохраняется:
- * `applySession` оставляет его, раз оно среди своих
+ * `renewSession` оставляет его, раз оно среди своих
  */
 @Component({
   selector: 'profile-password',
@@ -30,8 +30,7 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   templateUrl: './password.component.html'
 })
 export class ProfilePasswordComponent {
-  protected readonly i18n = inject(I18nService);
-  private readonly workspaceContext = inject(WorkspaceContextService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   /** Есть ли у аккаунта пароль — от этого «задать» или «сменить» */
   readonly hasPassword = input.required<boolean>();
@@ -76,7 +75,7 @@ export class ProfilePasswordComponent {
         ? await this.api.changePassword(currentPassword, newPassword, newPasswordConfirm)
         : await this.api.setPassword(newPassword, newPasswordConfirm);
 
-      this.userService.applySession(session, this.workspaceContext.getCurrentWorkspaceId());
+      this.userService.renewSession(session);
       this.open.set(false);
       this.saved.set(true);
       this.changed.emit();

@@ -1,16 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AssistantApiService } from '../../shared/api/assistant-api.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
-import { I18nKey } from '../../shared/i18n/generated/i18n-keys';
+import { ScopedKey } from '../../shared/i18n/generated/i18n-keys';
 import { formatDate } from '../../shared/i18n/format.util';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
+import { contextResource, contextSignal } from '../../shared/core/context-resource';
 import { AssistantFact, AssistantMemory } from '../../shared/models/assistant.model';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { ASSISTANT_MEMORY_SCOPES } from '../profile.scopes';
 
 /** Сколько держится всплывающая ошибка */
 const ALERT_MS = 5000;
+
+const NO_MEMORY: AssistantMemory = { shared: [], personal: [] };
 
 /**
  * Что ассистент помнит (спец. assistant, 12.5).
@@ -89,21 +92,26 @@ const ALERT_MS = 5000;
   `]
 })
 export class AssistantMemoryComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_MEMORY_SCOPES);
   private readonly api = inject(AssistantApiService);
   private readonly alerts = inject(AlertsService);
-  private readonly workspaceContext = inject(WorkspaceContextService);
+  /** Память — своя в каждом пространстве: сменили его в шапке — перечитываем (`contextResource`) */
+  private readonly memoryResource = contextResource<AssistantMemory | null>({
+    loader: ({ abortSignal }) => this.api.Memory(abortSignal),
+    defaultValue: null
+  });
 
-  public readonly memory = signal<AssistantMemory>({ shared: [], personal: [] });
+  /** Ответ сервера; «Убрать» правит его на месте (`set`), следующая загрузка — заменяет */
+  public readonly memory = computed(() => this.memoryResource.value() ?? NO_MEMORY);
 
   /** Ответ пришёл: «пусто» до него было бы враньём */
-  public readonly loaded = signal(false);
+  public readonly loaded = computed(() => this.memoryResource.value() != null);
 
   /** Факт, удаление которого ждёт подтверждения */
-  public readonly forgetting = signal<string | null>(null);
+  public readonly forgetting = contextSignal<string | null>(null);
 
   /** Плоский список, сгруппированный по владельцу — «Про пространство» и «Про меня» (12.5) */
-  public readonly groups = computed<{ id: string; title: I18nKey; facts: AssistantFact[] }[]>(() => [
+  public readonly groups = computed<{ id: string; title: ScopedKey<'assistant'>; facts: AssistantFact[] }[]>(() => [
     { id: 'shared', title: 'assistant.memory.shared', facts: this.memory().shared },
     { id: 'personal', title: 'assistant.memory.personal', facts: this.memory().personal }
   ]);
@@ -112,13 +120,12 @@ export class AssistantMemoryComponent {
     this.memory().shared.length === 0 && this.memory().personal.length === 0);
 
   constructor() {
-    // Память — своя в каждом пространстве: сменили его в шапке — перечитываем
     effect(() => {
-      this.workspaceContext.currentWorkspaceId();
-      untracked(() => {
-        this.forgetting.set(null);
-        void this.load();
-      });
+      const error = this.memoryResource.error();
+      if (error) {
+        untracked(() =>
+          this.alerts.push('danger', serverErrorMessage(error, this.i18n, this.i18n.t('assistant.error.unknown')), ALERT_MS));
+      }
     });
   }
 
@@ -130,19 +137,11 @@ export class AssistantMemoryComponent {
     this.forgetting.set(null);
     try {
       await this.api.DeleteFact(id);
-      this.memory.update(current => ({
+      const current = this.memory();
+      this.memoryResource.set({
         shared: current.shared.filter(x => x.id !== id),
         personal: current.personal.filter(x => x.id !== id)
-      }));
-    } catch (e) {
-      this.alerts.push('danger', serverErrorMessage(e, this.i18n, this.i18n.t('assistant.error.unknown')), ALERT_MS);
-    }
-  }
-
-  private async load() {
-    try {
-      this.memory.set(await this.api.Memory());
-      this.loaded.set(true);
+      });
     } catch (e) {
       this.alerts.push('danger', serverErrorMessage(e, this.i18n, this.i18n.t('assistant.error.unknown')), ALERT_MS);
     }

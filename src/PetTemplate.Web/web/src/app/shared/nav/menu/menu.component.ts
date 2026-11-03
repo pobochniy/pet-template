@@ -1,27 +1,28 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { CircleUser, House, LucideAngularModule, Users } from 'lucide-angular';
+import { CircleQuestionMark, CircleUser, House, LucideAngularModule, Users } from 'lucide-angular';
 import { UserService } from '../../core/user.service';
 import { PermissionsService } from '../../services/permissions.service';
 import { MEMBERS_PAGE_PERMISSIONS } from '../../../workspace/workspace-permissions';
-import { EventEmitterService } from '../event-emitter.service';
-import { I18nService } from '../../i18n/i18n.service';
+import { MenuStateService } from '../menu-state.service';
 import { provideIcons } from '../../icons/lucide-icons.provider';
+import { injectI18n } from '../../i18n/inject-i18n';
 
 @Component({
   selector: 'shared-nav-menu',
   templateUrl: './menu.component.html',
   styleUrls: ['./menu.component.css'],
   imports: [RouterLink, RouterLinkActive, LucideAngularModule],
-  providers: [provideIcons({ CircleUser, House, Users })],
+  providers: [provideIcons({ CircleQuestionMark, CircleUser, House, Users })],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class NavMenuComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+export class NavMenuComponent {
+  protected readonly i18n = injectI18n();
   private readonly permissions = inject(PermissionsService);
 
-  readonly isExpanded = signal(false);
+  private readonly menu = inject(MenuStateService);
+
+  readonly isExpanded = this.menu.expanded;
 
   /**
    * Пункт «Участники» — тем, кого пустит маршрут: по любому из прав страницы
@@ -31,21 +32,10 @@ export class NavMenuComponent implements OnInit {
     MEMBERS_PAGE_PERMISSIONS.some(x => this.permissions.permissions().includes(x))
   );
 
-  private readonly destroyRef = inject(DestroyRef);
-
-  constructor(
-    private eventEmitterService: EventEmitterService,
-    public userService: UserService
-  ) { }
-
-  ngOnInit(): void {
-    this.eventEmitterService.invokeMenuToggleMenuFunction
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.toggleMenu());
-  }
+  constructor(public userService: UserService) { }
 
   toggleMenu() {
-    this.isExpanded.update(value => !value);
+    this.menu.toggle();
   }
 
   /**
@@ -54,6 +44,6 @@ export class NavMenuComponent implements OnInit {
    * На широком экране меню стоит сбоку и ничего не перекрывает
    */
   onItemClick() {
-    if (window.matchMedia('(max-width: 768px)').matches) this.isExpanded.set(false);
+    if (window.matchMedia('(max-width: 768px)').matches) this.menu.collapse();
   }
 }

@@ -46,6 +46,8 @@ public class AssistantWiringTests
         Assert.Same(scope.ServiceProvider.GetRequiredService<TraceWriter>(),
             scope.ServiceProvider.GetRequiredService<IRunTrace>());
         Assert.IsType<RunBilling>(scope.ServiceProvider.GetRequiredService<IRunBilling>());
+        // Разбор отказов поставщика по умолчанию — OpenAI-совместимый (16.5)
+        Assert.Same(OpenAiErrorClassifier.Instance, scope.ServiceProvider.GetRequiredService<IProviderErrorClassifier>());
     }
 
     /// <summary>
@@ -146,7 +148,8 @@ public class AssistantWiringTests
         // Arrange
         var world = await AssistantWorld.Build("Тапки и Носки");
         var tools = new AssistantTools(world.Help, world.Context, world.Collector, world.Executor, world.Operations,
-            world.Outcome, world.Memory, [new DuplicateHelp()], Options.Create(world.Settings));
+            world.Outcome, world.Memory, new AssistantPermissions(world.Db), [new DuplicateHelp()],
+            Options.Create(world.Settings));
 
         // Act
         var error = Assert.Throws<InvalidOperationException>(() => tools.Catalog());
@@ -160,6 +163,6 @@ public class AssistantWiringTests
     {
         public string Instructions => string.Empty;
 
-        public IEnumerable<AITool> Tools() => [AIFunctionFactory.Create(() => "дубль", "search_help")];
+        public IEnumerable<AssistantTool> Tools() => [new(AIFunctionFactory.Create(() => "дубль", "search_help"), [])];
     }
 }

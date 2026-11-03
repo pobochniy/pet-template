@@ -29,18 +29,18 @@ describe('SessionResetService', () => {
   });
 
   it('should keep cleaning up after a failing handler', async () => {
-    const cleaned = jasmine.createSpy('cleaned');
-    spyOn(console, 'error');
+    const cleaned = vi.fn();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     service.register(() => Promise.reject(new Error('not saved')));
     service.register(cleaned);
 
     // Выход не должен срываться из-за неудачной уборки одного сервиса
-    await expectAsync(service.run()).toBeResolved();
+    await expect(service.run()).resolves.toBeUndefined();
     expect(cleaned).toHaveBeenCalled();
   });
 
   it('should forget an unregistered handler', async () => {
-    const handler = jasmine.createSpy('handler');
+    const handler = vi.fn();
     const unregister = service.register(handler);
 
     unregister();

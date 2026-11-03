@@ -8,6 +8,7 @@ import { TokenService } from '../../shared/api/token.service';
 import { UserService } from '../../shared/core/user.service';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto, sessionDto } from '../../shared/api/dto.mock';
 
 describe('DeleteAccountComponent', () => {
   let fixture: ComponentFixture<DeleteAccountComponent>;
@@ -29,10 +30,9 @@ describe('DeleteAccountComponent', () => {
 
     api = TestBed.inject(AccountApiServiceMock);
     user = TestBed.inject(UserService);
-    TestBed.inject(TokenService).Token = 'token-1';
-    user.setProfile({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true });
+    user.applySession(sessionDto({ token: 'token-1', profile: profileDto({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true }), permissionsByWorkspace: {} }));
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     await loadAllScopes(TestBed.inject(I18nService));
     fixture = TestBed.createComponent(DeleteAccountComponent);
     el = fixture.nativeElement;
@@ -41,7 +41,6 @@ describe('DeleteAccountComponent', () => {
 
   afterEach(() => {
     user.clearProfile();
-    TestBed.inject(TokenService).Token = '';
   });
 
   async function render() {
@@ -70,10 +69,10 @@ describe('DeleteAccountComponent', () => {
 
   it('should keep the button disabled until the own username is typed', () => {
     type('boris');
-    expect(button().disabled).toBeTrue();
+    expect(button().disabled).toBe(true);
 
     type('TESTER');
-    expect(button().disabled).toBeFalse();
+    expect(button().disabled).toBe(false);
   });
 
   /** Удалённый аккаунт сервер уже не примет — сессия убирается без обращения к нему */
@@ -84,7 +83,7 @@ describe('DeleteAccountComponent', () => {
     await render();
 
     expect(api.deletedWith).toBe('tester');
-    expect(user.isAuthenticated).toBeFalse();
+    expect(user.isAuthenticated).toBe(false);
     expect(TestBed.inject(TokenService).Token).toBe('');
     expect(router.navigateByUrl).toHaveBeenCalledWith('/auth/login');
   });
@@ -92,7 +91,7 @@ describe('DeleteAccountComponent', () => {
   /** Гость — на вход, без запроса карточки: удалять ему нечего */
   it('should send a guest to the login screen', async () => {
     user.clearProfile();
-    const preview = spyOn(api, 'deletePreview').and.callThrough();
+    const preview = vi.spyOn(api, 'deletePreview');
     fixture = TestBed.createComponent(DeleteAccountComponent);
     await render();
 

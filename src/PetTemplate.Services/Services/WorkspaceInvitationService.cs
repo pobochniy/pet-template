@@ -13,7 +13,7 @@ namespace PetTemplate.Services.Services;
 /// членство принявшего — обычные строки <see cref="UserInPermission"/>,
 /// как у всех остальных участников
 /// </summary>
-public class WorkspaceInvitationService(ApplicationContext db, AuthService auth)
+public class WorkspaceInvitationService(ApplicationContext db, AuthService auth, SessionGuard sessions)
 {
     /// <summary>
     /// Выдаёт ссылку. Пустой набор прав отбила модель (<see cref="InvitationCreateDto"/>,
@@ -243,6 +243,8 @@ public class WorkspaceInvitationService(ApplicationContext db, AuthService auth)
         Consume(invitation, profile, isFirstWorkspace: !hadWorkspaces);
 
         await SaveConsumed(ct);
+        // Права в новом пространстве — со следующего запроса, а не с истечением кэша
+        sessions.Forget(userId);
 
         return await auth.GetUser(userId, ct);
     }

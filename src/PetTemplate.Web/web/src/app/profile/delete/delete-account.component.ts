@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -6,9 +6,10 @@ import { AccountApiService } from '../../shared/api/account-api.service';
 import { AccountCardModel } from '../../shared/models/account.model';
 import { UserService } from '../../shared/core/user.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
-import { createDeleteConfirmControl } from '../../shared/form-models/merge-proof-form.model';
+import { createDeleteConfirmControl } from '../form-models/merge-proof-form.model';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * `/profile/delete` — удаление аккаунта (спец. accounts, разделы 9 и 10).
@@ -25,7 +26,7 @@ import { createDeleteConfirmControl } from '../../shared/form-models/merge-proof
   templateUrl: './delete-account.component.html'
 })
 export class DeleteAccountComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   protected readonly card = signal<AccountCardModel | null>(null);
   protected readonly busy = signal(false);

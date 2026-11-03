@@ -13,7 +13,7 @@ namespace PetTemplate.Services.Assistant.Plans;
 /// предохранители раздела 8, согласие 5.1, сверка 5.4, идемпотентность — общее
 /// и раздела не касается.
 ///
-/// Регистрация — <c>AddPlanOperation&lt;T&gt;()</c>. Проще всего унаследовать
+/// Регистрация — <c>section.Operation&lt;T&gt;()</c> в <c>IAssistantSection.Register</c>. Проще всего унаследовать
 /// <see cref="PlanOperationHandler{TArgs}"/>: он разбирает аргументы и задаёт
 /// осторожные умолчания.
 /// </summary>

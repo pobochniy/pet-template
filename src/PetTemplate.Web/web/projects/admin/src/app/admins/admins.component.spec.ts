@@ -217,7 +217,7 @@ describe('AdminsComponent', () => {
 
     expect(element.querySelector('.alert-danger')!.textContent).toContain('Это последняя роль');
     expect(element.querySelectorAll('.admin-row').length).toBe(2);
-    expect(element.querySelectorAll('.admin-row')[0].querySelectorAll<HTMLButtonElement>('.revoke-role')[1].disabled).toBeFalse();
+    expect(element.querySelectorAll('.admin-row')[0].querySelectorAll<HTMLButtonElement>('.revoke-role')[1].disabled).toBe(false);
   });
 
   it('should not remove an admin when the confirmation is cancelled', async () => {
@@ -235,7 +235,7 @@ describe('AdminsComponent', () => {
   it('should not offer to issue a link without roles', async () => {
     const { element } = await render();
 
-    expect(button(element, 'Выдать ссылку').disabled).toBeTrue();
+    expect(button(element, 'Выдать ссылку').disabled).toBe(true);
   });
 
   it('should hide the issued link once it is revoked', async () => {

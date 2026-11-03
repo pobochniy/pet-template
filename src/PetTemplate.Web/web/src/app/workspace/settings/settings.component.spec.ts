@@ -1,9 +1,10 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
 import { WorkspaceSettingsComponent } from './settings.component';
 import { WorkspaceApiService } from '../../shared/api/workspace-api.service';
-import { UsersApiService } from '../../shared/api/users-api.service';
+import { UsersApiService } from '../users-api.service';
 import { InvitationApiService } from '../../shared/api/invitation-api.service';
 import { UserService } from '../../shared/core/user.service';
 import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
@@ -12,27 +13,27 @@ import { PermissionEnum } from '../../shared/enums/permission.enum';
 import { ProfileModel } from '../../shared/models/profile.model';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto, sessionDto } from '../../shared/api/dto.mock';
 
 describe('WorkspaceSettingsComponent', () => {
   let fixture: ComponentFixture<WorkspaceSettingsComponent>;
   let el: HTMLElement;
-  let api: jasmine.SpyObj<WorkspaceApiService>;
+  let api: Mocked<WorkspaceApiService>;
   let router: Router;
 
-  const profile: ProfileModel = {
+  const profile: ProfileModel = profileDto({
     id: 'me', userName: 'Oleg', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true,
     primaryWorkspaceId: 'ws-1'
-  };
+  });
 
   async function render(permissionsByWorkspace: Record<string, PermissionEnum[]>, names: Record<string, string>) {
-    api = jasmine.createSpyObj<WorkspaceApiService>('WorkspaceApiService',
-      ['getList', 'create', 'rename', 'setPrimary', 'leave', 'removeMember']);
-    api.getList.and.resolveTo(Object.entries(names).map(([id, name]) => ({ id, name, membersCount: 2 })));
+    api = { getList: vi.fn(), create: vi.fn(), rename: vi.fn(), setPrimary: vi.fn(), leave: vi.fn(), removeMember: vi.fn() } as unknown as Mocked<WorkspaceApiService>;
+    api.getList.mockResolvedValue(Object.entries(names).map(([id, name]) => ({ id, name, membersCount: 2 })));
 
-    const usersApi = jasmine.createSpyObj<UsersApiService>('UsersApiService', ['getProfiles']);
-    usersApi.getProfiles.and.resolveTo([]);
-    const invitationApi = jasmine.createSpyObj<InvitationApiService>('InvitationApiService', ['getList', 'link']);
-    invitationApi.getList.and.resolveTo([]);
+    const usersApi = { getProfiles: vi.fn() } as unknown as Mocked<UsersApiService>;
+    usersApi.getProfiles.mockResolvedValue([]);
+    const invitationApi = { getList: vi.fn(), link: vi.fn() } as unknown as Mocked<InvitationApiService>;
+    invitationApi.getList.mockResolvedValue([]);
 
     await TestBed.configureTestingModule({
       imports: [WorkspaceSettingsComponent],
@@ -46,9 +47,9 @@ describe('WorkspaceSettingsComponent', () => {
     }).compileComponents();
 
     await loadAllScopes(TestBed.inject(I18nService));
-    TestBed.inject(UserService).applySession({ token: 'token', profile, permissionsByWorkspace });
+    TestBed.inject(UserService).applySession(sessionDto({ token: 'token', profile, permissionsByWorkspace }));
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(WorkspaceSettingsComponent);
     el = fixture.nativeElement;
@@ -67,13 +68,13 @@ describe('WorkspaceSettingsComponent', () => {
   // После создания — новая сессия, созданное активно, переход к участникам (спец. authorization, 3, п. 5)
   it('should apply the new session and go to the new workspace members', async () => {
     await render({}, {});
-    api.create.and.resolveTo({
+    api.create.mockResolvedValue({
       workspaceId: 'ws-new',
-      authentication: {
+      authentication: sessionDto({
         token: 'new-token',
         profile: { ...profile, primaryWorkspaceId: 'ws-new' },
         permissionsByWorkspace: { 'ws-new': [PermissionEnum.PermissionManagement, PermissionEnum.WorkspaceMemberCrud] }
-      }
+      })
     });
 
     const input = el.querySelector<HTMLInputElement>('#workspace-name')!;
@@ -103,7 +104,7 @@ describe('WorkspaceSettingsComponent', () => {
   it('should rename a workspace with its own header', async () => {
     await render({ 'ws-1': [PermissionEnum.WorkspaceInfoCrud], 'ws-2': [PermissionEnum.WorkspaceInfoCrud] },
       { 'ws-1': 'Рога и Копыта', 'ws-2': 'Пончики и Плюшки' });
-    api.rename.and.resolveTo();
+    api.rename.mockResolvedValue(undefined);
 
     rows()[1].querySelector<HTMLButtonElement>('.rename')!.click();
     await fixture.whenStable();
@@ -122,8 +123,8 @@ describe('WorkspaceSettingsComponent', () => {
     await render({ 'ws-1': [PermissionEnum.WorkspaceMemberRead], 'ws-2': [PermissionEnum.WorkspaceMemberRead] },
       { 'ws-1': 'Рога и Копыта', 'ws-2': 'Пончики и Плюшки' });
     TestBed.inject(UserService).switchWorkspace('ws-2');
-    api.leave.and.resolveTo({ token: 'new-token', profile, permissionsByWorkspace: { 'ws-2': [PermissionEnum.WorkspaceMemberRead] } });
-    api.getList.and.resolveTo([{ id: 'ws-2', name: 'Пончики и Плюшки', membersCount: 2 }]);
+    api.leave.mockResolvedValue(sessionDto({ token: 'new-token', profile, permissionsByWorkspace: { 'ws-2': [PermissionEnum.WorkspaceMemberRead] } }));
+    api.getList.mockResolvedValue([{ id: 'ws-2', name: 'Пончики и Плюшки', membersCount: 2 }]);
 
     rows()[0].querySelector<HTMLButtonElement>('.leave')!.click();
     await fixture.whenStable();

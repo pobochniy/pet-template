@@ -8,6 +8,7 @@ using PetTemplate.Services.Assistant.Hooks;
 using PetTemplate.Services.Assistant.Models;
 using PetTemplate.Services.Assistant.Plans;
 using PetTemplate.Services.Assistant.Tools;
+using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Assistant;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Shared.Options;
@@ -46,6 +47,7 @@ public class AssistantRunService(
     IRunBilling billing,
     RunNotifier notifier,
     AssistantMetrics metrics,
+    AssistantPermissions permissions,
     IOptions<AssistantOptions> settings)
 {
     /// <summary>
@@ -94,6 +96,14 @@ public class AssistantRunService(
         using var span = AssistantMetrics.Source.StartActivity("pettemplate.assistant.run");
         span?.SetTag("run.id", run.Id);
 
+        // Автора убрали из пространства, пока ход ждал в очереди (раздел 9): от его имени
+        // уже нельзя ни читать, ни собирать план. Модель не зовём — ход кончается строкой
+        if (!await permissions.IsMember(run.UserId, run.WorkspaceId, ct))
+        {
+            await Finish(run, AssistantTexts.NotAMember, AssistantStopReason.Completed, ct);
+            return;
+        }
+
         // Модель выбирается на старте каждой попытки и записывается до первого
         // обращения к ней: повтор из очереди начинает ход заново и может уйти уже
         // к запасной (16.2), а разбору диалогов модель нужна и у хода без токенов
@@ -121,10 +131,9 @@ public class AssistantRunService(
                 .FirstOrDefaultAsync(ct) ?? string.Empty;
 
             var thread = await history.Build(run.UserId, run.WorkspaceId, ct);
-            var messages = new List<ChatMessage>
-            {
-                new(ChatRole.System, await Prompt(run, thread, ct))
-            };
+            // Наши инструкции — системным сообщением, данные людей — отдельным блоком
+            // перед перепиской (раздел 9)
+            var messages = new List<ChatMessage>((await Prompt(run, thread, ct)).Messages());
             messages.AddRange(thread.Messages);
 
             var catalog = tools.Catalog();
@@ -276,7 +285,7 @@ public class AssistantRunService(
         }
     }
 
-    private async Task<string> Prompt(AssistantRun run, AssistantHistory thread, CancellationToken ct)
+    private async Task<AssistantPrompt> Prompt(AssistantRun run, AssistantHistory thread, CancellationToken ct)
     {
         var workspaceName = await context.Workspaces
             .Where(x => x.Id == run.WorkspaceId)
@@ -485,11 +494,16 @@ public class AssistantRunService(
         // Транзакцию «Остановить» уже не обрывает: оборванная между сохранением
         // и фиксацией, она оставила бы прогон в памяти законченным, а в базе — идущим
         await using var transaction = billing.ShouldCharge(run)
-            ? await context.Database.BeginTransactionAsync(CancellationToken.None)
+            ? await NestedTransaction.Begin(context.Database, CancellationToken.None)
             : null;
         await billing.Charge(run, CancellationToken.None);
 
-        var planId = await SavePlan(run, stop, ct);
+        // «Очистить», пока ход ещё шёл (12.1.1): переписку стёрли после старта хода, и ни
+        // сообщения, ни плана, ни дописанной трассы в пустой ленте появиться не должно.
+        // Прогон и его расход записываются как обычно
+        var cleared = await Cleared(run.Id, ct);
+
+        var planId = cleared ? null : await SavePlan(run, stop, ct);
 
         // Одно «сейчас» на сообщение и прогон: отметки одного события не расходятся
         var now = DateTime.UtcNow;
@@ -512,7 +526,16 @@ public class AssistantRunService(
             FactIds = outcome.FactIds.Count > 0 ? JsonSerializer.Serialize(outcome.FactIds) : null,
             CreatedAtUtc = now
         };
-        await context.AssistantMessages.AddAsync(message, ct);
+        if (cleared)
+        {
+            await context.AssistantTraceSteps
+                .Where(x => x.RunId == run.Id)
+                .ExecuteDeleteAsync(CancellationToken.None);
+        }
+        else
+        {
+            await context.AssistantMessages.AddAsync(message, ct);
+        }
 
         run.Status = stop switch
         {
@@ -543,13 +566,25 @@ public class AssistantRunService(
         // Что факт пригодился, считается по самим текстам хода — подстрочно,
         // без модели и без отдельного инструмента (12.5). Ход уже записан: счётчик —
         // не повод ронять конец хода, поэтому и токен здесь не ходовой
-        await memory.TouchUsed(run.UserId, run.WorkspaceId, runContext.UserText, message.Content,
-            CancellationToken.None);
+        if (!cleared)
+            await memory.TouchUsed(run.UserId, run.WorkspaceId, runContext.UserText, message.Content,
+                CancellationToken.None);
 
         // Конец хода — единственное, что клиенту действительно нужно узнать быстро:
         // уведомлений в продукте нет, и лента меняется только по этому ответу (раздел 3)
         notifier.Notify(run.Id);
     }
+
+    /// <summary>
+    /// Стёрли ли тред, пока ход шёл (12.1.1): пометку ставит «Очистить» до того, как
+    /// стереть переписку. Читается из базы, а не из отслеживаемой сущности — «Очистить»
+    /// пришло другим запросом
+    /// </summary>
+    private async Task<bool> Cleared(Guid runId, CancellationToken ct) =>
+        await context.AssistantRuns
+            .Where(x => x.Id == runId)
+            .Select(x => x.Cleared)
+            .SingleOrDefaultAsync(ct);
 
     /// <summary>
     /// Какой план приедет с сообщением. Собранные инструментами операции сохраняются
@@ -564,9 +599,11 @@ public class AssistantRunService(
         // Незакрытый план в треде один: новый отменяет предыдущий (12.2.1)
         await executor.CancelOpen(run.UserId, run.WorkspaceId, ct);
 
-        // Ход кончился вопросом или остановкой — план собран не до конца, и спрашивать
-        // «делаем?» по нему нельзя: он Draft (5.2, раздел 3)
-        var draft = outcome.Kind == RunOutcomeKind.AskUser || stop == AssistantStopReason.UserStopped;
+        // Ход кончился вопросом, остановкой или сбоем — план собран не до конца, и спрашивать
+        // «делаем?» по нему нельзя: он Draft (5.2, раздел 3). Сбой — тем более: модель
+        // не дописала ни план, ни вопрос, а «да» на следующую реплику применило бы обрывок
+        var draft = outcome.Kind == RunOutcomeKind.AskUser
+                    || stop is AssistantStopReason.UserStopped or AssistantStopReason.ProviderError;
 
         var plan = new AssistantPlan
         {

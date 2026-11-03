@@ -5,6 +5,7 @@ import { CORE, LOADERS } from './generated';
 import { I18nKey, I18nPluralKey, LazyScope } from './generated/i18n-keys';
 import { Lang, LANG_STORAGE_KEY, resolveInitialLang } from './lang';
 import { pluralRules } from './formatters';
+import { safeStorage } from '../core/safe-storage';
 
 /**
  * Перевод интерфейса (`src/PetTemplate.Web/agents.md`, «Локализация»).
@@ -132,7 +133,8 @@ export class I18nService {
     this._lang.set(lang);
     this.dicts.update(current => ({ ...current, core: CORE[lang] }));
 
-    writeStorage(LANG_STORAGE_KEY, lang);
+    // Хранилище закрыто — выбор не переживёт перезагрузку, но интерфейс уже на нужном языке
+    safeStorage.set(LANG_STORAGE_KEY, lang);
 
     const scopes = [...this.requested];
 
@@ -212,13 +214,4 @@ function interpolate(text: string, params?: I18nParams): string {
 
     return params[name] == null ? '' : String(params[name]);
   });
-}
-
-function writeStorage(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Приватный режим и запрет сторонних данных: выбор не переживёт перезагрузку,
-    // но интерфейс уже на нужном языке — сообщать человеку не о чем
-  }
 }

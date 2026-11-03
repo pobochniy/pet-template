@@ -1,9 +1,9 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { BaseApiService } from './base-api.service';
 import { AuthenticationResultModel } from '../models/authentication-result.model';
 import { ExternalCodeModel, ExternalLoginsConfigModel, ExternalProofModel } from '../models/external-login.model';
-import { I18nService } from '../i18n/i18n.service';
+import { injectI18n } from '../i18n/inject-i18n';
 
 /**
  * Вход через Telegram и VK (спец. accounts, 5): параметры площадок, вход с сайта и вход
@@ -32,7 +32,7 @@ export interface IExternalLoginApiService {
 
 @Injectable({ providedIn: 'root' })
 export class ExternalLoginApiService extends BaseApiService implements IExternalLoginApiService {
-  private readonly i18n = inject(I18nService);
+  private readonly i18n = injectI18n();
 
   /**
    * Параметры площадок не меняются, пока сервер не перевыкатили: один запрос на вкладку.

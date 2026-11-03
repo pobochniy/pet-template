@@ -293,7 +293,7 @@ public class ModelBreakerTests
         if (stopped) source.Cancel();
 
         // Act
-        var failure = ModelBreaker.IsFailure(error, source.Token);
+        var failure = OpenAiErrorClassifier.Instance.IsFailure(error, source.Token);
 
         // Assert
         Assert.Equal(expected, failure);
@@ -343,7 +343,9 @@ public class ModelBreakerTests
     /// <summary>Упавший ход доводит до конца обработчик; здесь — руками, чтобы завести следующий</summary>
     private static async Task Finish(AssistantWorld world, AssistantRun run)
     {
+        // Законченный ход — с отметкой конца: живым у треда считается незаконченный (раздел 3)
         run.Status = AssistantRunStatus.Failed;
+        run.FinishedAtUtc = DateTime.UtcNow;
         await world.Save();
     }
 
@@ -368,5 +370,51 @@ public class ModelBreakerTests
         public override void Dispose()
         {
         }
+    }
+
+    /// <summary>
+    /// Отказ не-OpenAI адаптера размыкатель узнаёт по разбору, который принёс адаптер
+    /// (<see cref="IProviderErrorClassifier"/>, 16.5): своё исключение поставщика — отказ
+    /// </summary>
+    [Fact]
+    public async Task CustomClassifierCountsAdapterFailure()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Винтики и Шпунтики");
+        var breaker = new ModelBreaker(world.Db, Microsoft.Extensions.Options.Options.Create(world.BreakerSettings),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ModelBreaker>.Instance, null, new AdapterClassifier());
+
+        // Act
+        await breaker.Failed(new ModelPick(world.Model, false), new AdapterDownException(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, (await Stored(world)).FailureCount);
+    }
+
+    /// <summary>
+    /// Разбор по умолчанию — OpenAI-совместимый: чужого исключения он не знает, и отказом
+    /// оно не считается — ровно поэтому адаптеру нужен свой разбор (16.5)
+    /// </summary>
+    [Fact]
+    public async Task DefaultClassifierIgnoresUnknownAdapterError()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Винтики и Шпунтики");
+
+        // Act
+        await world.Breaker.Failed(new ModelPick(world.Model, false), new AdapterDownException(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, (await Stored(world)).FailureCount);
+    }
+
+    /// <summary>Исключение транспорта чужого SDK</summary>
+    private sealed class AdapterDownException() : Exception("поставщик недоступен");
+
+    private sealed class AdapterClassifier : IProviderErrorClassifier
+    {
+        public bool IsFailure(Exception error, CancellationToken ct) => error is AdapterDownException;
+
+        public bool Answered(Exception error) => false;
     }
 }

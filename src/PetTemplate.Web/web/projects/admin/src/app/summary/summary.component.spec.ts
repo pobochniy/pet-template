@@ -19,9 +19,15 @@ describe('SummaryComponent', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // `end()` в `afterEach` уводит на `/login`: без маршрута переход падает уже после теста
     TestBed.configureTestingModule({
       imports: [SummaryComponent],
-      providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()]
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([{ path: 'login', children: [] }]),
+        provideHttpClient(),
+        provideHttpClientTesting()
+      ]
     });
     httpMock = TestBed.inject(HttpTestingController);
 

@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ExternalLoginApiService } from './external-login-api.service';
 import { ExternalProviderEnum } from '../enums/external-provider.enum';
+import { profileDto, sessionDto } from './dto.mock';
 
 /** Тела запросов входа через площадки — как их ждёт `AuthController` (спец. accounts, 5) */
 describe('ExternalLoginApiService', () => {
@@ -28,7 +29,7 @@ describe('ExternalLoginApiService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body.initData).toBe('init-data');
     expect(req.request.body.language).toBeTruthy();
-    req.flush({ token: 't', profile: {}, permissionsByWorkspace: {} });
+    req.flush(sessionDto({ token: 't', profile: profileDto(), permissionsByWorkspace: {} }));
     await promise;
   });
 
@@ -38,7 +39,7 @@ describe('ExternalLoginApiService', () => {
     const req = http.expectOne('/api/Auth/VkAuth');
     expect(req.request.body.launchParams).toBe('vk_user_id=1&sign=x');
     expect(req.request.body.invitation).toBe('token-1');
-    req.flush({ token: 't', profile: {}, permissionsByWorkspace: {} });
+    req.flush(sessionDto({ token: 't', profile: profileDto(), permissionsByWorkspace: {} }));
     await promise;
   });
 
@@ -56,7 +57,7 @@ describe('ExternalLoginApiService', () => {
   it('should ask again after a failed config request', async () => {
     const first = service.externalLogins();
     http.expectOne('/api/Auth/ExternalLogins').flush({}, { status: 500, statusText: 'Error' });
-    await expectAsync(first).toBeRejected();
+    await expect(first).rejects.toThrow();
 
     const second = service.externalLogins();
     http.expectOne('/api/Auth/ExternalLogins').flush({ telegramBotId: '', vkAppId: '2' });
@@ -69,7 +70,7 @@ describe('ExternalLoginApiService', () => {
 
     const req = http.expectOne('/api/Auth/LogInAndLink');
     expect(req.request.body).toEqual({ login: 'masha', password: 'secret', proof });
-    req.flush({ token: 't', profile: {}, permissionsByWorkspace: {} });
+    req.flush(sessionDto({ token: 't', profile: profileDto(), permissionsByWorkspace: {} }));
     await promise;
   });
 });

@@ -26,11 +26,13 @@ IaC/
 │   ├── on-hold/             # telegram.yml — доставка тревог, пока не включена
 │   └── dashboards/          # дашборды JSON
 ├── setup-vm.sh              # Скрипт подготовки виртуальной машины
+├── run-api.sh               # docker run контейнера API и ожидание /health (зовут workflow)
+├── publish-static.sh        # атомарная выкатка клиента и админки (зовут workflow)
 ├── DEPLOYMENT.md            # Пошаговый деплой, секреты GitHub Actions, админка, бэкап
 ├── .env.example             # Шаблон переменных окружения
 ├── .env                     # Переменные окружения (создаётся setup-vm.sh, только на сервере)
-├── frontend/                # Симлинк на ~/frontend (создаётся автоматически)
-├── adminka/                 # Симлинк на ~/adminka (создаётся автоматически)
+├── frontend/                # Симлинк на ~/frontend: releases/<sha>, current, previous
+├── adminka/                 # Симлинк на ~/adminka — то же для админки
 ├── certbot/                 # Сертификаты Let's Encrypt (создаётся автоматически)
 │   ├── www/
 │   └── conf/
@@ -60,17 +62,18 @@ ssh user@your-vm
 # Перейдите в папку IaC
 cd ~/IaC
 
-# Сделайте скрипт исполняемым и запустите его
-chmod +x setup-vm.sh
-./setup-vm.sh
+# Запустите скрипт — через bash: в проекте из шаблона бита исполнения у него нет
+# (specs/infrastructure.md, 13); остальным скриптам его поставит сам setup-vm.sh
+bash setup-vm.sh
 ```
 
 Скрипт автоматически:
 - ✅ Проверит Docker, Docker Compose v2 и права на docker без `sudo`
-- ✅ Создаст каталоги `~/frontend`, `~/frontend-backup`, `~/adminka`, `~/adminka-backup`
+- ✅ Создаст каталоги `~/frontend`, `~/adminka` (выпуски в них заводит выкатка)
 - ✅ Создаст симлинки `IaC/frontend` → `~/frontend` и `IaC/adminka` → `~/adminka`
 - ✅ Создаст Docker сеть `nginx-proxy-man`
-- ✅ Создаст файл `.env` из того же шаблона, что `.env.example`
+- ✅ Поставит бит исполнения скриптам `postgres/init/` и `IaC/*.sh`
+- ✅ Создаст файл `.env` копией `.env.example`
 - ✅ Создаст директории для certbot
 
 ### 2. Настройка переменных окружения
@@ -97,6 +100,8 @@ POSTGRES_EXPORTER_USER=postgres_exporter
 POSTGRES_EXPORTER_PASSWORD=your_secure_exporter_password
 # Бот тревог Grafana — пока доставка не включена, пусто (DEPLOYMENT.md, «Тревоги в Telegram»)
 TELEGRAM_BOT_TOKEN=
+# Телеметрия — профиль compose; пусто — без Grafana, Prometheus, Tempo и экспортёров
+COMPOSE_PROFILES=observability
 
 # Порты
 NGINX_HTTP_PORT=80
@@ -204,7 +209,8 @@ docker compose exec webserver nginx -s reload
 2. **API контейнер (dapi)**
    - Создаётся через GitHub Actions (`Publish Api`), в compose не входит
    - Порт: `127.0.0.1:5000:8080` — снаружи только через nginx
-   - Подключается к сети `nginx-proxy-man`
+   - Подключается к сети `nginx-proxy-man`, потолок памяти 1.5 ГБ (`run-api.sh`)
+   - `GET /health` — база и Qdrant; выкатка ждёт его и сама возвращает прежний образ
    - Миграций на старте не накатывает: их до замены контейнера накатывает бандл под владельцем
      базы (`publish-api.yml`, шаг `apply migrations`)
 
@@ -232,9 +238,10 @@ docker compose exec webserver nginx -s reload
    - Получение и продление сертификатов Let's Encrypt
    - Хранит сертификаты в `./certbot/conf`
 
-7. **Телеметрия** (`DEPLOYMENT.md`, раздел 11)
+7. **Телеметрия** (`DEPLOYMENT.md`, раздел 11) — профиль compose `observability`, включён
+   строкой `COMPOSE_PROFILES` в `.env`; у каждого контейнера потолок памяти
    - `otel-collector` принимает OTLP от API и раскладывает: метрики — в `prometheus`
-     (30 дней или 2 ГБ, том `prometheus-data`), трассы — в `tempo` (30 дней, том `tempo-data`)
+     (30 дней или 2 ГБ, том `prometheus-data`), трассы — в `tempo` (7 дней, том `tempo-data`)
    - `postgres-exporter`, `node-exporter`, `cadvisor` и сам Qdrant — Prometheus забирает их `/metrics` сам
    - `grafana` — без своих учёток, за шлюзом админки (`grafana.example.com`, кука сессии
      админки и `auth_request` в nginx); источники, дашборды и тревоги — файлами из `grafana/`
@@ -306,17 +313,19 @@ docker exec -i dbcontainer pg_restore -l < backup_$(date +%Y%m%d).dump > /dev/nu
 
 ### Управление фронтендом
 
-Клиент деплоится через GitHub Actions в `~/frontend`, админка — в `~/adminka`.
+Клиент деплоится через GitHub Actions выпусками в `~/frontend/releases/<sha>`, админка —
+в `~/adminka/releases/<sha>`; nginx отдаёт тот, на который смотрит ссылка `current`
+(`DEPLOYMENT.md`, раздел 7).
 
 ```bash
-# Просмотр файлов фронтенда
-ls -la ~/frontend
+# Выпуски и ссылки
+ls -l ~/frontend ~/frontend/releases
 
-# Откат на предыдущую версию (если есть бэкап)
-rm -rf ~/frontend/* && cp -r ~/frontend-backup/* ~/frontend/
+# Откат на прежний выпуск — переключить ссылку, без пересборки
+ln -sfn "$(readlink ~/frontend/previous)" ~/frontend/current.tmp && mv -Tf ~/frontend/current.tmp ~/frontend/current
 
 # То же для админки
-rm -rf ~/adminka/* && cp -r ~/adminka-backup/* ~/adminka/
+ln -sfn "$(readlink ~/adminka/previous)" ~/adminka/current.tmp && mv -Tf ~/adminka/current.tmp ~/adminka/current
 ```
 
 ## 🔐 Безопасность
@@ -436,8 +445,8 @@ docker logs dapi
 ### Фронтенд показывает 404
 
 ```bash
-# Проверьте, что файлы есть в ~/frontend
-ls -la ~/frontend
+# Проверьте, что выпуск есть и current на него смотрит
+ls -l ~/frontend ~/frontend/current/
 
 # Проверьте симлинк
 ls -la ./frontend
@@ -463,25 +472,27 @@ docker compose exec webserver cat /etc/nginx/conf.d/nginx.conf
 ### Деплой API (через GitHub Actions):
 
 1. Разработчик запускает workflow "Publish Api" в GitHub
-2. Раннер на VM собирает API и параллельно гоняет тесты; красные — дальше не идёт
-3. Создаётся Docker образ `pettemplate-api:<дата>`
-4. Старый контейнер `dapi` останавливается и удаляется
-5. Запускается новый контейнер `dapi` с новым образом и секретами
-6. Старые образы удаляются (`Cleanup Old Images`, остаются 5 последних)
+2. Тесты на облачном раннере (`api-tests.yml`); красные — дальше не идёт
+3. Раннер на VM собирает API и Docker образ `pettemplate-api:<дата>`, накатывает миграции
+4. `run-api.sh` заменяет контейнер `dapi` и ждёт `200` от `/health`; не дождался —
+   поднимает прежний образ, выкатка красная
+5. Старые образы удаляются (`Cleanup Old Images`, остаются 5 последних)
 
 ### Деплой фронтенда и админки (через GitHub Actions):
 
 1. Разработчик запускает workflow "Publish Angular" ("Publish Admin")
 2. Сначала — тесты клиента (`web-tests.yml`)
-3. Создаётся бэкап текущей версии в `~/frontend-backup` (`~/adminka-backup`)
-4. Новые файлы копируются в `~/frontend` (`~/adminka`)
-5. Nginx сразу отдаёт новые файлы; `index.html` не кэшируется, бандлы — навсегда
+3. Сборка ложится в `~/frontend/releases/<sha>` (`~/adminka/…`), ссылка `current`
+   переключается на неё целиком, прежний выпуск остаётся `previous`
+4. Nginx сразу отдаёт новый выпуск; `index.html` не кэшируется, бандлы — навсегда,
+   а чанки вкладок со старым `index.html` берутся из `previous`
 
 ## 📝 Checklist перед первым запуском
 
 - [ ] Docker и Docker Compose v2 установлены, пользователь в группе `docker`
 - [ ] Запущен скрипт `setup-vm.sh`
-- [ ] Отредактирован файл `.env` с безопасными паролями (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`)
+- [ ] Отредактирован файл `.env` с безопасными паролями (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
+  `APP_DB_OWNER_PASSWORD`, `POSTGRES_EXPORTER_PASSWORD`); `COMPOSE_PROFILES=observability` на месте
 - [ ] Запущена инфраструктура: `docker compose up -d`, `database` — `healthy`
 - [ ] Получен сертификат на `example.com`, `www.example.com`, `adminka.example.com`
 - [ ] Настроен GitHub Actions self-hosted runner

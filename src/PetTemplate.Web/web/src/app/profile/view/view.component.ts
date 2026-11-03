@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ProfileApiService } from '../../shared/api/profile-api.service';
+import { ProfileApiService } from '../profile-api.service';
 import { ProfileModel } from '../../shared/models/profile.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 @Component({
   selector: 'app-view',
@@ -11,7 +12,7 @@ import { I18nService } from '../../shared/i18n/i18n.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ViewComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   /** Сигнал, а не поле: профиль приезжает после первой отрисовки, а Zone.js, которая заметила бы присваивание, нет */
   readonly profile = signal<ProfileModel | undefined>(undefined);

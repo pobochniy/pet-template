@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -44,9 +45,18 @@ public class ModelChatClients(IServiceProvider services, IOptions<AssistantOptio
         var endpoint = string.IsNullOrWhiteSpace(section.Endpoint) ? StubEndpoint : section.Endpoint;
         var apiKey = string.IsNullOrWhiteSpace(section.ApiKey) ? StubApiKey : section.ApiKey;
 
-        return new OpenAIClient(
-                new ApiKeyCredential(apiKey),
-                new OpenAIClientOptions { Endpoint = new Uri(endpoint) })
+        // Повторы и таймаут SDK — явно (17): по умолчанию клиент сам повторяет запрос трижды
+        // по 100 секунд, и это множилось бы с попытками хода незаметно. Повтор запроса
+        // гасит мелкий сбой без повтора всего хода; размыкатель видит один отказ — после
+        // последнего повтора
+        var client = new OpenAIClientOptions
+        {
+            Endpoint = new Uri(endpoint),
+            RetryPolicy = new ClientRetryPolicy(Math.Max(options.ModelRetries, 0)),
+            NetworkTimeout = TimeSpan.FromSeconds(Math.Max(options.ModelTimeoutSeconds, 1))
+        };
+
+        return new OpenAIClient(new ApiKeyCredential(apiKey), client)
             .GetChatClient(key)
             .AsIChatClient()
             .AsBuilder()

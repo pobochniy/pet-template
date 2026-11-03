@@ -7,14 +7,15 @@ import { UserService } from '../shared/core/user.service';
 import { AlertsService } from '../shared/alerts/alerts.service';
 import { InvitationStatusEnum } from '../shared/enums/invitation-status.enum';
 import { InvitationPreviewModel } from '../shared/models/workspace-invitation.model';
-import { createInviteRegisterForm } from '../shared/form-models/invite-register-form.model';
+import { createInviteRegisterForm } from './form-models/invite-register-form.model';
 import { createLoginForm } from '../shared/form-models/login-form.model';
 import { FormValidationComponent } from '../shared/form-validation/form-validation.component';
 import { INVITATION_UNAVAILABLE_KEY, invitationRefusalKey } from './invitation-messages';
-import { I18nService } from '../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../shared/core/server-error.util';
 import { applyServerValidationErrors } from '../shared/core/server-validation.util';
 import { ExternalButtonsComponent } from '../auth/external-buttons/external-buttons.component';
+import { injectI18n } from '../shared/i18n/inject-i18n';
+import { INVITE_SCOPES } from './invite.scopes';
 
 /**
  * Лендинг приглашения `/invite/:token` (спец. authorization, 6.3). Анонимный.
@@ -34,7 +35,7 @@ import { ExternalButtonsComponent } from '../auth/external-buttons/external-butt
   imports: [ReactiveFormsModule, FormValidationComponent, RouterLink, ExternalButtonsComponent]
 })
 export class InviteComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...INVITE_SCOPES);
   private readonly invitationApi = inject(InvitationApiService);
   private readonly authApi = inject(AuthApiService);
   private readonly userService = inject(UserService);
@@ -80,7 +81,7 @@ export class InviteComponent {
 
   /** Вошедшему показываем одну кнопку: логин и пароль у него уже есть */
   async accept() {
-    await this.run(() => this.invitationApi.accept(this.token()));
+    await this.run(async () => this.userService.applyAcceptedInvitation(await this.invitationApi.accept(this.token())));
   }
 
   async register() {
@@ -88,8 +89,8 @@ export class InviteComponent {
     if (!this.registerForm.valid) return;
 
     const value = this.registerForm.getRawValue();
-    await this.run(() =>
-      this.invitationApi.register(this.token(), value.userName.trim(), value.password, value.passwordConfirm, this.i18n.lang()));
+    await this.run(async () => this.userService.applyAcceptedInvitation(
+      await this.invitationApi.register(this.token(), value.userName.trim(), value.password, value.passwordConfirm, this.i18n.lang())));
   }
 
   /**
@@ -101,8 +102,8 @@ export class InviteComponent {
     if (!this.loginForm.valid) return;
 
     await this.run(async () => {
-      await this.authApi.login(this.loginForm);
-      await this.invitationApi.accept(this.token());
+      this.userService.applySession(await this.authApi.login(this.loginForm));
+      this.userService.applyAcceptedInvitation(await this.invitationApi.accept(this.token()));
     });
   }
 

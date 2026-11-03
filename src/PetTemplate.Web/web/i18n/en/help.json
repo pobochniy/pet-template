@@ -1,0 +1,8 @@
+{
+  "title": "Help",
+  "intro": "Short answers about how the site works. The assistant reads the same articles when it answers questions.",
+  "empty": "No articles yet",
+  "failed": "Could not load help",
+  "notFound": "There is no such article — it may have been renamed",
+  "back": "All articles"
+}

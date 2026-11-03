@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 
 namespace PetTemplate.Tests.Asserts;
 
@@ -19,9 +20,9 @@ public static class QueueAssert
         Commands<SendMailCommand>(db);
 
     /// <summary>Команды одного типа — для очередей, у которых своего метода здесь нет (поиск)</summary>
-    public static async Task<List<T>> Commands<T>(ApplicationContext db)
+    public static async Task<List<T>> Commands<T>(ApplicationContext db) where T : ICommand
     {
-        var commandType = typeof(T).FullName;
+        var commandType = CommandQueue.TypeOf<T>();
         var rows = await db.LocalQueue
             .AsNoTracking()
             .Where(x => x.CommandType == commandType)

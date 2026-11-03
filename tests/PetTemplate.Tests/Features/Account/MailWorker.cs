@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Services.Mail;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Enums;
@@ -42,12 +44,12 @@ public class MailWorker
         };
     }
 
-    private static Db.Entity.LocalQueue Command(object command) => new()
+    private static Db.Entity.LocalQueue Command(SendMailCommand command) => new()
     {
         Id = Guid.CreateVersion7(),
-        Data = command.ToString()!,
+        Data = JsonSerializer.Serialize(command),
         CreatedAtUtc = DateTime.UtcNow,
-        CommandType = command.GetType().FullName!
+        CommandType = CommandQueue.TypeOf<SendMailCommand>()
     };
 
     [Fact]

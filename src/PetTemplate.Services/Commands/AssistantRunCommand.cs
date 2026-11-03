@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -7,9 +5,9 @@ namespace PetTemplate.Services.Commands;
 /// и реплика человека с прогоном (outbox); <see cref="RunId"/> — ключ идемпотентности:
 /// повтор команды на законченном ходе не делает ничего
 /// </summary>
-public class AssistantRunCommand
+public class AssistantRunCommand : ICommand
 {
-    public Guid RunId { get; set; }
+    public static string QueueName => "assistant-run";
 
-    public override string ToString() => JsonSerializer.Serialize(this);
+    public Guid RunId { get; set; }
 }

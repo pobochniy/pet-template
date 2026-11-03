@@ -1,9 +1,7 @@
+import type { ApiSchema } from '../api/generated/schema';
+
 /**
- * Участник пространства в списках — `ProfileSummaryDto` на сервере. Контактов нет:
- * почта и телефон — только в своём профиле (спец. authorization, 5)
+ * Участник пространства в списках — `ProfileSummaryDto` на сервере (алиас схемы OpenAPI).
+ * Контактов нет: почта и телефон — только в своём профиле (спец. authorization, 5)
  */
-export interface UserProfileModel {
-  id: string;
-  userName: string | null;
-  avatarId: number | null;
-}
+export type UserProfileModel = ApiSchema<'ProfileSummaryDto'>;

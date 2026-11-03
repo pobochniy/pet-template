@@ -18,8 +18,8 @@ env:
   ANGULAR_PROJECT_PATH: src/PetTemplate.Web/web
   # outputPath проекта admin в angular.json — dist/admin; application-билдер кладёт сайт в browser/
   BUILD_OUTPUT_PATH: src/PetTemplate.Web/web/dist/admin/browser
-  DEPLOY_DIR: ~/adminka
-  BACKUP_DIR: ~/adminka-backup
+  # Корень выпусков: releases/<sha>, ссылки current и previous (IaC/publish-static.sh)
+  DEPLOY_ROOT: adminka
 
 jobs:
   tests:
@@ -49,22 +49,14 @@ jobs:
         working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
         run: npx ng build admin --configuration production
 
-      - name: Backup previous version 💾
-        run: |
-          mkdir -p ${{ env.BACKUP_DIR }}
-          rm -rf ${{ env.BACKUP_DIR }}/*
-          if [ -d "${{ env.DEPLOY_DIR }}" ] && [ "$(ls -A ${{ env.DEPLOY_DIR }})" ]; then
-            cp -r ${{ env.DEPLOY_DIR }}/* ${{ env.BACKUP_DIR }}/
-            echo "Backed up current version to ${{ env.BACKUP_DIR }}"
-          else
-            echo "No previous version to backup"
-          fi
+      # CSP админки — `script-src 'self'` без хешей: в собранном `index.html` ни инлайн-скриптов,
+      # ни инлайн-обработчиков (`tools/csp-hash.mjs`)
+      - name: Check CSP of the built index.html 🛡️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm run csp:hash -- --check
 
-      - name: Deploy built files 🚀
-        run: |
-          mkdir -p ${{ env.DEPLOY_DIR }}
-          rm -rf ${{ env.DEPLOY_DIR }}/*
-          # `/.` а не `/*`: звёздочка не берёт скрытые файлы сборки
-          cp -r ${{ env.BUILD_OUTPUT_PATH }}/. ${{ env.DEPLOY_DIR }}/
-          ls -la ${{ env.DEPLOY_DIR }}
-          echo "ℹ️  To rollback: rm -rf ${{ env.DEPLOY_DIR }}/* && cp -r ${{ env.BACKUP_DIR }}/* ${{ env.DEPLOY_DIR }}/"
+      # Атомарно, как у продукта (publish-angular.yml, IaC/publish-static.sh)
+      - name: Deploy 🚀
+        env:
+          SHA: ${{ github.sha }}
+        run: sh IaC/publish-static.sh "$BUILD_OUTPUT_PATH" "$HOME/$DEPLOY_ROOT" "$SHA"

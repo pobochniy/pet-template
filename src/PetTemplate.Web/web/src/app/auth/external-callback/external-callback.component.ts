@@ -10,9 +10,10 @@ import { MergePreviewModel } from '../../shared/models/account.model';
 import {
   EXTERNAL_PROVIDER_CODES, ExternalCodeModel, ExternalProofModel, ExternalProvider
 } from '../../shared/models/external-login.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { LanguageService } from '../../shared/i18n/language.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /** Адрес возврата с одноразовым кодом в истории не остаётся */
 const REPLACE = { replaceUrl: true } as const;
@@ -69,7 +70,7 @@ export function afterSignIn(isNewAccount: boolean, returnUrl: string): string {
   `
 })
 export class ExternalCallbackComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
   private readonly language = inject(LanguageService);
   private readonly location = inject(Location);
 

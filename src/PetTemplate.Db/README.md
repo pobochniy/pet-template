@@ -92,7 +92,9 @@ dotnet ef migrations bundle --startup-project src/PetTemplate.Api --project src/
   `user_name` и `email` у `profiles` — `citext`;
 - уникальный индекс фактов памяти ассистента `assistant_facts` по
   `(workspace_id, user_id, kind, key)` — `NULLS NOT DISTINCT` (`AssistantFact.OwnerKeyIndex`);
-- частичные индексы `WHERE status = 0` у `admin_jobs` и `assistant_runs` (`HasFilter`);
+- частичный индекс `WHERE status = 0` у `admin_jobs` (`HasFilter`); у `assistant_runs` индекс
+  «один живой ход на тред» в `Init` тоже `status = 0`, а с `AssistantLiveRunAndSpendCaps` —
+  `finished_at_utc IS NULL`;
 - у `ai_models` нет колонки `version`/`xmin`: `xmin` — системная колонка Postgres;
 - имена таблиц, колонок и индексов — snake_case (`ix_…`, `pk_…`): по ним `DbErrors`
   разбирает нарушения уникальности.

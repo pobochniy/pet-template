@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using System.Text;
 using PetTemplate.Services.Services;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -41,6 +41,9 @@ public static class ServicesExtensions
     /// <summary>Именованный клиент расшифровки голоса — свой таймаут, адрес ставится на запросе</summary>
     public const string TranscriptionClient = "transcription";
 
+    /// <summary>Имя приложения в кольце Data Protection — общее у всех экземпляров и выкаток</summary>
+    public const string DataProtectionApplicationName = "PetTemplate";
+
     public static IServiceCollection ConfigureServices(this IServiceCollection services, IConfiguration config)
     {
         services
@@ -51,6 +54,7 @@ public static class ServicesExtensions
             .AddControllersWithSwagger()
             // .RegisterMiddlewares()
             .AddDbContext(config)
+            .AddKeyRing()
             .AddAppServices()
             .AddSearch(config)
             .AddAssistant()
@@ -136,26 +140,15 @@ public static class ServicesExtensions
                     },
                     OnTokenValidated = RejectRevokedAdminSession
                 };
-            })
-            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, o =>
-            {
-                o.Cookie.HttpOnly = true;
-                o.Events = new CookieAuthenticationEvents
-                {
-                    OnRedirectToLogin = redirectContext =>
-                    {
-                        redirectContext.HttpContext.Response.StatusCode = 401;
-                        return Task.CompletedTask;
-                    }
-                };
             });
 
         services.AddMemoryCache();
         services.AddScoped<SessionGuard>();
         services.AddTransient<AdminTokenFactory>();
-        // Счётчики неудачных паролей живут в памяти процесса — один на всё приложение:
+        // Счётчики неудачных паролей живут в памяти процесса — один на всё приложение
+        // (API один, tech-debt/single-instance.md):
         // общий для входа в админку и проверок пароля в продукте (спец. admin, 3.3; accounts, 8.1)
-        services.AddSingleton<AdminLoginLimiter>();
+        services.AddSingleton<LoginLimiter>();
 
         // Входы площадок (спец. accounts, 5.2, 5.3, 5.6): Telegram на сайте проверяется копией
         // ключей без сети, VK ID — обменом кода; HTTP-клиент VK — из фабрики, тесты подменяют
@@ -276,6 +269,13 @@ public static class ServicesExtensions
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
+            // Из этого документа генерируются типы клиента (`npm run api:types`, спец. infrastructure, 5):
+            // nullable-аннотации C# — в `nullable` схемы (у ссылки на схему — через `allOf`),
+            // а не «всё ссылочное может быть null»; ненулевое ссылочное — в `required`,
+            // как его и требует привязка модели MVC
+            options.SupportNonNullableReferenceTypes();
+            options.NonNullableReferenceTypesAsRequired();
+            options.UseAllOfToExtendReferenceSchemas();
             options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
             {
                 Type = SecuritySchemeType.Http,
@@ -346,8 +346,22 @@ public static class ServicesExtensions
 
         return services;
     }
-    
-    
+
+    /// <summary>
+    /// Кольцо ключей Data Protection — в базе (спец. infrastructure, 3.1): контейнер API
+    /// выкатка пересоздаёт, и кольцо в нём заводилось бы с нуля на каждый деплой. Имя
+    /// приложения — явное: по умолчанию оно берётся из пути сборки, и смена каталога
+    /// публикации тоже обнулила бы кольцо
+    /// </summary>
+    private static IServiceCollection AddKeyRing(this IServiceCollection services)
+    {
+        services.AddDataProtection()
+            .SetApplicationName(DataProtectionApplicationName)
+            .PersistKeysToDbContext<ApplicationContext>();
+
+        return services;
+    }
+
     private static IServiceCollection AddAppServices(this IServiceCollection services)
     {
         services.AddTransient<PermissionsValidation>();
@@ -362,7 +376,8 @@ public static class ServicesExtensions
         services.AddTransient<AccountTokens>();
         services.AddTransient<EmailConfirmation>();
         services.AddTransient<PasswordReset>();
-        // Счётчики попыток живут в памяти процесса — один на всё приложение (спец. accounts, 8.4)
+        // Счётчики попыток живут в памяти процесса — один на всё приложение (спец. accounts, 8.4;
+        // API один, tech-debt/single-instance.md)
         services.AddSingleton<ResetIpLimiter>();
         services.AddTransient<ProfileService>();
         services.AddTransient<WorkspaceService>();
@@ -427,42 +442,24 @@ public static class ServicesExtensions
     }
 
     /// <summary>
-    /// Ассистент (спец. assistant, 15.2): клиенты моделей по строкам справочника,
-    /// ход и всё, что живёт в нём одном, тред. Инструменты и операции плана разделов
-    /// проекта — <see cref="AddAssistantTools{TSource}"/> и <see cref="AddPlanOperation{THandler}"/>
+    /// Ассистент (спец. assistant, 15.2): ход — общей сборкой
+    /// <see cref="AssistantRuntime.AddAssistantRuntime"/> (её же берут мир сверки модели
+    /// и тесты), поверх — то, что есть только у приложения: тред, голос, живые прогоны,
+    /// стартовый справочник, учёт у поставщика. Разделы проекта —
+    /// <see cref="AssistantRuntime.AddAssistantSection{TSection}"/> (7.1)
     /// </summary>
     private static IServiceCollection AddAssistant(this IServiceCollection services)
     {
-        services.AddSingleton<IModelChatClients, ModelChatClients>();
-        // Метрики ассистента и справки (13.4; спец. help, 10) — синглтон со своим Meter
-        services.AddSingleton(_ => new AssistantMetrics());
-        services.AddTransient<AiModelCatalog>();
-        services.AddTransient<ModelBreaker>();
+        services.AddAssistantRuntime();
+
         // Стартовая строка справочника в пустую таблицу (16.2); дальше справочником
         // владеет экран «Модели» в админке (спец. admin, 15)
         services.AddHostedService<AiModelSeeder>();
 
-        // Живые прогоны и долгий опрос — синглтоны: ход идёт в воркере,
-        // а останавливают и ждут его из запроса (раздел 3)
+        // Живые прогоны — синглтон: ход идёт в воркере, а останавливают его из запроса (раздел 3)
         services.AddSingleton<RunCancellation>();
-        services.AddSingleton<RunNotifier>();
-
-        // Контекст хода, копилка плана, исход и предохранители — на область команды:
-        // в них лежит, от чьего имени идёт ход и что он успел задумать (15.2)
-        services.AddScoped<AssistantContext>();
-        services.AddScoped<PlanCollector>();
-        services.AddScoped<RunOutcome>();
-        services.AddScoped<LoopGuards>();
-        services.AddScoped<AssistantTools>();
-        services.AddScoped<AssistantRunService>();
         services.AddScoped<AssistantThreadService>();
-        services.AddTransient<MemoryService>();
         services.AddTransient<VoiceInputService>();
-        services.AddTransient<PlanOperations>();
-        services.AddTransient<PlanExecutor>();
-        services.AddTransient<AssistantPermissions>();
-        services.AddTransient<SystemPromptBuilder>();
-        services.AddTransient<HistoryBuilder>();
 
         // Расшифровка голоса (6.2) — тот же поставщик, что у моделей, своя только модель.
         // Решается на каждом запросе по живым настройкам, а не на старте: модели нет
@@ -487,43 +484,11 @@ public static class ServicesExtensions
                 sp.GetRequiredService<ILogger<OpenAiCompatibleTranscriptionService>>());
         });
 
-        // Трасса и учёт расхода (13.1, 13.5): тот же контекст, что у хода — трасса
-        // сохраняет и его накопленные токены, учёт уезжает сохранением финального статуса
-        services.AddScoped<TraceWriter>();
-        services.AddScoped<IRunTrace>(sp => sp.GetRequiredService<TraceWriter>());
-        services.AddScoped<IRunBilling, RunBilling>();
-
-        // Расход и лимиты пространств без баланса (13.5–13.6): метрики — синглтон,
-        // снимок счёта у поставщика — своим воркером
-        services.AddSingleton(_ => new BillingMetrics());
+        // Лимиты пространств без баланса (13.5–13.6): снимок счёта у поставщика — своим воркером
         services.AddTransient<ProviderLedger>();
         services.AddTransient<WorkspaceLimits>();
         services.AddTransient<BillingMonitor>();
         services.AddHostedService<BillingMonitorWorker>();
-
-        return services;
-    }
-
-    /// <summary>
-    /// Инструменты ассистента раздела проекта — точка расширения (спец. assistant, 7.1):
-    /// читающие отвечают данными, пишущие кладут операцию в план
-    /// </summary>
-    public static IServiceCollection AddAssistantTools<TSource>(this IServiceCollection services)
-        where TSource : class, IAssistantToolSource
-    {
-        services.AddScoped<IAssistantToolSource, TSource>();
-
-        return services;
-    }
-
-    /// <summary>
-    /// Операция плана раздела проекта — то, что исполнит <c>apply_plan</c> после согласия
-    /// (спец. assistant, 7.1). Пока ни одной нет, <c>apply_plan</c> модели не показывается
-    /// </summary>
-    public static IServiceCollection AddPlanOperation<THandler>(this IServiceCollection services)
-        where THandler : class, IPlanOperationHandler
-    {
-        services.AddScoped<IPlanOperationHandler, THandler>();
 
         return services;
     }
@@ -545,7 +510,7 @@ public static class ServicesExtensions
     /// Очередь команд (спец. mail, 4): постановка — <c>CommandQueue.Enqueue</c> тем же
     /// сохранением, что и доменное изменение, разбор — воркеры пакета <c>AsuTrack.LocalQueue</c>
     /// (<see cref="CommandQueueRegistration"/>). Письма: только обработчик очереди зовёт
-    /// отправителя. Индексация поиска — тем же путём
+    /// отправителя. Индексация поиска — тем же путём, своим воркером
     /// </summary>
     private static IServiceCollection AddCommandQueue(this IServiceCollection services, IConfiguration config)
     {
@@ -559,10 +524,15 @@ public static class ServicesExtensions
             // Общий воркер, один цикл: команды идут по одной
             .AddCommandQueueWorker(h => h
                 // Письмо: провайдер упал — повтор через минуту, а не потеря (спец. mail, 4)
-                .Add<SendMailCommand, SendMailCommandHandler>(TimeSpan.FromMinutes(1))
-                // Индексация (спец. search, 4): эмбеддер или Qdrant легли — повтор через минуту
+                .Add<SendMailCommand, SendMailCommandHandler>(TimeSpan.FromMinutes(1)))
+            // Индексация поиска (спец. search, 4–5) — своим воркером в один цикл: полный
+            // реиндекс ставит команду на каждую сущность, и в общем воркере письмо
+            // подтверждения стояло бы за тысячами чанков. Эмбеддер или Qdrant легли — повтор
+            // через минуту; чистка пространства идёт тем же воркером, что и запись точек
+            .AddCommandQueueWorker(h => h
                 .Add<SearchIndexCommand, SearchIndexCommandHandler>()
-                .Add<SearchReindexCommand, SearchIndexCommandHandler>())
+                .Add<SearchReindexCommand, SearchIndexCommandHandler>()
+                .Add<SearchPurgeWorkspaceCommand, SearchIndexCommandHandler>())
             // Ассистент (спец. assistant, раздел 3) — своим воркером: ход идёт минуты,
             // и ни письма за ним, ни он за полным реиндексом поиска не стоят.
             // «Сколько ходов одновременно» — число циклов; выборка по одной строке:

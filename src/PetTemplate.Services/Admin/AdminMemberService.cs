@@ -4,6 +4,7 @@ using PetTemplate.Db.Entity;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 
 namespace PetTemplate.Services.Admin;
 
@@ -81,10 +82,10 @@ public class AdminMemberService(ApplicationContext db, ILogger<AdminMemberServic
     /// </summary>
     public async Task<bool> Grant(Guid userId, AdminRole role, Guid actorId, CancellationToken ct = default)
     {
-        if (!AdminRoleSet.IsSingle(role)) throw new ArgumentException("Неизвестная роль");
+        if (!AdminRoleSet.IsSingle(role)) throw new AdminRejectionException("Неизвестная роль");
 
         var own = await EnsureManager(actorId, ct);
-        if (!own.Contains(role)) throw new ArgumentException("Нельзя выдать роль, которой нет у вас самих");
+        if (!own.Contains(role)) throw new AdminRejectionException("Нельзя выдать роль, которой нет у вас самих");
 
         var current = await RolesOf(userId, ct);
         if (current.Length == 0) return false;
@@ -128,7 +129,7 @@ public class AdminMemberService(ApplicationContext db, ILogger<AdminMemberServic
         if (!current.Contains(role)) return true;
 
         if (current.Length == 1)
-            throw new ArgumentException("Это последняя роль: без ролей человек не админ — удалите его явно");
+            throw new AdminRejectionException("Это последняя роль: без ролей человек не админ — удалите его явно");
 
         if (role == AdminRole.AdminManagement) await EnsureNotLastManager(userId, ct);
 
@@ -169,7 +170,7 @@ public class AdminMemberService(ApplicationContext db, ILogger<AdminMemberServic
         var own = await RolesOf(actorId, ct);
 
         if (!own.Contains(AdminRole.AdminManagement))
-            throw new ArgumentException("Роль AdminManagement у вас уже снята — войдите заново");
+            throw new AdminRejectionException("Роль AdminManagement у вас уже снята — войдите заново");
 
         return own;
     }
@@ -186,6 +187,6 @@ public class AdminMemberService(ApplicationContext db, ILogger<AdminMemberServic
             .AnyAsync(x => x.Role == AdminRole.AdminManagement && x.UserId != userId, ct);
 
         if (!others)
-            throw new ArgumentException("Это последний, у кого есть AdminManagement: вернуть роль в систему будет некому");
+            throw new AdminRejectionException("Это последний, у кого есть AdminManagement: вернуть роль в систему будет некому");
     }
 }

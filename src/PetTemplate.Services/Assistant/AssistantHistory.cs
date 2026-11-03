@@ -5,7 +5,7 @@ namespace PetTemplate.Services.Assistant;
 
 /// <summary>
 /// Что из треда едет в ход (спец. assistant, 12.4): сама переписка — сообщениями,
-/// резюме и незакрытый план — блоками системного промпта
+/// резюме и операции незакрытого плана — блоком данных хода (спец. assistant, 9)
 /// </summary>
 public class AssistantHistory
 {

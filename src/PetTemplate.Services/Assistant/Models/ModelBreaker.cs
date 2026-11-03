@@ -1,6 +1,3 @@
-using System.ClientModel;
-using System.Net;
-using System.Net.Sockets;
 using PetTemplate.Db.Entity;
 using PetTemplate.Shared.Options;
 using Microsoft.EntityFrameworkCore;
@@ -24,13 +21,20 @@ namespace PetTemplate.Services.Assistant.Models;
 /// События и состояние моделей уходят в метрики (<see cref="AssistantMetrics"/>, 13.4)
 /// там же, где пишется лог: размыкание своей карты, молча висящее неделю, обходится
 /// в реальные деньги на покупной модели.
+///
+/// Что из исключений — отказ поставщика, решает <see cref="IProviderErrorClassifier"/>
+/// (16.5): размыкатель про типы транспорта не знает, и адаптер не-OpenAI поставщика
+/// приносит свой разбор. Не зарегистрирован — <see cref="OpenAiErrorClassifier"/>
 /// </summary>
 public class ModelBreaker(
     ApplicationContext context,
     IOptions<ModelBreakerOptions> options,
     ILogger<ModelBreaker> logger,
-    AssistantMetrics? metrics = null)
+    AssistantMetrics? metrics = null,
+    IProviderErrorClassifier? classifier = null)
 {
+    private readonly IProviderErrorClassifier _classifier = classifier ?? OpenAiErrorClassifier.Instance;
+
     /// <summary>Разомкнута ли модель на момент <paramref name="now"/> — пауза ещё идёт</summary>
     public static bool IsOpen(AiModel model, DateTime now) => model.OpenUntilUtc >= now;
 
@@ -89,7 +93,7 @@ public class ModelBreaker(
     }
 
     /// <summary>
-    /// Обращение к модели упало. Отказ ли это — решает <see cref="IsFailure"/>;
+    /// Обращение к модели упало. Отказ ли это — решает <see cref="IProviderErrorClassifier"/>;
     /// нет — размыкателю дела нет. Упавшая проба снова размыкает модель на вдвое
     /// большую паузу (до <c>OpenForMax</c>); обычный отказ растит счётчик и на пороге
     /// размыкает — условным <c>UPDATE</c>, чтобы размыкание случилось один раз, а не
@@ -97,14 +101,14 @@ public class ModelBreaker(
     /// </summary>
     public async Task Failed(ModelPick pick, Exception error, CancellationToken ct)
     {
-        if (!IsFailure(error, ct))
+        if (!_classifier.IsFailure(error, ct))
         {
             // Проба и без отказа должна чем-то кончиться, иначе модель простоит
             // разомкнутой всю паузу: ответ 4xx — поставщик жив, проба удалась;
             // «Остановить» и прочее — проба ничего не сказала, отпускаем
             if (pick.Probe)
             {
-                if (Answered(error)) await Succeeded(pick);
+                if (_classifier.Answered(error)) await Succeeded(pick);
                 else await Release(pick);
             }
 
@@ -178,61 +182,6 @@ public class ModelBreaker(
             logger.LogInformation("Model {ModelKey} probe is released without an outcome", model.Key);
         });
     }
-
-    /// <summary>Поставщик ответил кодом — пусть и отказом в нашем запросе: он жив</summary>
-    private static bool Answered(Exception error)
-    {
-        for (var e = error; e != null; e = e.InnerException)
-        {
-            switch (e)
-            {
-                case ClientResultException { Status: > 0 }:
-                case HttpRequestException { StatusCode: not null }:
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Что считается отказом (16.2): сетевая ошибка, таймаут, 5xx, отказ авторизации —
-    /// поставщик не ответил. Плохой ответ модели — пустой, не по делу, без вызова
-    /// инструмента — отказом не считается и сюда не попадает вовсе: он не бросает.
-    /// Прочие 4xx — это наш запрос, а не их модель, и к запасной с ним идти незачем.
-    ///
-    /// 408 и 429 — тоже отказ: поставщик жив, но ответа нет, и запасная как раз
-    /// выручит. «Остановить» — не отказ: ход оборвали мы
-    /// </summary>
-    public static bool IsFailure(Exception error, CancellationToken ct)
-    {
-        for (var e = error; e != null; e = e.InnerException)
-        {
-            switch (e)
-            {
-                case OperationCanceledException:
-                    return !ct.IsCancellationRequested;
-                case ClientResultException { Status: 0 }:
-                    // Ответа нет вовсе — сеть; настоящая причина обычно внутри
-                    return true;
-                case ClientResultException result:
-                    return Failing((HttpStatusCode)result.Status);
-                case HttpRequestException { StatusCode: { } status }:
-                    return Failing(status);
-                case HttpRequestException or SocketException or IOException or TimeoutException:
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool Failing(HttpStatusCode status) =>
-        (int)status >= 500
-        || status is HttpStatusCode.Unauthorized
-            or HttpStatusCode.Forbidden
-            or HttpStatusCode.RequestTimeout
-            or HttpStatusCode.TooManyRequests;
 
     /// <summary>Текущая пауза модели; у ни разу не размыкавшейся — первая, <c>OpenFor</c></summary>
     private TimeSpan Pause(AiModel model) =>

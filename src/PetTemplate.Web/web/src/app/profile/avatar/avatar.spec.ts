@@ -1,31 +1,33 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Avatar } from './avatar';
-import { ProfileApiService } from '../../shared/api/profile-api.service';
+import { ProfileApiService } from '../profile-api.service';
 import { UserService } from '../../shared/core/user.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { ProfileModel } from '../../shared/models/profile.model';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('Avatar', () => {
   let component: Avatar;
   let fixture: ComponentFixture<Avatar>;
-  let profileApi: jasmine.SpyObj<ProfileApiService>;
+  let profileApi: Mocked<ProfileApiService>;
   let userService: UserService;
 
-  const profile: ProfileModel = {
+  const profile: ProfileModel = profileDto({
     id: '123',
     userName: 'TestUser',
     avatarId: 3,
     comment: null,
     isAdult: true,
     hasAcceptedTerms: true
-  };
+  });
 
   beforeEach(async () => {
-    profileApi = jasmine.createSpyObj<ProfileApiService>('ProfileApiService', ['details', 'setAvatar']);
+    profileApi = { details: vi.fn(), setAvatar: vi.fn() } as unknown as Mocked<ProfileApiService>;
 
     await TestBed.configureTestingModule({
       imports: [Avatar],
@@ -51,7 +53,7 @@ describe('Avatar', () => {
   });
 
   it('should load the profile when the session has none', async () => {
-    profileApi.details.and.resolveTo(profile);
+    profileApi.details.mockResolvedValue(profile);
 
     await component.ngOnInit();
 
@@ -65,7 +67,7 @@ describe('Avatar', () => {
 
   it('should save the picked avatar and mark it as selected', async () => {
     userService.setProfile(profile);
-    profileApi.setAvatar.and.resolveTo({});
+    profileApi.setAvatar.mockResolvedValue({});
     await fixture.whenStable();
 
     const options = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.avatar-option');
@@ -81,7 +83,7 @@ describe('Avatar', () => {
 
   it('should tell about a failed change', async () => {
     userService.setProfile(profile);
-    profileApi.setAvatar.and.rejectWith(new Error('Invalid avatar'));
+    profileApi.setAvatar.mockRejectedValue(new Error('Invalid avatar'));
 
     await component.selectAvatar(5);
 

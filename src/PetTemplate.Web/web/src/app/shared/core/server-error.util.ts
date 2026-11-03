@@ -26,7 +26,13 @@ export interface ErrorTranslator {
 }
 
 export function serverErrorMessage(error: unknown, translator: ErrorTranslator, fallback: string): string {
-  const body = (error as { error?: { code?: unknown; params?: I18nParams; error?: unknown } } | null)?.error;
+  const response = error as { status?: unknown; error?: { code?: unknown; params?: I18nParams; error?: unknown } } | null;
+
+  // Сбой сервера (5xx) не говорит человеку ничего: в теле общий текст и traceId
+  // для журнала, а не объяснение — показываем свою подпись вызывающего
+  if (typeof response?.status === 'number' && response.status >= 500) return fallback;
+
+  const body = response?.error;
   const code = body?.code;
 
   if (typeof code === 'string' && code.length > 0) {

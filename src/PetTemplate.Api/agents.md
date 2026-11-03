@@ -18,17 +18,23 @@
 
 Устройство — `specs/authorization.md`, 1.2 и 2.
 
-- Права есть только внутри пространства (workspace): в токене — клейм на право
-  `ws_permission = {workspaceId}|{(int)permission}` (`CustomClaimTypes.WorkspacePermission`),
-  глобальных `ClaimTypes.Role` нет. Активное пространство приезжает заголовком
-  `X-Workspace-Id` (`HttpContextExtensions.GetWorkspaceId`, нет или не `Guid` — `400`)
+- Права есть только внутри пространства (workspace), глобальных `ClaimTypes.Role` нет.
+  **В токене прав нет**: сервер читает их из базы на каждом запросе — отметкой `SessionGuard`
+  (`PermissionsIn`, кэш 30 секунд, спец. authorization, 2.3). Активное пространство приезжает
+  заголовком `X-Workspace-Id` (`HttpContextExtensions.GetWorkspaceId`, нет или не `Guid` — `400`)
+- Кто меняет состав или права пространства (выдача и отзыв прав, выход, удаление участника,
+  приглашение, создание, удаление и слияние аккаунта), **после коммита** зовёт
+  `SessionGuard.Forget` для каждого, чьи права поменялись. До коммита нельзя: чтение между
+  сбросом и коммитом положит в кэш старое. Внутри чужой транзакции — сбрасывает тот, кто её коммитит
 - Эндпоинт внутри пространства помечается `[AuthorizePermissions(PermissionEnum.…)]`:
-  нужно хотя бы одно из перечисленных прав **в пространстве из заголовка**.
+  нужно хотя бы одно из перечисленных прав **в пространстве из заголовка**. Проверка — фильтром
+  авторизации, до разбора тела и `[ValidateRequest]`: посторонний получает `403`, а не `422`.
   `[AuthorizePermissions]` без аргументов — «участник пространства» (любое право в нём):
   так закрыт состав пространства, у которого своего права нет
 - Без атрибута — только то, что живёт вне пространства или до него: создание, список своих,
   основное, выход (`WorkspaceController`), анонимные методы приглашения и `Accept`
-  (пространство берётся из приглашения)
+  (пространство берётся из приглашения). Метод, читающий `workspaceId` из параметров без
+  атрибута, — только из белого списка `WorkspaceWiringTests`: новый дописывается туда явно
 - **НЕ дублируем** проверку прав внутри сервисов — она на уровне контроллера, атрибутом.
   Сервис фильтрует сущности по пространству, а id из чужого — ошибка, а не доступ
 - **ВАЖНО:** Для методов чтения (GET) указываем **оба** разрешения: `Crud` и `Read`, например
@@ -36,7 +42,8 @@
   `Crud` подразумевает просмотр
 - Сессию собирает только `AuthResultFactory`. Запрос, который сам меняет права вызывающего
   (создание пространства, выход, приглашение) или отзывает сессии (смена пароля), отвечает
-  новой сессией — второй вызов «за токеном» не заводим (спец. authorization, 2.2)
+  новой сессией: клиенту нужен свежий `permissionsByWorkspace` — второй вызов «за сессией»
+  не заводим (спец. authorization, 2.2)
 - Права разделов проекта — точка расширения: значения в конец `PermissionEnum` и его
   клиентского двойника, подпись в `permission-catalog.ts`, выдача существующим участникам
   миграцией данных (спец. authorization, 1.1)
@@ -49,11 +56,11 @@
   (SHA-256 с солью в `SecurityStamp`) пересчитывается при входе сам
 - Отзыв сессий — `SessionGuard` (`specs/accounts.md`, 8.1): на каждом запросе `OnTokenValidated`
   (`RejectRevokedSession`) сверяет `iat` токена с `User.TokensValidAfterUtc` и проверяет, что
-  аккаунт есть. Кто меняет пароль (или удаляет аккаунт), ставит отметку `SessionGuard.Revoke`
+  аккаунт есть; та же отметка несёт права по пространствам. Кто меняет пароль (или удаляет аккаунт), ставит отметку `SessionGuard.Revoke`
   тем же сохранением, после сохранения зовёт `Forget`, а текущей сессии отдаёт новый токен
   (`AuthResultFactory.Build`) в ответе. Новый выпуск токена — только через `AuthResultFactory`
   (админский — только через `AdminTokenFactory`): в нём клейм `iat`, без него отзыв не работает
-- Проверка пароля — под лимитом неудач `AdminLoginLimiter` (`specs/accounts.md`, 8.1; общий
+- Проверка пароля — под лимитом неудач `LoginLimiter` (`specs/accounts.md`, 8.1; общий
   со входом в админку): `TryBeginProduct(userId, ClientAddress.Key(...))` до проверки,
   `attempt.Succeeded()` после верного пароля; заперто — `400 auth.error.tooManyAttempts`.
   Так устроены `Auth/LogIn`, `Auth/LogInAndLink`, `Account/ConfirmPassword`,
@@ -94,8 +101,8 @@
   `[ValidateRequest]` на входе нет — его `422` выдал бы, что дверь тут есть.
   Кодов отказов (`ErrorMessage`) админка не заводит — ошибки показываются текстом как есть
 - Отсюда и исключение из правила «русских строк в `throw` не бывает»: отказ по
-  содержанию запроса админский сервис бросает `ArgumentException` с русским текстом,
-  и `400` везёт его клиенту в поле `error`. Проверки полей — в сервисе, а не атрибутами:
+  содержанию запроса админский сервис бросает `AdminRejectionException` с русским текстом,
+  и `400` везёт его клиенту в поле `error`. Голый `ArgumentException` — это `500`. Проверки полей — в сервисе, а не атрибутами:
   у `422` валидации в теле коды, а переводить их админке нечем. «Такой записи нет» —
   голый `NotFound()` из контроллера, как и любой другой отказ админки
 - Вне `[AuthorizeAdmin]` четыре метода: `Admin/Login`, `GET Admin/Invitations/{token}`,
@@ -112,7 +119,8 @@
 ### Сверка пространства с параметрами
 
 - `[AuthorizePermissions]` **автоматически** сверяет пространство из заголовка с query-параметром
-  `workspaceId`, параметром маршрута `workspaceId` и свойством `WorkspaceId` в DTO
+  `workspaceId`, параметром маршрута `workspaceId` и свойством `WorkspaceId` в DTO — фильтром
+  действия раньше `[ValidateRequest]` (`AuthorizePermissions.FilterOrder`)
 - **НЕ нужно** писать вручную `if (dto.WorkspaceId != workspaceIdFromHeader)` в методах
 - Не совпало — `403 Forbidden`: иначе право, выданное в своём пространстве, открывало бы
   чужое, названное в параметрах
@@ -140,12 +148,14 @@
   GitHub: строка подключения, `JwtOptions:SigningKey`, `AdminOptions:SigningKey`,
   `Telegram:BotToken`, `VkOptions:PrivateKey`, `MailOptions:Password`, `AssistantOptions:Providers:main:ApiKey`
   (`specs/infrastructure.md`, раздел 9; полный список —
-  `IaC/DEPLOYMENT.md`, раздел 6; `publish-api.yml` и `rollback-api.yml` ставят один
-  и тот же набор). Конфигурация ASP.NET читает их поверх файла, поэтому значение
+  `IaC/DEPLOYMENT.md`, раздел 6). `docker run` один — `IaC/run-api.sh`: он передаёт их
+  контейнеру (`--env ИМЯ` без значения), а значения берутся из `env:` шага `publish-api.yml`
+  и `rollback-api.yml`. Конфигурация ASP.NET читает их поверх файла, поэтому значение
   из репозитория в прод не попадает никогда
 - Это **осознанная организация кода, а не долг**: заводить в `tech-debt/`
   «секреты в `appsettings.json`» не нужно. Настоящих значений в файлах нет и быть
-  не должно: новый ключ — секретом GitHub и строкой `--env` в обоих workflow
+  не должно: новый ключ — секретом GitHub, строкой `--env` в `IaC/run-api.sh` и строкой
+  в `env:` шага обоих workflow
 - Адреса соседних контейнеров — не секреты, и в переменные окружения им не надо:
   они лежат в `appsettings.Release.json` (по имени контейнера из `IaC/docker-compose.yml`
   в сети `nginx-proxy-man`; первым туда встанет Qdrant — `qdrantcontainer:6334`,
@@ -160,18 +170,21 @@
 - Всё, что не должно ни теряться, ни выполняться в запросе (письмо), — **командой в очередь**:
   `db.Enqueue(command)` (`LocalQueueHandlers/CommandQueue`) до общего `SaveChanges` — команда
   ложится в `local_queue` той же транзакцией, что и доменное изменение (outbox). Отдельный
-  `SaveChanges` на команду не делаем. Команда сериализует себя сама (`ToString()` — JSON)
+  `SaveChanges` на команду не делаем. Команда — класс с `ICommand` и своим устойчивым
+  `QueueName` (kebab-case, новое имя — строкой в `QueueRegistrationTests.QueueNamesAreStable`);
+  тело сериализует `CommandQueue`, `ToString()` у команды не переопределяем
 - Обработчик — `LocalQueue.Processing.ICommandHandler<TCommand>` пакета, регистрация —
   `h.Add<TCommand, THandler>(retryAfterFailure)` внутри `AddCommandQueueWorker(h => …)`
   в `ServicesExtensions.AddCommandQueue` (`Workers/CommandQueueRegistration`). Упала — строка
   прячется на `retryAfterFailure` (по умолчанию минута), и с каждой попыткой пауза удваивается
-  до `CommandQueueOptions.MaxRetryAfterFailure` (час); предела попыток нет — застрявшую команду
-  показывает тревога «Команда очереди не проходит».
+  до `CommandQueueOptions.MaxRetryAfterFailure` (час); после `CommandQueueOptions.MaxAttempts`
+  выдач (25; свой — `h.Add<…>(maxAttempts: …)`) команда бросается с ошибкой в лог и остаётся
+  в таблице отложенной — её показывает тревога «Команда очереди не проходит».
   Исключение — повтор, поэтому обработчик идемпотентен: сам проверяет, что уже сделано
   (письмо — по `AccountToken.MailSentAtUtc`)
 - **Воркеры.** Обычная команда — в общий воркер (один цикл, `CommandQueueOptions`). Команда,
-  которая идёт минутами и не должна ни ждать за чужими, ни держать их (ход ассистента, сверка
-  модели), — своим воркером: ещё один `AddCommandQueueWorker(h => h.Add<…>(), workers, prefetchCount,
+  которая идёт минутами или пачками и не должна ни ждать за чужими, ни держать их (ход ассистента,
+  сверка модели, индексация поиска), — своим воркером: ещё один `AddCommandQueueWorker(h => h.Add<…>(), workers, prefetchCount,
   invisibilityTimeout)`. Обработчик долгой команды продлевает аренду своей строки между шагами —
   `LocalQueue.Processing.ICommandLease.Extend(срок, ct)` пакета (вне воркера — ничего не делает)
 - Почта — только из обработчика очереди через `IMailSender`; тексты — `Mail/Templates/{ru,en}.json`
@@ -210,23 +223,38 @@
 
 Устройство — `specs/assistant.md`; рецепт инструментов раздела — там же, 7.1.
 
-- Инструменты раздела — `IAssistantToolSource` (`AddAssistantTools<T>()`), операции плана —
-  `IPlanOperationHandler` (`AddPlanOperation<T>()`). Правка `AssistantTools` и `PlanExecutor`
-  под раздел не нужна
+- Ход собирается одним `AddAssistantRuntime()` (`Assistant/AssistantRuntime`): его же берут мир
+  сверки модели и мир тестов, отличия — регистрациями поверх (`Replace`). Новый сервис хода —
+  туда, а не в `AddAssistant` приложения
+- Раздел проекта подключается **одной регистрацией** — `services.AddAssistantSection<T>()`,
+  класс `IAssistantSection`: в `Register` — инструменты (`section.Tools<T>()`), операции плана
+  (`section.Operation<T>()`) и сервисы, которые они зовут; глаголы трассы, фразы и данные сверки
+  модели — его же членами (спец. assistant, 7.1). Правка `AssistantTools`, `PlanExecutor`,
+  `TraceSummary` и `ModelCheckRunner` под раздел не нужна
 - **Инструмент ничего не пишет.** Пишущий кладёт операцию в план (`PlanCollector.Propose`);
   пишет только `apply_plan` через обработчик операции — после согласия или по прямому поручению (5.1)
   Единственное исключение — `remember_fact` ядра (12.5): факт памяти пишется мимо плана, и защищает
-  его ключ, обязанный прозвучать в реплике человека этого хода (`AssistantContext.UserText`)
-- **Права — в инструменте**, тем же набором, что на эндпоинте раздела (`AssistantPermissions.Has`;
-  у операции — `Permissions`, проверяет исполнитель): инструмент зовёт сервис мимо атрибута контроллера.
-  `userId` и пространство — только из `AssistantContext`, в схеме инструмента их нет
+  его ключ, обязанный прозвучать в реплике человека этого хода (`AssistantContext.UserText`), а у
+  общего факта — ещё и текст его словами (`MemoryService.IsGrounded`); по умолчанию факт личный
+- **Права — декларацией, проверяет ядро**: инструмент раздела — `AssistantTool.Create(метод, имя,
+  права…)` тем же набором, что на эндпоинте раздела, каталог оборачивает его в `PermittedFunction`
+  (живые права перед каждым вызовом); у операции — `Permissions`, проверяет исполнитель.
+  Проверять права в теле инструмента не нужно. `userId` и пространство — только из
+  `AssistantContext`, в схеме инструмента их нет
+- **Данные людей — не в системный промпт** (спец. assistant, 9): имена, названия, факты, резюме
+  и операции плана едут блоком данных (`AssistantPrompt.Data`, JSON в `<app_data>`); в системном —
+  только наши тексты. `Instructions` раздела — текст раздела, без данных. Подстановка в шаблон —
+  `SystemPromptBuilder.Fill` (один проход), не цепочка `Replace`
+- Своя транзакция в коде хода и операций плана — `NestedTransaction.Begin` (`Services/Services`),
+  а не `BeginTransactionAsync`: мир сверки модели ведёт ход внутри своей транзакции
 - **Отказ — строкой модели**, а не исключением: инструмент ловит `NotFound`/`BadRequest`/`Conflict`
   и отвечает текстом; у операции плана — исключение, исполнитель сделает из него крестик
 - Схема инструмента плоская (строки, числа, `bool`); описания — `[Description]`, по-русски; имя
   инструмента уникально во всём каталоге
 - Модель — только через `IModelChatClients` по строке справочника (`AiModelCatalog.Pick`); своего
-  `OpenAIClient` и `UseFunctionInvocation()` не заводим — цикл свой (15.2). Тесты — `FakeChatClient`,
-  в сеть ни один тест не ходит
+  `OpenAIClient` и `UseFunctionInvocation()` не заводим — цикл свой (15.2). Адаптер не-OpenAI
+  поставщика приносит свой `IProviderErrorClassifier` — иначе размыкатель его отказов не узнает
+  (16.5). Тесты — `FakeChatClient`, в сеть ни один тест не ходит
 - Тексты, которые ассистент пишет от себя в ленту, — `AssistantTexts`; промпты — `Assistant/Prompts/*.md`
 - Голос — только через `ITranscriptionService` (провод OpenAI-совместимый, поставщик — тот же
   `AssistantOptions.Providers`, своя только `Transcription.Model`); тесты — фейком движка или
@@ -251,6 +279,12 @@
 - У нас есть `GlobalExceptionHandler`, который автоматически обрабатывает все исключения
 - **НЕ требуется** оборачивать код в контроллерах в дополнительные `try-catch` блоки для логирования
 - Исключения из сервисов будут автоматически перехвачены и залогированы глобальным обработчиком
+- Статус дают только свои исключения — наследники `DomainException` (`PetTemplate.Shared/Exceptions`):
+  `BadRequestException` и `AdminRejectionException` — `400`, `NotFoundException` — `404`,
+  `ConflictException` — `409`; плюс `BadHttpRequestException` — `400`. Всё остальное, включая
+  `ArgumentException` и `InvalidOperationException` (их бросают библиотеки и `SingleAsync`), —
+  баг: `500` с общей фразой и `traceId`, запись в лог уровнем `Error`. Отказ, задуманный
+  кодом, бросаем своим типом, а не `ArgumentException`
 
 ## Сервисы
 

@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Router } from '@angular/router';
@@ -7,36 +8,37 @@ import { SessionResetService } from '../../core/session-reset.service';
 import { AccountApiService } from '../../api/account-api.service';
 import { AccountApiServiceMock } from '../../api/account-api.service.mock';
 import { I18nService } from '../../i18n/i18n.service';
-import { EventEmitterService } from '../event-emitter.service';
+import { MenuStateService } from '../menu-state.service';
 import { WorkspaceApiService } from '../../api/workspace-api.service';
 import { WorkspaceContextService } from '../../core/workspace-context.service';
 import { PermissionsService } from '../../services/permissions.service';
 import { PermissionEnum } from '../../enums/permission.enum';
 import { WorkspaceModel } from '../../models/workspace.model';
 import { ProfileModel } from '../../models/profile.model';
+import { profileDto, sessionDto } from '../../api/dto.mock';
 
 describe('TopNavComponent', () => {
   let fixture: ComponentFixture<TopNavComponent>;
   let el: HTMLElement;
   let userService: UserService;
-  let router: jasmine.SpyObj<Router>;
-  let workspaceApi: jasmine.SpyObj<WorkspaceApiService>;
+  let router: Mocked<Router>;
+  let workspaceApi: Mocked<WorkspaceApiService>;
 
-  const profile: ProfileModel = {
+  const profile: ProfileModel = profileDto({
     id: '1', userName: 'user', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true,
     primaryWorkspaceId: 'ws-1'
-  };
+  });
 
   const workspaces: WorkspaceModel[] = [
-    { id: 'ws-1', name: 'Рога и Копыта' },
-    { id: 'ws-2', name: 'Пончики и Плюшки' }
+    { id: 'ws-1', name: 'Рога и Копыта', membersCount: null },
+    { id: 'ws-2', name: 'Пончики и Плюшки', membersCount: null }
   ];
 
   async function render(authenticated: boolean): Promise<void> {
-    router = jasmine.createSpyObj<Router>('Router', ['navigateByUrl']);
-    router.navigateByUrl.and.resolveTo(true);
-    workspaceApi = jasmine.createSpyObj<WorkspaceApiService>('WorkspaceApiService', ['getList']);
-    workspaceApi.getList.and.resolveTo([]);
+    router = { navigateByUrl: vi.fn() } as unknown as Mocked<Router>;
+    router.navigateByUrl.mockResolvedValue(true);
+    workspaceApi = { getList: vi.fn() } as unknown as Mocked<WorkspaceApiService>;
+    workspaceApi.getList.mockResolvedValue([]);
 
     await TestBed.configureTestingModule({
       imports: [TopNavComponent],
@@ -51,9 +53,9 @@ describe('TopNavComponent', () => {
 
     userService = TestBed.inject(UserService);
     if (authenticated) {
-      userService.setProfile({
+      userService.setProfile(profileDto({
         id: '1', userName: 'user', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true
-      });
+      }));
     }
 
     fixture = TestBed.createComponent(TopNavComponent);
@@ -80,14 +82,14 @@ describe('TopNavComponent', () => {
 
   it('should clean up the session and go home on log out', async () => {
     await render(true);
-    const cleanup = jasmine.createSpy('cleanup');
+    const cleanup = vi.fn();
     TestBed.inject(SessionResetService).register(cleanup);
 
     button('Выйти')!.click();
     await fixture.whenStable();
 
     expect(cleanup).toHaveBeenCalled();
-    expect(userService.isAuthenticated).toBeFalse();
+    expect(userService.isAuthenticated).toBe(false);
     expect(router.navigateByUrl).toHaveBeenCalledWith('/');
   });
 
@@ -105,15 +107,15 @@ describe('TopNavComponent', () => {
   /** Вошёл с двумя пространствами: список приходит после ответа сервера */
   async function renderWithWorkspaces(): Promise<void> {
     await render(false);
-    workspaceApi.getList.and.resolveTo(workspaces);
-    TestBed.inject(UserService).applySession({
+    workspaceApi.getList.mockResolvedValue(workspaces);
+    TestBed.inject(UserService).applySession(sessionDto({
       token: 'token',
       profile,
       permissionsByWorkspace: {
         'ws-1': [PermissionEnum.WorkspaceMemberRead],
         'ws-2': [PermissionEnum.PermissionManagement]
       }
-    });
+    }));
     await settle();
   }
 
@@ -123,7 +125,7 @@ describe('TopNavComponent', () => {
     const select = el.querySelector<HTMLSelectElement>('#workspace-selector')!;
     expect(Array.from(select.options).map(o => o.textContent?.trim())).toEqual(['Рога и Копыта', 'Пончики и Плюшки']);
     expect(select.value).toBe('ws-1');
-    expect(select.disabled).toBeFalse();
+    expect(select.disabled).toBe(false);
   });
 
   /** Пространство и права переключаются вместе: меню рисуется по правам выбранного */
@@ -141,13 +143,13 @@ describe('TopNavComponent', () => {
 
   it('should disable the selector when there is a single workspace', async () => {
     await render(false);
-    workspaceApi.getList.and.resolveTo([workspaces[0]]);
-    TestBed.inject(UserService).applySession({
+    workspaceApi.getList.mockResolvedValue([workspaces[0]]);
+    TestBed.inject(UserService).applySession(sessionDto({
       token: 'token', profile, permissionsByWorkspace: { 'ws-1': [PermissionEnum.WorkspaceMemberRead] }
-    });
+    }));
     await settle();
 
-    expect(el.querySelector<HTMLSelectElement>('#workspace-selector')!.disabled).toBeTrue();
+    expect(el.querySelector<HTMLSelectElement>('#workspace-selector')!.disabled).toBe(true);
   });
 
   it('should not ask for workspaces of a user without any', async () => {
@@ -160,12 +162,12 @@ describe('TopNavComponent', () => {
 
   it('should toggle the side menu', async () => {
     await render(false);
-    const toggled = jasmine.createSpy('toggled');
-    TestBed.inject(EventEmitterService).invokeMenuToggleMenuFunction.subscribe(toggled);
+    const menu = TestBed.inject(MenuStateService);
+    expect(menu.expanded()).toBe(false);
 
     button('Показать или скрыть меню')!.click();
 
-    expect(toggled).toHaveBeenCalled();
+    expect(menu.expanded()).toBe(true);
   });
 
   it('should switch the interface language from the picker', async () => {

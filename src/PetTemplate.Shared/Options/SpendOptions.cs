@@ -23,6 +23,21 @@ public class SpendOptions
     public AssistantLimitOptions DefaultLimit { get; set; } = new();
 
     /// <summary>
+    /// Потолок одного человека за сутки по UTC — по всем его пространствам вместе (13.6).
+    /// Лимит пространства его не заменяет: пространство заводит кто угодно, и у каждого
+    /// нового своё умолчание — без этого потолка десять пустых пространств дали бы
+    /// десять суточных лимитов. Пустое поле — без потолка
+    /// </summary>
+    public AssistantDailyLimitOptions UserDailyLimit { get; set; } = new();
+
+    /// <summary>
+    /// Потолок всей установки за сутки по UTC — предохранитель счёта у поставщика (13.6):
+    /// весь расход, служебный тоже. Достигнут — ассистент выключен для всех до конца суток
+    /// тем же отказом, что «моделей нет» (<c>modelUnavailable</c>). Пустое поле — без потолка
+    /// </summary>
+    public AssistantDailyLimitOptions InstallationDailyLimit { get; set; } = new();
+
+    /// <summary>
     /// Как часто пересчитываются метрики-снимки денег (<c>BillingMonitor</c>):
     /// остаток и сверка у поставщика
     /// </summary>
@@ -52,4 +67,16 @@ public class AssistantLimitOptions
 
     /// <summary>Денег за календарный месяц по UTC</summary>
     public decimal? CostPerMonth { get; set; }
+}
+
+/// <summary>
+/// Суточные потолки человека и установки (13.6); пустой — потолка нет
+/// </summary>
+public class AssistantDailyLimitOptions
+{
+    /// <summary>Токенов (входящие и исходящие вместе) за сутки по UTC</summary>
+    public long? TokensPerDay { get; set; }
+
+    /// <summary>Денег за сутки по UTC, в <see cref="SpendOptions.Currency"/></summary>
+    public decimal? CostPerDay { get; set; }
 }

@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Скрипт для подготовки виртуальной машины для проекта PetTemplate
-# Запуск: chmod +x setup-vm.sh && ./setup-vm.sh
+# Запуск: bash setup-vm.sh — через bash, а не ./: `dotnet new` не сохраняет бит
+# исполнения (спец. infrastructure, 13)
 
 set -e  # Остановка при ошибке
 
@@ -96,11 +97,10 @@ echo ""
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Сборки клиента и админки и их предыдущие версии (спец. infrastructure, 7)
+# Сборки клиента и админки: releases/<sha> и ссылки current/previous в них заводит
+# выкатка (IaC/publish-static.sh, спец. infrastructure, 7)
 ensure_dir "$HOME/frontend"
-ensure_dir "$HOME/frontend-backup"
 ensure_dir "$HOME/adminka"
-ensure_dir "$HOME/adminka-backup"
 
 ensure_link "$SCRIPT_DIR/frontend" "$HOME/frontend"
 ensure_link "$SCRIPT_DIR/adminka" "$HOME/adminka"
@@ -159,32 +159,21 @@ else
     success "Найден файл: postgres/init/02-exporter-user.sh"
 fi
 
+# Бит исполнения: `dotnet new` его не сохраняет, а образ postgres неисполняемый *.sh
+# из /docker-entrypoint-initdb.d не запускает, а подключает в свой shell — и `exit 0`
+# в 02-exporter-user.sh (пароля нет) оборвал бы первичную инициализацию тома
+chmod +x "$SCRIPT_DIR"/postgres/init/*.sh "$SCRIPT_DIR"/*.sh
+success "Скрипты postgres/init и IaC исполняемые"
+
 echo ""
 echo "🔐 Шаг 5: Настройка переменных окружения..."
 echo ""
 
-# Проверка/создание .env файла для docker-compose. Текст — тот же, что в .env.example:
-# правите одно — правьте и другое
+# Проверка/создание .env файла для docker-compose
 ENV_FILE="$SCRIPT_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
-    cat > "$ENV_FILE" << 'EOF'
-# Database configuration. Пароли читаются только при первом старте Postgres на пустом
-# томе db-data (IaC/DEPLOYMENT.md, раздел 2)
-POSTGRES_DB=pettemplatedb
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=change_me_postgres_password
-# Пользователь приложения — под ним ходит API (секрет API_DB_CONNECTION_STRING), только DML
-APP_DB_USER=pettemplate_app
-APP_DB_PASSWORD=change_me_app_password
-# Владелец базы — под ним выкатка накатывает миграции (секрет MIGRATIONS_DB_CONNECTION_STRING)
-APP_DB_OWNER=pettemplate_owner
-APP_DB_OWNER_PASSWORD=change_me_owner_password
-
-# Порты
-# DB_PORT=5432   # только если раскомментирован ports у database (на 127.0.0.1)
-NGINX_HTTP_PORT=80
-NGINX_HTTPS_PORT=443
-EOF
+    # Из .env.example: один шаблон, а не копия текстом здесь — копия расходится первой
+    cp "$SCRIPT_DIR/.env.example" "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     success "Создан файл .env с дефолтными значениями"
     warning "ВАЖНО: Отредактируйте файл $ENV_FILE и установите безопасные пароли!"
@@ -209,7 +198,7 @@ echo "✅ Подготовка виртуальной машины заверш�
 echo ""
 echo "📝 Следующие шаги:"
 echo ""
-echo "1. Отредактируйте файл $ENV_FILE и установите безопасные пароли (POSTGRES_PASSWORD, APP_DB_PASSWORD)"
+echo "1. Отредактируйте файл $ENV_FILE и установите безопасные пароли (POSTGRES_PASSWORD, APP_DB_PASSWORD, APP_DB_OWNER_PASSWORD, POSTGRES_EXPORTER_PASSWORD)"
 echo "2. Запустите инфраструктуру: docker compose up -d"
 echo "3. Получите сертификат (IaC/DEPLOYMENT.md, раздел 4)"
 echo "4. Настройте GitHub Actions self-hosted runner (IaC/DEPLOYMENT.md, раздел 5)"

@@ -3,12 +3,13 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { RecoveryApiService } from '../../shared/api/recovery-api.service';
 import { UserService } from '../../shared/core/user.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { LanguageService } from '../../shared/i18n/language.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
 import { createPasswordForm } from '../../shared/form-models/account-form.model';
 import { applyServerValidationErrors } from '../../shared/core/server-validation.util';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /**
  * `/auth/reset/:token` — новый пароль по ссылке из письма или от поддержки
@@ -54,7 +55,7 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   `
 })
 export class ResetComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
   private readonly language = inject(LanguageService);
 
   /** Токен из адреса — через `withComponentInputBinding()` */

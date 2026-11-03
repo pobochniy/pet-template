@@ -5,9 +5,10 @@ import { MergeStateService } from '../../shared/core/merge-state.service';
 import { UserService } from '../../shared/core/user.service';
 import { AccountCardModel, AccountWorkspaceModel } from '../../shared/models/account.model';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { formatDate, formatNumber } from '../../shared/i18n/format.util';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * Экран слияния (спец. accounts, 7.3): два аккаунта рядом — логин, способы войти, дата
@@ -28,7 +29,7 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   templateUrl: './merge.component.html'
 })
 export class MergeComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
   private readonly state = inject(MergeStateService);
 
   protected readonly preview = this.state.preview;

@@ -12,9 +12,16 @@ name: Publish Help
 #
 # Сверка карты (HelpCheck map) здесь не идёт: она про полноту и живёт в ПР
 # (help-check.yml). Линтер идёт: справка с техническими словами не уезжает ни с какой ветки.
+# Publish Api зовёт с lint: false — он линтует тот же коммит до замены контейнера.
 
 on:
   workflow_call:
+    inputs:
+      lint:
+        description: 'Гонять HelpCheck lint (false — вызывающий уже прогнал его на этом коммите)'
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
 
 env:
@@ -33,13 +40,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: setup dotnet
+        if: ${{ inputs.lint != false }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
         env:
           DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
 
+      # У ручного запуска inputs.lint нет (null) — линтер идёт
       - name: lint 📖
+        if: ${{ inputs.lint != false }}
         run: dotnet run --project tools/HelpCheck -c Release -- lint
 
       - name: publish 📚

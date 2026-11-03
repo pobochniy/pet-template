@@ -2,35 +2,39 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PetTemplate.Api.Extensions;
 using PetTemplate.Api.Extensions.Auth;
+using PetTemplate.Services.Services;
 using PetTemplate.Shared.Enums;
 
 namespace PetTemplate.Api.Middlewares;
 
 /// <summary>
-/// Проверка <see cref="AuthorizePermissions"/> (спец. authorization, 1.2):
+/// Проверка <see cref="AuthorizePermissions"/> (спец. authorization, 1.2) — в два шага.
+///
+/// Фильтр авторизации — до разбора тела и до <c>[ValidateRequest]</c>: посторонний получает
+/// <c>403</c>, а не <c>422</c> с подробностями формы, в которую ему нельзя.
 /// <list type="number">
 /// <item>метод помечен ещё и <see cref="OutsideWorkspace"/> — ошибка разметки, исключение;</item>
 /// <item>не вошёл — <c>401</c>;</item>
 /// <item>нет заголовка <c>X-Workspace-Id</c> или в нём не <c>Guid</c> — <c>400</c>;</item>
-/// <item>пространство из заголовка не совпало с <c>workspaceId</c> в query или маршруте
-/// либо со свойством <c>WorkspaceId</c> в теле — <c>403</c>: иначе право, выданное
-/// в своём пространстве, открывало бы чужое, названное в параметрах;</item>
 /// <item>нет ни одного из прав в этом пространстве (без прав в атрибуте — ни одного
 /// права вовсе, то есть не участник) — <c>403</c>.</item>
 /// </list>
 ///
-/// Права берутся из токена, а не из базы: изменённые чужими руками доезжают
-/// до следующего входа (спец. authorization, 2.3, <c>tech-debt/jwt-stale-permissions.md</c>)
+/// Фильтр действия — после разбора, но раньше <c>[ValidateRequest]</c>
+/// (<see cref="AuthorizePermissions.FilterOrder"/>): пространство из заголовка не совпало
+/// с <c>workspaceId</c> в query или маршруте либо со свойством <c>WorkspaceId</c> в теле —
+/// <c>403</c>: иначе право, выданное в своём пространстве, открывало бы чужое, названное
+/// в параметрах.
+///
+/// Права — из базы, отметкой <see cref="SessionGuard"/> (кэш на секунды, сброс после
+/// каждой правки прав), а не из токена: отозванное право не живёт до истечения сессии
+/// (спец. authorization, 2.3)
 /// </summary>
-public class PermissionsValidation : Attribute, IActionFilter
+public class PermissionsValidation(SessionGuard sessions) : IAsyncAuthorizationFilter, IActionFilter
 {
     public PermissionEnum[] Permissions { get; set; } = [];
 
-    public void OnActionExecuted(ActionExecutedContext context)
-    {
-    }
-
-    public void OnActionExecuting(ActionExecutingContext context)
+    public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
         // Два признака на одном эндпоинте — ошибка разметки, а не запрос: молча
         // выбрать один значило бы либо требовать пространство у админки, либо пускать
@@ -60,17 +64,26 @@ public class PermissionsValidation : Attribute, IActionFilter
             return;
         }
 
-        if (!ValidateWorkspaceContext(context, workspaceId))
-        {
-            context.Result = new StatusCodeResult(403);
-            return;
-        }
+        var granted = await sessions.PermissionsIn(user.GetUserId(), workspaceId, context.HttpContext.RequestAborted);
 
         var isAllowed = Permissions.Length == 0
-            ? user.IsWorkspaceMember(workspaceId)
-            : user.HasAnyWorkspacePermission(workspaceId, Permissions);
+            ? granted.Length > 0
+            : Permissions.Any(granted.Contains);
 
         if (!isAllowed) context.Result = new StatusCodeResult(403);
+    }
+
+    public void OnActionExecuting(ActionExecutingContext context)
+    {
+        // Заголовок уже проверен на шаге авторизации: без него сюда не доходят
+        if (!ValidateWorkspaceContext(context, context.HttpContext.GetWorkspaceId()))
+        {
+            context.Result = new StatusCodeResult(403);
+        }
+    }
+
+    public void OnActionExecuted(ActionExecutedContext context)
+    {
     }
 
     /// <summary>

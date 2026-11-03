@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;
@@ -27,9 +28,12 @@ namespace PetTemplate.Tests.Arranges;
 /// (<see cref="FakeChatClient"/>), инструменты разделов — тестовые заметки
 /// (<c>Features/Assistant/TestPlan</c>): предметных сущностей в ядре нет.
 ///
-/// Сервисы собираются руками, а не из DI приложения: тесту нужны настройки, которые
-/// он правит до хода (<see cref="Settings"/>), и общие на весь мир копилка, исход
-/// и контекст хода — как у одной области команды в бою
+/// Ход собирается той же сборкой, что в бою и в мире сверки модели
+/// (<c>AddAssistantRuntime</c>, спец. assistant, 15.2), а не руками; поверх — то, чем мир
+/// теста отличается: база теста, настройки, которые тест правит до хода
+/// (<see cref="Settings"/>), и общие на весь мир копилка, исход и контекст хода — как
+/// у одной области команды в бою. Тестовый раздел подключён так же, как раздел
+/// проекта, — <see cref="TestNoteSection"/>
 /// </summary>
 public sealed class AssistantWorld
 {
@@ -38,6 +42,9 @@ public sealed class AssistantWorld
     private int _messages;
 
     private AssistantThreadService? _threads;
+
+    /// <summary>Область мира: одна на мир, как область одной команды хода</summary>
+    private IServiceScope _scope = null!;
 
     public Guid WorkspaceId { get; private init; }
 
@@ -118,11 +125,11 @@ public sealed class AssistantWorld
 
     /// <summary>Тред поверх своего контекста — как у второй вкладки (<see cref="NewContext"/>)</summary>
     public AssistantThreadService ThreadsOver(ApplicationContext db) => new(
-        db, Cancellation, new WorkspaceLimits(db, Options.Create(SpendSettings)),
+        db, Cancellation, new WorkspaceLimits(db, Options.Create(SpendSettings), Options.Create(Settings)),
         new AiModelCatalog(db, new ModelBreaker(db, Options.Create(_breakerSettings), NullLogger<ModelBreaker>.Instance, Metrics),
             NullLogger<AiModelCatalog>.Instance, Metrics),
         new MemoryService(db, Options.Create(Settings)),
-        BillingMetrics, Options.Create(Settings));
+        BillingMetrics, _scope.ServiceProvider.GetRequiredService<TraceSummary>(), Options.Create(Settings));
 
     /// <summary>Размыкатель поверх контекста теста: состояние — в строках справочника</summary>
     public ModelBreaker Breaker => new(Db, Options.Create(_breakerSettings), NullLogger<ModelBreaker>.Instance, Metrics);
@@ -199,31 +206,14 @@ public sealed class AssistantWorld
     /// <summary>Ход целиком поверх заранее записанной модели</summary>
     public AssistantRunService Runner(FakeChatClient chat) => Runner(new FakeModelChatClients(chat));
 
-    /// <summary>Ход, у которого видно, под какую строку справочника он брал клиента</summary>
-    public AssistantRunService Runner(IModelChatClients clients)
-    {
-        var settings = Options.Create(Settings);
-
-        return new AssistantRunService(
-            Db,
-            clients,
-            Models,
-            Breaker,
-            Tools,
-            Context,
-            Collector,
-            Executor,
-            Outcome,
-            new LoopGuards(settings),
-            new SystemPromptBuilder(settings, NullLogger<SystemPromptBuilder>.Instance),
-            new HistoryBuilder(Db, settings),
-            Memory,
-            new TraceWriter(Db, settings),
-            new RunBilling(Db, BillingMetrics, NullLogger<RunBilling>.Instance),
-            Notifier,
-            Metrics,
-            settings);
-    }
+    /// <summary>
+    /// Ход, у которого видно, под какую строку справочника он брал клиента. Из области
+    /// мира — копилка, исход, контекст и инструменты; предохранители — свои у каждого
+    /// хода, как в бою у каждой команды
+    /// </summary>
+    public AssistantRunService Runner(IModelChatClients clients) =>
+        ActivatorUtilities.CreateInstance<AssistantRunService>(
+            _scope.ServiceProvider, clients, new LoopGuards(Options.Create(Settings)));
 
     /// <summary>Голос поверх движка теста: тред, лимит и учёт — те же, что у мира</summary>
     public VoiceInputService Voice(ITranscriptionService engine) =>
@@ -374,26 +364,35 @@ public sealed class AssistantWorld
     };
 
     /// <summary>
-    /// Достроить мир: реестр операций, копилка, исполнитель и инструменты — одни
-    /// на мир, как в одной области команды
+    /// Достроить мир: сборка хода приложения и тестовый раздел, поверх — база, настройки
+    /// и общие объекты мира. Копилка, исполнитель и инструменты — из одной области,
+    /// как в одной области команды
     /// </summary>
     private AssistantWorld Assemble()
     {
-        var operations = new PlanOperations(
-        [
-            new CreateTestNoteOperation(Notes),
-            new CreateTestBookOperation(Notes),
-            new RenameTestNoteOperation(Notes)
-        ]);
-        var collector = new PlanCollector(operations);
-        var executor = new PlanExecutor(Db, operations, new AssistantPermissions(Db), Context);
-        var settings = Options.Create(Settings);
+        var services = new ServiceCollection();
+        services.AddAssistantRuntime();
+        services.AddAssistantSection(new TestNoteSection(Notes));
 
-        Operations = operations;
-        Collector = collector;
-        Executor = executor;
-        Tools = new AssistantTools(Help, Context, collector, executor, operations, Outcome, Memory,
-            [new TestNoteTools(collector, Notes)], settings);
+        services.AddLogging();
+        services.AddSingleton(Options.Create(Settings));
+        services.AddSingleton(Options.Create(_breakerSettings));
+        services.AddScoped(_ => Db);
+        services.AddTransient(_ => Help);
+        services.Replace(ServiceDescriptor.Singleton(Context));
+        services.Replace(ServiceDescriptor.Singleton(Outcome));
+        services.Replace(ServiceDescriptor.Singleton(Notifier));
+        services.Replace(ServiceDescriptor.Singleton(BillingMetrics));
+        // Метрики тест подменяет и после сборки мира — берутся на каждом разрешении
+        services.Replace(ServiceDescriptor.Transient(_ => Metrics));
+
+        _scope = services.BuildServiceProvider().CreateScope();
+        var provider = _scope.ServiceProvider;
+
+        Operations = provider.GetRequiredService<PlanOperations>();
+        Collector = provider.GetRequiredService<PlanCollector>();
+        Executor = provider.GetRequiredService<PlanExecutor>();
+        Tools = provider.GetRequiredService<AssistantTools>();
 
         return this;
     }

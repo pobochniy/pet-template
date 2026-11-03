@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using PetTemplate.Services.Commands;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Shared.Options;
 using PetTemplate.Tests.Arranges;
+using PetTemplate.Tests.Asserts;
 using PetTemplate.Tests.EntityBuilders;
 
 namespace PetTemplate.Tests.Features.Workspace;
@@ -36,6 +39,25 @@ public class WorkspaceCleanupTests
         // Указатель на удалённое не остаётся ни у кого
         var profile = await db.Profiles.AsNoTracking().SingleAsync(x => x.Id == oleg.Id);
         Assert.Null(profile.PrimaryWorkspaceId);
+    }
+
+    /// <summary>
+    /// Снос пространства ставит команду унести его точки из Qdrant той же транзакцией
+    /// (спец. search, 4): в payload точки лежит текст, и разделу помнить про поиск не нужно
+    /// </summary>
+    [Fact]
+    public async Task PurgeQueuesSearchPointsRemoval()
+    {
+        var abandoned = new WorkspaceBuilder("Шарики и Палочки")
+            .CreatedAt(DateTime.UtcNow - WorkspaceConstants.AbandonedRetention - TimeSpan.FromDays(1))
+            .Please();
+
+        var (_, db) = await Given.ApiClient(arrange => arrange.Workspaces.Add(abandoned));
+
+        await Cleanup(db);
+
+        var command = Assert.Single(await QueueAssert.Commands<SearchPurgeWorkspaceCommand>(db));
+        Assert.Equal(abandoned.Id, command.WorkspaceId);
     }
 
     /// <summary>
@@ -94,9 +116,10 @@ public class WorkspaceCleanupTests
             arrange.WorkspaceInvitations.AddRange(old, fresh);
         });
 
-        var workspaces = new WorkspaceService(db);
+        var sessions = new SessionGuard(db, new MemoryCache(new MemoryCacheOptions()));
+        var workspaces = new WorkspaceService(db, sessions);
         var emails = new EmailConfirmation(db, new AccountTokens(db), Options.Create(new AccountOptions()));
-        var deleted = await new WorkspaceInvitationService(db, new AuthService(db, workspaces, emails, new UserNameGenerator(db))).CleanupOld();
+        var deleted = await new WorkspaceInvitationService(db, new AuthService(db, workspaces, emails, new UserNameGenerator(db)), sessions).CleanupOld();
 
         Assert.Equal(1, deleted);
         var left = await db.WorkspaceInvitations.AsNoTracking().Select(x => x.Id).ToListAsync();
@@ -104,5 +127,5 @@ public class WorkspaceCleanupTests
     }
 
     private static Task<int> Cleanup(PetTemplate.Db.Entity.ApplicationContext db) =>
-        new WorkspaceService(db).CleanupAbandoned();
+        new WorkspaceService(db, new SessionGuard(db, new MemoryCache(new MemoryCacheOptions()))).CleanupAbandoned();
 }

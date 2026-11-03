@@ -17,7 +17,8 @@ public record HelpSearchResult(string? Commit, IReadOnlyList<HelpHit> Hits)
 
 /// <summary>
 /// Справка в памяти API (спец. help, 6.1 и 6.4): держит текущий индекс, ищет по нему
-/// и подменяет его новой версией. Синглтон — индекс один на процесс, контейнер API один.
+/// и подменяет его новой версией. Синглтон — индекс один на процесс, контейнер API один
+/// (<c>tech-debt/single-instance.md</c>).
 ///
 /// Эмбеддер — типизированный клиент с коротким временем жизни, поэтому берётся из
 /// области на каждую сборку и каждый поиск, а не держится здесь.
@@ -30,7 +31,8 @@ public class HelpSearch(
     IOptions<HelpOptions> options,
     IOptions<SearchOptions> searchOptions,
     ILogger<HelpSearch> logger,
-    AssistantMetrics? metrics = null)
+    AssistantMetrics? metrics = null,
+    TimeProvider? time = null)
 {
     /// <summary>
     /// Сколько ждём вектор запроса: эмбеддер считает короткую строку за десятки
@@ -42,6 +44,14 @@ public class HelpSearch(
 
     /// <summary>Последнее состояние «справки нет», о котором уже написали в лог</summary>
     private string? _loggedProblem;
+
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
+    /// <summary>Пауза до следующей пересборки ради недостающих векторов; ноль — догонять нечего</summary>
+    private TimeSpan _vectorRetryDelay;
+
+    /// <summary>Не раньше этого момента пересобираем тот же выпуск за векторами</summary>
+    private DateTimeOffset _vectorRetryAt;
 
     /// <summary>Каталог кэша векторов; тесты подставляют свой</summary>
     public string? CacheDirectory { get; init; } = HelpIndexBuilder.DefaultCacheDirectory;
@@ -84,7 +94,11 @@ public class HelpSearch(
     ///
     /// Ссылку <c>current</c> разрешаем один раз в начале: публикация может переключить
     /// её посреди чтения, и манифест одной версии со статьями другой дали бы индекс
-    /// с чужим коммитом
+    /// с чужим коммитом.
+    ///
+    /// Тот же коммит пересобирается, пока у разделов не хватает векторов (эмбеддер лежал
+    /// при сборке, 6.4), — с паузой, удваивающейся до <see cref="HelpOptions.VectorRetryMaxDelay"/>.
+    /// Готовые векторы лежат в кэше, повтор считает только недостающие
     /// </summary>
     public async Task Refresh(CancellationToken ct)
     {
@@ -100,7 +114,9 @@ public class HelpSearch(
         }
 
         _loggedProblem = null;
-        if (Current?.Commit == manifest.Commit) return;
+        var current = Current;
+        var sameCommit = current?.Commit == manifest.Commit;
+        if (sameCommit && !VectorsDue(current!)) return;
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var settings = searchOptions.Value;
@@ -114,12 +130,37 @@ public class HelpSearch(
         Volatile.Write(ref _current, index);
         metrics?.HelpVersion(index.Commit);
         logger.LogInformation(
-            "Help {Commit} published: {Sections} sections, {Recomputed} vectors recomputed",
-            index.Commit, index.Sections, index.RecomputedVectors);
+            "Help {Commit} published: {Sections} sections, {Recomputed} vectors recomputed, {Missing} missing",
+            index.Commit, index.Sections, index.RecomputedVectors, index.MissingVectors);
+        ScheduleVectorRetry(index, sameCommit);
     }
 
     /// <summary>Подменить индекс готовым — для сверки по справке репозитория</summary>
     public void Use(HelpIndex index) => Volatile.Write(ref _current, index);
+
+    /// <summary>Пора ли пересобрать тот же выпуск ради недостающих векторов</summary>
+    private bool VectorsDue(HelpIndex index) =>
+        EmbedderConfigured && index.MissingVectors > 0 && _time.GetUtcNow() >= _vectorRetryAt;
+
+    /// <summary>
+    /// Векторов хватает — догонять нечего. Не хватает — следующая попытка через паузу:
+    /// у нового выпуска первая, у повтора того же — вдвое дольше прежней, до потолка
+    /// </summary>
+    private void ScheduleVectorRetry(HelpIndex index, bool sameCommit)
+    {
+        if (!EmbedderConfigured || index.MissingVectors == 0)
+        {
+            _vectorRetryDelay = TimeSpan.Zero;
+
+            return;
+        }
+
+        var settings = options.Value;
+        _vectorRetryDelay = sameCommit && _vectorRetryDelay > TimeSpan.Zero
+            ? TimeSpan.FromTicks(Math.Min(_vectorRetryDelay.Ticks * 2, settings.VectorRetryMaxDelay.Ticks))
+            : settings.VectorRetryDelay;
+        _vectorRetryAt = _time.GetUtcNow() + _vectorRetryDelay;
+    }
 
     private static string? Resolve(string path)
     {

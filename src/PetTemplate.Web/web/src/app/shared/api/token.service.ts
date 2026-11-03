@@ -1,18 +1,17 @@
 import { Injectable } from '@angular/core';
+import { readSession } from '../core/session-store';
 
+/**
+ * Токен текущей сессии — для `authInterceptor`.
+ *
+ * Своего кеша нет намеренно: токен читается из записи сессии (`session-store.ts`)
+ * на каждый запрос. Соседняя вкладка могла перевыпустить сессию (смена пароля
+ * отзывает прежние токены) — запрос уйдёт уже со свежим. Записывает сессию только
+ * `UserService`
+ */
 @Injectable({ providedIn: 'root' })
 export class TokenService {
-  private _token: string = '';
-
   get Token(): string {
-    if (!this._token) {
-      this._token = localStorage.getItem('token') || '';
-    }
-    return this._token;
-  }
-
-  set Token(val: string) {
-    this._token = val;
-    localStorage.setItem('token', val);
+    return readSession()?.token ?? '';
   }
 }

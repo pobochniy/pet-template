@@ -14,8 +14,9 @@ public class AuthenticationResultDto
     public ProfileDto Profile { get; set; } = null!;
 
     /// <summary>
-    /// Те же права, что в токене, — словарём по пространствам. Клиент по ним рисует
-    /// меню и селектор пространств, не разбирая JWT
+    /// Права по пространствам на момент выдачи сессии — только для клиента: по ним он рисует
+    /// меню и селектор пространств. В токене прав нет, сервер читает их из базы
+    /// (спец. authorization, 2.3)
     /// </summary>
     public Dictionary<Guid, List<PermissionEnum>> PermissionsByWorkspace { get; set; } = new();
 

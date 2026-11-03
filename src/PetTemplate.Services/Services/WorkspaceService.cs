@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PetTemplate.Db.Entity;
+using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Dto;
 using PetTemplate.Shared.Enums;
@@ -21,7 +23,7 @@ namespace PetTemplate.Services.Services;
 /// до удаления самого пространства.</item>
 /// </list>
 /// </summary>
-public class WorkspaceService(ApplicationContext db)
+public class WorkspaceService(ApplicationContext db, SessionGuard sessions)
 {
     /// <summary>
     /// Все права системы — набор владельца пространства. Его получает создатель
@@ -51,6 +53,9 @@ public class WorkspaceService(ApplicationContext db)
 
         var workspaceId = await Add(dto.Name.Trim(), userId, primaryOf, ct);
         await db.SaveChangesAsync(ct);
+        // Права создателя проверяются по отметке SessionGuard: без сброса новое
+        // пространство было бы закрыто для него до истечения кэша (спец. authorization, 2.3)
+        sessions.Forget(userId);
 
         return workspaceId;
     }
@@ -136,9 +141,13 @@ public class WorkspaceService(ApplicationContext db)
     /// при входе, если ушли из основного (<see cref="RepointPrimary"/>).
     ///
     /// Вышел последний — пространство удаляется сразу, тем же порядком, что фоновая
-    /// чистка: передавать его некому, а полгода до чистки оно висело бы мёртвым
+    /// чистка: передавать его некому, а полгода до чистки оно висело бы мёртвым.
+    ///
+    /// Возвращает тех, чьи права поменялись, — вышедшего и получивших переданное право.
+    /// Их отметки <see cref="SessionGuard"/> сбрасываются после коммита: сам, если транзакции
+    /// вызывающего нет; внутри чужой (удаление аккаунта) — сбрасывает вызывающий после своего
     /// </summary>
-    public async Task Leave(Guid userId, Guid workspaceId, CancellationToken ct = default)
+    public async Task<IReadOnlyCollection<Guid>> Leave(Guid userId, Guid workspaceId, CancellationToken ct = default)
     {
         var membership = await db.UserInPermissions
             .Where(x => x.UserId == userId && x.WorkspaceId == workspaceId)
@@ -152,10 +161,16 @@ public class WorkspaceService(ApplicationContext db)
         db.UserInPermissions.RemoveRange(membership);
         await ForgetPersonalFacts(userId, workspaceId, ct);
 
-        await TransferPermissions(workspaceId, leavingUserId: userId, ct);
+        var heirs = await TransferPermissions(workspaceId, leavingUserId: userId, ct);
         await RepointPrimary(userId, workspaceId, ct);
 
         await db.SaveChangesAsync(ct);
+
+        IReadOnlyCollection<Guid> changed = [userId, ..heirs];
+        if (db.Database.CurrentTransaction == null)
+        {
+            sessions.Forget(changed);
+        }
 
         // Удаление аккаунта (AccountDeletion) зовёт выход внутри своей транзакции и только
         // из пространств, где кто-то остаётся. Снос открывает свою транзакцию сам,
@@ -165,6 +180,8 @@ public class WorkspaceService(ApplicationContext db)
         {
             await Purge(workspaceId, ct);
         }
+
+        return changed;
     }
 
     /// <summary>
@@ -198,10 +215,31 @@ public class WorkspaceService(ApplicationContext db)
 
         // Убрать могли и единственного, кто раздавал права: пространство без такого
         // участника чинить потом будет некому
-        await TransferPermissions(workspaceId, leavingUserId: userId, ct);
+        var heirs = await TransferPermissions(workspaceId, leavingUserId: userId, ct);
         await RepointPrimary(userId, workspaceId, ct);
 
         await db.SaveChangesAsync(ct);
+
+        // Удалённый теряет доступ со следующего запроса, а не с истечением кэша
+        // (спец. authorization, 2.3)
+        sessions.Forget([userId, ..heirs]);
+    }
+
+    /// <summary>
+    /// Свои права по пространствам — из базы, как их проверяет сервер (спец. authorization, 2.3).
+    /// Клиент перечитывает ими меню и гарды на <c>403</c> и при возврате во вкладку: права,
+    /// изменённые чужими руками, видны без перевхода и без перевыпуска токена
+    /// </summary>
+    public async Task<Dictionary<Guid, List<PermissionEnum>>> MyPermissions(Guid userId, CancellationToken ct = default)
+    {
+        var rows = await db.UserInPermissions
+            .Where(x => x.UserId == userId)
+            .Select(x => new { x.WorkspaceId, x.PermissionId })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(x => x.WorkspaceId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.PermissionId).Order().ToList());
     }
 
     /// <summary>
@@ -289,12 +327,16 @@ public class WorkspaceService(ApplicationContext db)
     /// содержимого на пространство стоят <c>Restrict</c>, каскада от него нет.
     ///
     /// Точка расширения: раздел проекта дописывает удаление своего содержимого сюда,
-    /// <b>до</b> удаления самого пространства. Если раздел индексирует содержимое
-    /// в поиске, точки в Qdrant удаляет тоже он: <c>SearchIndex.Of</c> на свои сущности
-    /// тем же сохранением, до их удаления (спец. search, 4 и 9)
+    /// <b>до</b> удаления самого пространства. Точки поиска в Qdrant разделу удалять
+    /// не нужно: их по <c>workspaceId</c> уносит команда, которую ставит этот же метод
+    /// (спец. search, 4)
     /// </summary>
     public async Task PurgeContents(Guid workspaceId, CancellationToken ct)
     {
+        // Векторы с текстом чанков — в Qdrant, мимо транзакции: строка очереди уходит в ней,
+        // и точки удалит воркер поиска, только если снос зафиксирован
+        await db.EnqueueNow(new SearchPurgeWorkspaceCommand { WorkspaceId = workspaceId }, ct);
+
         // Права приглашений уносит каскад со своего приглашения
         await db.WorkspaceInvitations.Where(x => x.WorkspaceId == workspaceId).ExecuteDeleteAsync(ct);
 
@@ -327,9 +369,10 @@ public class WorkspaceService(ApplicationContext db)
     /// выбирать из них одного нам не по чему.
     ///
     /// Ничего не сохраняет: и выход, и удаление участника уходят одним
-    /// <c>SaveChanges</c> вместе со снятием прав
+    /// <c>SaveChanges</c> вместе со снятием прав. Возвращает тех, кому право досталось
     /// </summary>
-    private async Task TransferPermissions(Guid workspaceId, Guid leavingUserId, CancellationToken ct)
+    private async Task<IReadOnlyCollection<Guid>> TransferPermissions(Guid workspaceId, Guid leavingUserId,
+        CancellationToken ct)
     {
         var rest = await db.UserInPermissions
             .Where(x => x.WorkspaceId == workspaceId && x.UserId != leavingUserId)
@@ -337,9 +380,9 @@ public class WorkspaceService(ApplicationContext db)
             .ToListAsync(ct);
 
         // Пространство опустело — раздавать право некому: оно удаляется сразу в Leave
-        if (rest.Count == 0) return;
+        if (rest.Count == 0) return [];
 
-        if (rest.Any(x => x.PermissionId == PermissionEnum.PermissionManagement)) return;
+        if (rest.Any(x => x.PermissionId == PermissionEnum.PermissionManagement)) return [];
 
         var members = rest.Select(x => x.UserId).Distinct().ToList();
 
@@ -358,6 +401,8 @@ public class WorkspaceService(ApplicationContext db)
                 }));
 
         db.UserInPermissions.AddRange(missing);
+
+        return members;
     }
 
     /// <summary>

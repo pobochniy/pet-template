@@ -10,13 +10,13 @@ import {
 export const TIME_ZONE_HEADER = 'X-Time-Zone';
 
 export interface IAssistantApiService {
-  History(cursor?: string): Promise<AssistantHistory>;
+  History(cursor?: string, signal?: AbortSignal): Promise<AssistantHistory>;
   Send(text: string): Promise<AssistantSendResult>;
-  Run(id: string, waitSeconds?: number): Promise<AssistantRun>;
+  Run(id: string, waitSeconds?: number, signal?: AbortSignal): Promise<AssistantRun>;
   Stop(id: string): Promise<void>;
   Trace(id: string): Promise<AssistantTrace>;
   Clear(): Promise<void>;
-  Memory(): Promise<AssistantMemory>;
+  Memory(signal?: AbortSignal): Promise<AssistantMemory>;
   DeleteFact(id: string): Promise<void>;
   Transcribe(audio: Blob, fileName: string, seconds: number): Promise<string>;
 }
@@ -36,8 +36,8 @@ export class AssistantApiService extends BaseApiService implements IAssistantApi
   }
 
   /** Последняя страница ленты; `cursor` — идентификатор верхнего сообщения страницы */
-  public History(cursor?: string) {
-    return this.get<AssistantHistory>(cursor ? `History?cursor=${encodeURIComponent(cursor)}` : 'History');
+  public History(cursor?: string, signal?: AbortSignal) {
+    return this.get<AssistantHistory>(cursor ? `History?cursor=${encodeURIComponent(cursor)}` : 'History', signal);
   }
 
   /**
@@ -51,17 +51,17 @@ export class AssistantApiService extends BaseApiService implements IAssistantApi
    */
   public Send(text: string) {
     return firstValueFrom(this.http.post<AssistantSendResult>('/api/Assistant/Send', { text }, {
-      withCredentials: true,
       headers: { [TIME_ZONE_HEADER]: Intl.DateTimeFormat().resolvedOptions().timeZone }
     }));
   }
 
   /**
    * Состояние хода. С `waitSeconds` сервер держит запрос до смены состояния —
-   * короткий ход отвечает в момент завершения, а не на следующем тике
+   * короткий ход отвечает в момент завершения, а не на следующем тике.
+   * `signal` обрывает ожидание: экран закрыт или пространство сменилось
    */
-  public Run(id: string, waitSeconds = 0) {
-    return this.get<AssistantRun>(waitSeconds > 0 ? `Run/${id}?wait=${waitSeconds}` : `Run/${id}`);
+  public Run(id: string, waitSeconds = 0, signal?: AbortSignal) {
+    return this.get<AssistantRun>(waitSeconds > 0 ? `Run/${id}?wait=${waitSeconds}` : `Run/${id}`, signal);
   }
 
   public async Stop(id: string) {
@@ -79,8 +79,8 @@ export class AssistantApiService extends BaseApiService implements IAssistantApi
   }
 
   /** Память ассистента в активном пространстве: общее и своё (12.5) */
-  public Memory() {
-    return this.get<AssistantMemory>('Memory');
+  public Memory(signal?: AbortSignal) {
+    return this.get<AssistantMemory>('Memory', signal);
   }
 
   /** Убрать факт — насовсем; строка «Запомнил» в ленте при этом остаётся (12.5) */

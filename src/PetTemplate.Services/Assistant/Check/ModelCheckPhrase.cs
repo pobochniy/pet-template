@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using PetTemplate.Services.Assistant.Sections;
 
 namespace PetTemplate.Services.Assistant.Check;
 
@@ -10,9 +11,9 @@ namespace PetTemplate.Services.Assistant.Check;
 /// Ожидания намеренно мягкие: сверяется не дословный ответ, а то, что модель
 /// разобрала — какой инструмент позвала и не рассказала ли лишнего.
 ///
-/// Набор — ресурс сборки (<c>phrases.json</c> рядом). В ядре он про ядро: цикл, справка,
-/// память, уточняющий вопрос. Раздел проекта со своими инструментами (спец. assistant, 7.1)
-/// дописывает сюда свои фразы, а данные под них — в <see cref="ModelCheckWorld"/>
+/// Набор ядра — ресурс сборки (<c>phrases.json</c> рядом): цикл, справка, память,
+/// уточняющий вопрос. Раздел проекта со своими инструментами (спец. assistant, 7.1)
+/// приносит свои фразы и данные под них сам (<c>IAssistantSection.Phrases</c> и <c>Seed</c>)
 /// </summary>
 public class ModelCheckPhrase
 {
@@ -39,8 +40,12 @@ public class ModelCheckPhrase
         return JsonSerializer.Deserialize<List<ModelCheckPhrase>>(stream, Json) ?? [];
     });
 
-    /// <summary>Набор сверки — тот, что лежит в сборке</summary>
+    /// <summary>Набор ядра — тот, что лежит в сборке</summary>
     public static IReadOnlyList<ModelCheckPhrase> Embedded() => Set.Value;
+
+    /// <summary>Набор сверки целиком: фразы ядра, за ними — фразы разделов по порядку регистрации</summary>
+    public static IReadOnlyList<ModelCheckPhrase> Of(IEnumerable<IAssistantSection> sections) =>
+        [.. Embedded(), .. sections.SelectMany(x => x.Phrases)];
 
     public static readonly JsonSerializerOptions Json = new()
     {

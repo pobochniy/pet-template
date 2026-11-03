@@ -7,6 +7,7 @@ using PetTemplate.Services.Commands;
 using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 using PetTemplate.Tests.Arranges;
 using PetTemplate.Tests.EntityBuilders;
@@ -351,7 +352,7 @@ public class DialogEvaluationTests
             Service(db, new FakeChatClient()).Start(Batch(_seed.Id, 6), _vasya.Id));
 
         // Assert
-        Assert.Equal("Размер пачки — от 1 до 5", Assert.IsType<ArgumentException>(refused).Message);
+        Assert.Equal("Размер пачки — от 1 до 5", Assert.IsType<AdminRejectionException>(refused).Message);
         Assert.False(await db.AdminJobs.AnyAsync());
     }
 
@@ -368,7 +369,7 @@ public class DialogEvaluationTests
             Service(db, new FakeChatClient()).Start(Batch(_seed.Id, 5), _vasya.Id));
 
         // Assert
-        Assert.IsType<ArgumentException>(refused);
+        Assert.IsType<AdminRejectionException>(refused);
         Assert.False(await db.AdminJobs.AnyAsync());
     }
 
@@ -387,7 +388,7 @@ public class DialogEvaluationTests
             Service(db, new FakeChatClient()).Start(Batch(_seed.Id, 5), _vasya.Id));
 
         // Assert
-        Assert.IsType<ArgumentException>(refused);
+        Assert.IsType<AdminRejectionException>(refused);
         Assert.Equal(1, await db.AdminJobs.CountAsync());
     }
 
@@ -659,7 +660,7 @@ public class DialogEvaluationTests
 
     private static async Task<Guid[]> Queued(ApplicationContext db, Guid jobId)
     {
-        var type = typeof(DialogEvaluationCommand).FullName;
+        var type = CommandQueue.TypeOf<DialogEvaluationCommand>();
         var data = await db.LocalQueue.Where(x => x.CommandType == type).Select(x => x.Data).ToListAsync();
 
         return data

@@ -1,21 +1,25 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AssistantApiService } from '../shared/api/assistant-api.service';
 import { AlertsService } from '../shared/alerts/alerts.service';
-import { I18nService } from '../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../shared/core/server-error.util';
 import { WorkspaceContextService } from '../shared/core/workspace-context.service';
+import { UserService } from '../shared/core/user.service';
+import { isAbortError } from '../shared/api/base-api.service';
 import { SessionResetService } from '../shared/core/session-reset.service';
 import {
   AssistantMessage, AssistantMessageRole, AssistantRun, isRunFinished
 } from '../shared/models/assistant.model';
+import { injectI18n } from '../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from './assistant.scopes';
 
 /** Сколько держится всплывающая ошибка ассистента */
 const ALERT_MS = 5000;
 
-/** Отказы `Send` лимитом пространства (спец. assistant, 13.6) — общий лимит всех участников */
+/** Отказы `Send` лимитом (спец. assistant, 13.6): пространства — общий для участников, человека — общий для его пространств */
 export const LIMIT_REFUSAL_CODES: readonly string[] = [
   'assistant.error.dailyLimitReached',
-  'assistant.error.monthlyLimitReached'
+  'assistant.error.monthlyLimitReached',
+  'assistant.error.userDailyLimitReached'
 ];
 
 /**
@@ -25,16 +29,23 @@ export const LIMIT_REFUSAL_CODES: readonly string[] = [
  * стрима токенов нет тоже. Поэтому здесь живёт цикл долгого опроса — один запрос
  * на двадцать секунд вместо двадцати запросов в секунду.
  *
- * Тред — пара «человек + пространство» (12.1): сменили пространство в шапке —
- * лента, ход и плашка лимита прошлого пространства уходят, открытый экран
- * перечитывает свой тред. Выход из аккаунта убирает всё через `SessionResetService`.
+ * Тред — пара «человек + пространство» (12.1): сменился контекст вкладки
+ * (`UserService.context`) — запросы про прежний тред обрываются (`AbortSignal` до
+ * `HttpClient`), лента, ход и плашка лимита уходят, открытый экран перечитывает свой тред.
+ * Каждая запись ответа в сигналы сверяется с отменой: ответ про прошлое пространство
+ * в ленту не ляжет. Выход из аккаунта убирает всё через `SessionResetService`.
+ *
+ * Лента здесь не `resource()`: её дописывают отправка, подгрузка выше и конец хода,
+ * то есть это изменяемое состояние, а не чтение. Правило «чтение — `resource`,
+ * команды — `async/await`» выполнено иначе — отменой на смену контекста
  */
 @Injectable({ providedIn: 'root' })
 export class AssistantService {
   private readonly api = inject(AssistantApiService);
   private readonly alerts = inject(AlertsService);
-  private readonly i18n = inject(I18nService);
+  private readonly i18n = injectI18n(...ASSISTANT_SCOPES);
   private readonly workspaceContext = inject(WorkspaceContextService);
+  private readonly context = inject(UserService).context;
 
   /** Сколько секунд сервер держит ответ. Своё ожидание у него тоже ограничено */
   private static readonly WaitSeconds = 20;
@@ -48,6 +59,12 @@ export class AssistantService {
    * превратил бы долгий опрос в горячий цикл
    */
   private static readonly PollGapMs = 250;
+
+  /**
+   * Сколько раз перечитать ленту, пока реплика ждёт хода за останавливаемым (3 с × 60 —
+   * три минуты: столько старый ход в худшем случае дожидается ответа поставщика)
+   */
+  private static readonly WaitingChecks = 60;
 
   public readonly messages = signal<AssistantMessage[]>([]);
   public readonly activeRun = signal<AssistantRun | undefined>(undefined);
@@ -80,23 +97,28 @@ export class AssistantService {
 
   private watching: string | null = null;
 
-  /** Открыт ли экран чата: только ему нужна лента после смены пространства */
+  /** Открыт ли экран чата: только ему нужна лента и долгий опрос */
   private attached = false;
+
+  /**
+   * Отмена всего, что грузится про текущий тред. Обрывается сменой контекста,
+   * закрытием экрана и уборкой при выходе — и заводится заново
+   */
+  private scope = new AbortController();
+
+  /** Контекст, для которого собрана лента: эффект сравнивает с ним, а не пропускает «первый раз» */
+  private loadedFor = this.context();
 
   constructor() {
     // Следующий в той же вкладке не должен унаследовать ни плашку, ни чужую ленту
     inject(SessionResetService).register(() => this.reset());
 
     // Своё пространство — свой тред (12.1): чужая лента не должна мелькнуть ни на миг
-    let first = true;
     effect(() => {
-      this.workspaceContext.currentWorkspaceId();
-      if (first) {
-        first = false;
+      const context = this.context();
+      if (context === this.loadedFor) return;
 
-        return;
-      }
-
+      this.loadedFor = context;
       untracked(() => {
         this.reset();
         if (this.attached) void this.load();
@@ -107,7 +129,7 @@ export class AssistantService {
     // Слушатель один на приложение: сервис живёт столько же
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) return;
+        if (document.hidden || !this.attached) return;
 
         const run = this.activeRun();
         if (run && !isRunFinished(run)) void this.watch(run.id);
@@ -128,13 +150,18 @@ export class AssistantService {
   public close() {
     this.attached = false;
     this.watching = null;
+    this.restartScope();
   }
 
   /** Последняя страница ленты и живой ход, если он есть */
   public async load() {
+    const signal = this.scope.signal;
+
     this.loading.set(true);
     try {
-      const history = await this.api.History();
+      const history = await this.api.History(undefined, signal);
+      if (signal.aborted) return;
+
       this.messages.set(visible(history.messages));
       this.nextCursor.set(history.nextCursor ?? undefined);
       this.activeRun.set(history.activeRun ?? undefined);
@@ -142,9 +169,9 @@ export class AssistantService {
       // Ход мог начаться до того, как человек вернулся на экран
       if (history.activeRun) void this.watch(history.activeRun.id);
     } catch (e) {
-      this.fail(e);
+      if (!signal.aborted) this.fail(e);
     } finally {
-      this.loading.set(false);
+      if (!signal.aborted) this.loading.set(false);
     }
   }
 
@@ -153,15 +180,19 @@ export class AssistantService {
     const cursor = this.nextCursor();
     if (!cursor || this.loading()) return;
 
+    const signal = this.scope.signal;
+
     this.loading.set(true);
     try {
-      const history = await this.api.History(cursor);
+      const history = await this.api.History(cursor, signal);
+      if (signal.aborted) return;
+
       this.messages.update(current => [...visible(history.messages), ...current]);
       this.nextCursor.set(history.nextCursor ?? undefined);
     } catch (e) {
-      this.fail(e);
+      if (!signal.aborted) this.fail(e);
     } finally {
-      this.loading.set(false);
+      if (!signal.aborted) this.loading.set(false);
     }
   }
 
@@ -181,13 +212,19 @@ export class AssistantService {
       id: `local-${Date.now()}`,
       role: AssistantMessageRole.User,
       content: trimmed,
+      runId: null,
+      plan: null,
+      options: null,
+      facts: [],
       createdAtUtc: new Date().toISOString()
     };
     this.messages.update(current => [...current, optimistic]);
 
+    const signal = this.scope.signal;
+
     try {
       const sent = await this.api.Send(trimmed);
-      void this.watch(sent.runId);
+      if (!signal.aborted) void this.watch(sent.runId);
     } catch (e) {
       // Не ушло — убираем своё же сообщение: пусть лучше человек отправит заново,
       // чем увидит в ленте то, чего на сервере нет
@@ -204,7 +241,7 @@ export class AssistantService {
   }
 
   /**
-   * Отказ лимитом пространства (13.6) — от `Send` или от расшифровки голоса: голос
+   * Отказ лимитом пространства или человека (13.6) — от `Send` или от расшифровки голоса: голос
    * проверяет тот же лимит до расшифровки (6). Ответ один — плашка на месте поля ввода.
    * `false` — отказ не про лимит, его показывает вызывающий
    */
@@ -245,8 +282,10 @@ export class AssistantService {
    * несколько
    */
   public async watch(runId: string) {
-    if (this.watching === runId) return;
+    if (this.watching === runId || !this.attached) return;
     this.watching = runId;
+
+    const signal = this.scope.signal;
 
     // Первый вопрос — без ожидания: плашка хода нужна сразу, а долгий опрос
     // ответил бы только на смене шага
@@ -259,9 +298,12 @@ export class AssistantService {
 
         let run: AssistantRun;
         try {
-          run = await this.api.Run(runId, wait);
+          run = await this.api.Run(runId, wait, signal);
           wait = AssistantService.WaitSeconds;
-        } catch {
+        } catch (e) {
+          // Экран закрыли или сменили пространство — запрос оборван, следить незачем
+          if (signal.aborted || isAbortError(e)) return;
+
           // Сеть моргнула — ждём и пробуем снова. Ход при этом продолжается
           // на сервере: он живёт в очереди, а не в этом запросе
           await pause(AssistantService.RetryMs);
@@ -269,11 +311,11 @@ export class AssistantService {
         }
 
         // Пока ждали ответа, сменили пространство или вышли — ответ уже не про этот тред
-        if (this.watching !== runId) return;
+        if (signal.aborted || this.watching !== runId) return;
 
         this.activeRun.set(run);
         if (isRunFinished(run)) {
-          await this.refresh();
+          await this.refresh(signal);
 
           return;
         }
@@ -321,9 +363,21 @@ export class AssistantService {
    * подгружено выше: свои оптимистичные сообщения при этом уходят — они вернулись
    * с сервера с настоящими идентификаторами
    */
-  private async refresh() {
+  private async refresh(signal: AbortSignal) {
     try {
-      const history = await this.api.History();
+      let history = await this.api.History(undefined, signal);
+      if (signal.aborted) return;
+
+      // Реплику отправили, пока ход останавливался (спец. assistant, 3): она ждёт в очереди
+      // треда без прогона, а следующий ход заведёт старый, когда допишет своё. Живого хода
+      // в ленте ещё нет — перечитываем, пока он не появится или реплика не уйдёт из очереди
+      for (let i = 0; i < AssistantService.WaitingChecks && !history.activeRun && hasWaiting(history.messages); i++) {
+        await pause(AssistantService.RetryMs);
+        if (signal.aborted) return;
+        history = await this.api.History(undefined, signal);
+        if (signal.aborted) return;
+      }
+
       const page = visible(history.messages);
       const ids = new Set(page.map(x => x.id));
       const older = this.messages().filter(x => !ids.has(x.id) && !x.id.startsWith('local-'));
@@ -335,11 +389,19 @@ export class AssistantService {
       // Пока шёл этот ход, в очереди треда ждала следующая реплика — следим и за ней
       if (history.activeRun) void this.watch(history.activeRun.id);
     } catch (e) {
-      this.fail(e);
+      if (!signal.aborted) this.fail(e);
     }
   }
 
+  /** Всё, что грузилось про прежний тред, обрывается; новое — под новой отменой */
+  private restartScope() {
+    this.scope.abort();
+    this.scope = new AbortController();
+  }
+
   private reset() {
+    this.restartScope();
+    this.loading.set(false);
     this.watching = null;
     this.messages.set([]);
     this.activeRun.set(undefined);
@@ -353,6 +415,11 @@ export class AssistantService {
 }
 
 /** Резюме компакции в ленте не показывается — оно для модели (12.4) */
+/** В ленте есть реплика человека, которая ждёт своего хода в очереди треда */
+function hasWaiting(messages: AssistantMessage[]) {
+  return messages.some(x => x.role === AssistantMessageRole.User && !x.runId);
+}
+
 function visible(messages: AssistantMessage[]) {
   return messages.filter(x => x.role !== AssistantMessageRole.Summary);
 }

@@ -56,7 +56,7 @@ describe('adminInterceptor', () => {
     void firstValueFrom(http.get('/api/Admin/Me'));
     const req = httpMock.expectOne('/api/Admin/Me');
 
-    expect(req.request.headers.has('X-Workspace-Id')).toBeFalse();
+    expect(req.request.headers.has('X-Workspace-Id')).toBe(false);
     req.flush({});
   });
 
@@ -64,7 +64,7 @@ describe('adminInterceptor', () => {
     void firstValueFrom(http.post('/api/Admin/Login', {}));
     const req = httpMock.expectOne('/api/Admin/Login');
 
-    expect(req.request.headers.has('Authorization')).toBeFalse();
+    expect(req.request.headers.has('Authorization')).toBe(false);
     req.flush({});
   });
 });

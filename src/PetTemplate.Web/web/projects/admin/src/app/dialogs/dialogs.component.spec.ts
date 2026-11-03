@@ -179,8 +179,8 @@ describe('DialogsComponent', () => {
     const from = new Date();
     from.setUTCDate(from.getUTCDate() - 6);
     expect(request.request.params.get('from')).toBe(from.toISOString().slice(0, 10));
-    expect(request.request.params.has('to')).toBeFalse();
-    expect(request.request.params.has('maxSatisfaction')).toBeFalse();
+    expect(request.request.params.has('to')).toBe(false);
+    expect(request.request.params.has('maxSatisfaction')).toBe(false);
     request.flush({ dialogs: [], nextBefore: null });
     httpMock.expectOne('/api/Admin/Dialogs/Evaluations').flush({ maxBatchSize: 20, jobs: [] });
     await settle(fixture);
@@ -229,7 +229,7 @@ describe('DialogsComponent', () => {
     });
 
     const evaluate = Array.from(element.querySelectorAll('button')).find(x => x.textContent!.trim() === 'Оценить')!;
-    expect(evaluate.disabled).toBeTrue();
+    expect(evaluate.disabled).toBe(true);
   });
 
   it('should open a trace with what went in and came back', async () => {
@@ -329,8 +329,8 @@ describe('DialogsComponent', () => {
     expect(params.get('workspace')).toBe('Дача');
     expect(params.get('status')).toBe(String(AssistantRunStatus.Failed));
     expect(params.get('maxSatisfaction')).toBe('2');
-    expect(params.has('modelId')).toBeFalse();
-    expect(params.has('minClarifications')).toBeFalse();
+    expect(params.has('modelId')).toBe(false);
+    expect(params.has('minClarifications')).toBe(false);
   });
 
   it('should continue the shown list, not the edited filter, with the next page', async () => {
@@ -343,12 +343,12 @@ describe('DialogsComponent', () => {
     const req = httpMock.expectOne(r => r.url === '/api/Admin/Dialogs');
 
     expect(req.request.params.get('before')).toBe('run-old');
-    expect(req.request.params.has('workspace')).toBeFalse();
+    expect(req.request.params.has('workspace')).toBe(false);
     req.flush({ dialogs: [{ ...dialog, runId: 'run-older' }], nextBefore: null });
     await settle(fixture);
 
     expect(element.querySelectorAll('.dialog-row').length).toBe(3);
-    expect(Array.from(element.querySelectorAll('button')).some(x => x.textContent!.trim() === 'Показать ещё')).toBeFalse();
+    expect(Array.from(element.querySelectorAll('button')).some(x => x.textContent!.trim() === 'Показать ещё')).toBe(false);
   });
 
   it('should show the refusal when a trace does not open', async () => {

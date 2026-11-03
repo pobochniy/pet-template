@@ -1,11 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RecoveryApiService } from '../../shared/api/recovery-api.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
-import { createRecoverEmailControl } from '../../shared/form-models/recover-form.model';
+import { createRecoverEmailControl } from '../form-models/recover-form.model';
 import { environment } from '../../../environments/environment';
 import { ExternalButtonsComponent } from '../external-buttons/external-buttons.component';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /**
  * `/auth/recover` — «Забыли пароль?» (спец. accounts, 8.2): пути по порядку.
@@ -27,7 +28,7 @@ import { ExternalButtonsComponent } from '../external-buttons/external-buttons.c
   styles: ['.auth-recover { max-width: 560px; }']
 })
 export class RecoverComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
 
   protected readonly email = createRecoverEmailControl();
   protected readonly sent = signal(false);

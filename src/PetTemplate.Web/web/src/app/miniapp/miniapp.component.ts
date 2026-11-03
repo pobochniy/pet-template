@@ -5,14 +5,15 @@ import { ExternalLoginApiService } from '../shared/api/external-login-api.servic
 import { AlertsService } from '../shared/alerts/alerts.service';
 import { UserService } from '../shared/core/user.service';
 import { MergeStateService } from '../shared/core/merge-state.service';
-import { I18nService } from '../shared/i18n/i18n.service';
 import { LanguageService } from '../shared/i18n/language.service';
 import { createLoginForm } from '../shared/form-models/login-form.model';
-import { invitationOf, launchInvitation, miniAppProof } from '../shared/core/mini-app.util';
+import { invitationOf, launchInvitation, miniAppProof } from './mini-app.util';
 import { launchParam } from '../shared/core/launch-params';
 import { serverErrorMessage } from '../shared/core/server-error.util';
 import { AuthenticationResultModel } from '../shared/models/authentication-result.model';
 import { ExternalProofModel, ExternalProvider } from '../shared/models/external-login.model';
+import { injectI18n } from '../shared/i18n/inject-i18n';
+import { MINIAPP_SCOPES } from './miniapp.scopes';
 
 /**
  * Вход из mini-app (спец. accounts, 5.6): `/miniapp` — Telegram, `/vk` — VK.
@@ -33,7 +34,7 @@ import { ExternalProofModel, ExternalProvider } from '../shared/models/external-
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MiniappComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...MINIAPP_SCOPES);
   private readonly language = inject(LanguageService);
   private readonly provider: ExternalProvider = inject(ActivatedRoute).snapshot.data['provider'] ?? 'telegram';
 

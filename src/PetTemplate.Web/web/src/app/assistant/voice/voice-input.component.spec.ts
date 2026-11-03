@@ -13,8 +13,8 @@ import { loadAllScopes } from '../../shared/i18n/i18n.testing';
 /**
  * Голос (спец. assistant, 6): наговорённое попадает в поле ввода, а не в тред.
  *
- * Запись подменена: настоящий `MediaRecorder` в headless-браузере микрофона
- * не найдёт, а проверяется здесь не он, а наш обвес вокруг него.
+ * Запись подменена: настоящего `MediaRecorder` в jsdom нет (и микрофона у тестов
+ * не было бы), а проверяется здесь не он, а наш обвес вокруг него.
  */
 describe('VoiceInputComponent', () => {
   let fixture: ComponentFixture<VoiceInputComponent>;
@@ -80,7 +80,7 @@ describe('VoiceInputComponent', () => {
     component.text.subscribe(text => heard.push(text));
 
     await component.toggle();
-    expect(component.recording()).toBeTrue();
+    expect(component.recording()).toBe(true);
 
     await recorder.finish();
     await fixture.whenStable();
@@ -116,20 +116,20 @@ describe('VoiceInputComponent', () => {
 
     await component.toggle();
 
-    expect(component.recording()).toBeFalse();
+    expect(component.recording()).toBe(false);
     expect(TestBed.inject(AlertsService).alerts()[0].content).toContain('Микрофон запрещён');
   });
 
   it('should stop by itself after a minute', async () => {
-    jasmine.clock().install();
+    vi.useFakeTimers();
     try {
       await component.toggle();
 
-      jasmine.clock().tick(60_000);
+      vi.advanceTimersByTime(60_000);
 
-      expect(recorder.stopped).toBeTrue();
+      expect(recorder.stopped).toBe(true);
     } finally {
-      jasmine.clock().uninstall();
+      vi.useRealTimers();
     }
   });
 
@@ -151,7 +151,7 @@ describe('VoiceInputComponent', () => {
     await recorder.finish();
     await fixture.whenStable();
 
-    expect(TestBed.inject(AssistantService).limitReached()).toBeTrue();
+    expect(TestBed.inject(AssistantService).limitReached()).toBe(true);
     expect(TestBed.inject(AlertsService).alerts()).toEqual([]);
   });
 });

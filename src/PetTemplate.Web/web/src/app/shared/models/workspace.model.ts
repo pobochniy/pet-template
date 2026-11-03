@@ -1,14 +1,11 @@
-import { AuthenticationResultModel } from './authentication-result.model';
+import type { ApiSchema } from '../api/generated/schema';
 
-export interface WorkspaceModel {
-  id: string;
-  name: string;
-  /**
-   * Сколько людей в пространстве — приезжает в списке своих. Последнему участнику
-   * подтверждение выхода говорит, что пространство удалится
-   */
-  membersCount?: number | null;
-}
+/**
+ * Пространство в списке своих — `WorkspaceDto` (алиас схемы OpenAPI, `npm run api:types`).
+ * `membersCount` — сколько людей в пространстве: последнему участнику подтверждение выхода
+ * говорит, что пространство удалится
+ */
+export type WorkspaceModel = ApiSchema<'WorkspaceDto'>;
 
 /**
  * Ответ на создание пространства: id нового и новая сессия. Токен приезжает сразу,
@@ -16,7 +13,4 @@ export interface WorkspaceModel {
  * токене нет: до перевыпуска сервер отвечал бы 403 на всё закрытое правами
  * (спец. authorization, 2.2)
  */
-export interface WorkspaceCreatedModel {
-  workspaceId: string;
-  authentication: AuthenticationResultModel;
-}
+export type WorkspaceCreatedModel = ApiSchema<'WorkspaceCreatedDto'>;

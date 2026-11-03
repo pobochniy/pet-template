@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { UsersApiService } from '../../../shared/api/users-api.service';
+import { UsersApiService } from '../../users-api.service';
 import { WorkspaceContextService } from '../../../shared/core/workspace-context.service';
 import { PermissionsService } from '../../../shared/services/permissions.service';
 import { AlertsService } from '../../../shared/alerts/alerts.service';
@@ -9,8 +9,9 @@ import {
   PERMISSION_CATALOG,
   PermissionInfo,
   groupPermissions
-} from '../../../shared/permissions/permission-catalog';
-import { I18nService } from '../../../shared/i18n/i18n.service';
+} from '../../permission-catalog';
+import { injectI18n } from '../../../shared/i18n/inject-i18n';
+import { WORKSPACE_SCOPES } from '../../workspace.scopes';
 
 /**
  * Права одного участника (спец. authorization, 5 и 7.3, право `PermissionManagement`).
@@ -31,7 +32,7 @@ import { I18nService } from '../../../shared/i18n/i18n.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkspaceMemberPermissionsComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);
   private readonly usersApi = inject(UsersApiService);
   private readonly workspaceContext = inject(WorkspaceContextService);
   private readonly permissionsService = inject(PermissionsService);

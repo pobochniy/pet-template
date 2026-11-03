@@ -19,7 +19,7 @@
  *      с имени существующего словаря. Ловит объявление мимо первого способа.
  *
  * Второй уровень — словарь с кодами обязан **грузиться хотя бы одним маршрутом**
- * (`withScope` в `app.routes.ts`, `loadScope` в `*.routes.ts`). Связь «эндпоинт ↔ экран»
+ * (`withScope(X_SCOPES, …)` в `app.routes.ts` — список из `*.scopes.ts`, `loadScope` в `*.routes.ts`). Связь «эндпоинт ↔ экран»
  * автоматически не выводится, а «словарь ↔ маршрут» — выводится: словарь, который
  * не грузит никто, не переведёт код ни на одном экране.
  *
@@ -127,7 +127,9 @@ function collectServerCodes(scopes) {
   /** Объявлен ли на сервере сам тип отказа с кодом — без него кодам взяться неоткуда */
   let declared = false;
 
-  const anyCode = new RegExp(`"((?:${[...scopes].join('|')})(?:\\.[A-Za-z0-9]+){1,})"`, 'g');
+  // Хвост склеенной строки (`Prefix + "help.search"` — имя метрики) — не код: код отказа
+  // пишется литералом целиком
+  const anyCode = new RegExp(`(?<!\\+\\s*)"((?:${[...scopes].join('|')})(?:\\.[A-Za-z0-9]+){1,})"`, 'g');
 
   for (const dir of SERVER_DIRS) {
     for (const file of walk(dir, name => name.endsWith('.cs'))) {
@@ -157,8 +159,8 @@ function collectServerCodes(scopes) {
  * Словари, которые грузит хоть один маршрут.
  *
  * Разбор по тексту, не деревом: раздел подключается в `app.routes.ts` через
- * `withScope('scope', import(...), 'ещё', …)`, а лишний словарь экрана — `loadScope('scope')`
- * в `*.routes.ts` раздела. Под каким адресом — не важно: таблицы «словарь → маршруты»
+ * `withScope(X_SCOPES, import(...))`, где `X_SCOPES` — константа из `*.scopes.ts` (её же
+ * берёт `injectI18n` экранов), а лишний словарь экрана — `loadScope('scope')` в `*.routes.ts`. Под каким адресом — не важно: таблицы «словарь → маршруты»
  * в шаблоне нет, нужен только факт загрузки
  *
  * @returns {Set<string>}
@@ -166,11 +168,18 @@ function collectServerCodes(scopes) {
 function collectLoadedScopes() {
   /** @type {Set<string>} */
   const scopes = new Set();
+  const constants = collectScopeConstants();
 
   for (const file of walk(APP_DIR, name => name.endsWith('.routes.ts'))) {
     const text = readFileSync(file, 'utf8');
 
     for (const match of text.matchAll(/(?:withScope|loadScope)\(\s*'([^']+)'/g)) scopes.add(match[1]);
+
+    for (const match of text.matchAll(/withScope\(\s*([A-Z][A-Z0-9_]*)\s*,/g)) {
+      const list = constants.get(match[1]);
+      if (list == null) fail(`${relative(ROOT, file)}: \`withScope(${match[1]}, …)\` — константы нет ни в одном \`*.scopes.ts\``);
+      for (const scope of list) scopes.add(scope);
+    }
 
     // Лишние словари маршрута — хвостом `withScope('home', import(...), 'assistant')`
     for (const match of text.matchAll(/withScope\(\s*'[^']+'\s*,\s*import\([^)]*\)((?:\s*,\s*'[^']+')+)/g)) {
@@ -181,6 +190,52 @@ function collectLoadedScopes() {
   if (scopes.size === 0) fail('ни один маршрут не грузит словарь — сломан разбор `*.routes.ts`');
 
   return scopes;
+}
+
+/**
+ * Константы словарей маршрутов: `export const X_SCOPES = ['a', 'b', ...Y_SCOPES] as const`
+ * в `*.scopes.ts`. Разворот `...Y` раскрывается по уже прочитанным
+ *
+ * @returns {Map<string, string[]>}
+ */
+function collectScopeConstants() {
+  /** @type {Map<string, string[]>} */
+  const raw = new Map();
+
+  for (const file of walk(APP_DIR, name => name.endsWith('.scopes.ts'))) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/export\s+const\s+([A-Z][A-Z0-9_]*)\s*=\s*\[([^\]]*)\]/g)) {
+      raw.set(match[1], match[2].split(',').map(x => x.trim()).filter(Boolean));
+    }
+  }
+
+  /** @type {Map<string, string[]>} */
+  const resolved = new Map();
+  const resolve = (/** @type {string} */ name, /** @type {Set<string>} */ seen) => {
+    const known = resolved.get(name);
+    if (known) return known;
+
+    const items = raw.get(name);
+    if (items == null || seen.has(name)) fail(`константа словарей \`${name}\` не найдена или ссылается сама на себя`);
+    seen.add(name);
+
+    /** @type {string[]} */
+    const list = [];
+    for (const item of items) {
+      const literal = /^'([^']+)'$/.exec(item);
+      const spread = /^\.\.\.([A-Z][A-Z0-9_]*)$/.exec(item);
+      if (literal) list.push(literal[1]);
+      else if (spread) list.push(...resolve(spread[1], seen));
+      else fail(`константа словарей \`${name}\`: не разобран элемент \`${item}\``);
+    }
+
+    resolved.set(name, list);
+    return list;
+  };
+
+  for (const name of raw.keys()) resolve(name, new Set());
+
+  return resolved;
 }
 
 // ── Проверки ──────────────────────────────────────────────────────────────────

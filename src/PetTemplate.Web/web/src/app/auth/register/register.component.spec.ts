@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
@@ -13,10 +14,10 @@ import { ExternalLoginApiServiceMock } from '../../shared/api/external-login-api
 describe('RegisterComponent', () => {
   let fixture: ComponentFixture<RegisterComponent>;
   let el: HTMLElement;
-  let auth: jasmine.SpyObj<AuthApiService>;
+  let auth: Mocked<AuthApiService>;
 
   beforeEach(async () => {
-    auth = jasmine.createSpyObj<AuthApiService>('AuthApiService', ['register']);
+    auth = { register: vi.fn() } as unknown as Mocked<AuthApiService>;
 
     await TestBed.configureTestingModule({
       imports: [RegisterComponent],
@@ -29,7 +30,7 @@ describe('RegisterComponent', () => {
     }).compileComponents();
 
     await loadAllScopes(TestBed.inject(I18nService));
-    spyOn(TestBed.inject(Router), 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     fixture = TestBed.createComponent(RegisterComponent);
     el = fixture.nativeElement;
     await fixture.whenStable();
@@ -77,7 +78,7 @@ describe('RegisterComponent', () => {
   });
 
   it('should show a taken user name in the interface language', async () => {
-    auth.register.and.rejectWith(serverRefusal(400, 'Такое имя пользователя уже занято', 'auth.error.userNameTaken'));
+    auth.register.mockRejectedValue(serverRefusal(400, 'Такое имя пользователя уже занято', 'auth.error.userNameTaken'));
     fillRequired();
 
     await submit();
@@ -86,7 +87,7 @@ describe('RegisterComponent', () => {
   });
 
   it('should open the optional fields to show a server refusal under the phone', async () => {
-    auth.register.and.rejectWith(validationRefusal({ phone: [{ code: 'core.validation.phoneFormat' }] }));
+    auth.register.mockRejectedValue(validationRefusal({ phone: [{ code: 'core.validation.phoneFormat' }] }));
     fillRequired();
 
     await submit();

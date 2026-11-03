@@ -1,4 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
 using PetTemplate.Services.Commands;
+using PetTemplate.Services.Qdrant;
+using PetTemplate.Shared.Enums;
+using PetTemplate.Tests.EntityBuilders;
+using PetTemplate.Tests.Mocks;
 using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Services.Search;
 using PetTemplate.Tests.Asserts;
@@ -15,6 +20,9 @@ namespace PetTemplate.Tests.Features.Search;
 public class SearchIndexWorker
 {
     private static readonly Guid RogaId = Guid.CreateVersion7();
+
+    /// <summary>Тип, которого нет среди источников, — как после переименования</summary>
+    private const SearchEntityType RenamedType = (SearchEntityType)1099;
 
     /// <summary>
     /// <b>Главный тест фичи по цене ошибки.</b> Qdrant не знает про пространства:
@@ -43,6 +51,31 @@ public class SearchIndexWorker
         // Assert
         Assert.NotEmpty(found);
         Assert.All(found, x => Assert.Equal(mine.Id.ToString(), x.EntityId));
+    }
+
+    /// <summary>
+    /// Снос пространства уносит все его точки — какие бы сущности их ни положили, — а чужие
+    /// не трогает (спец. search, 4): в payload лежит текст, и снесённое не должно оставаться
+    /// в индексе
+    /// </summary>
+    [Fact]
+    public async Task WorkspacePurgeRemovesOnlyItsPoints()
+    {
+        // Arrange
+        var world = await SearchWorld.Start();
+        var kopytaId = Guid.CreateVersion7();
+        var mine = SearchWorld.Note(RogaId, "Котёл", "Котёл меняли в две тысячи двадцать третьем");
+        var stranger = SearchWorld.Note(kopytaId, "Котёл", "Котёл у соседей тоже меняли");
+        await world.Add(mine, stranger);
+        await world.Handle(SearchIndex.Of(TestNoteSource.NoteType, mine.Id));
+        await world.Handle(SearchIndex.Of(TestNoteSource.NoteType, stranger.Id));
+
+        // Act
+        await world.Handle(new SearchPurgeWorkspaceCommand { WorkspaceId = RogaId });
+
+        // Assert
+        Assert.Empty(await world.Points(RogaId));
+        Assert.NotEmpty(await world.Points(kopytaId));
     }
 
     /// <summary>
@@ -177,6 +210,56 @@ public class SearchIndexWorker
     }
 
     /// <summary>
+    /// Реиндекс уносит точки типа, которого нет среди источников (тип переименовали или
+    /// убрали), а точки зарегистрированных типов не трогает (спец. search, 5)
+    /// </summary>
+    [Fact]
+    public async Task ReindexRemovesPointsOfUnknownType()
+    {
+        // Arrange
+        var world = await SearchWorld.Start();
+        var roga = new WorkspaceBuilder("Рога и Копыта").Please();
+        var db = world.Db();
+        db.Workspaces.Add(roga);
+        await db.SaveChangesAsync();
+        var note = SearchWorld.Note(roga.Id, "Котёл", "Котёл меняли в две тысячи двадцать третьем");
+        await world.Add(note);
+        await world.Handle(SearchIndex.Of(TestNoteSource.NoteType, note.Id));
+        await Orphan(world, RenamedType, roga.Id);
+
+        // Act
+        await world.Handle(new SearchReindexCommand());
+
+        // Assert
+        Assert.Equal([TestNoteSource.NoteType], (await world.Points(roga.Id)).Select(x => x.Type).Distinct());
+    }
+
+    /// <summary>
+    /// Реиндекс уносит точки пространства, которого нет в базе (команда сноса исчерпала
+    /// попытки), а точки живого пространства оставляет (спец. search, 5)
+    /// </summary>
+    [Fact]
+    public async Task ReindexRemovesPointsOfMissingWorkspace()
+    {
+        // Arrange
+        var world = await SearchWorld.Start();
+        var roga = new WorkspaceBuilder("Рога и Копыта").Please();
+        var goneId = Guid.CreateVersion7();
+        var db = world.Db();
+        db.Workspaces.Add(roga);
+        await db.SaveChangesAsync();
+        await Orphan(world, TestNoteSource.NoteType, roga.Id);
+        await Orphan(world, TestNoteSource.NoteType, goneId);
+
+        // Act
+        await world.Handle(new SearchReindexCommand());
+
+        // Assert
+        Assert.Empty(await world.Points(goneId));
+        Assert.NotEmpty(await world.Points(roga.Id));
+    }
+
+    /// <summary>
     /// Заметка, найденная и вектором, и словом, стоит выше найденной одним способом:
     /// в RRF позиция в каждой выдаче важнее её абсолютного счёта (спец. search, 7)
     /// </summary>
@@ -282,4 +365,10 @@ public class SearchIndexWorker
 
         Assert.Equal(note.Id.ToString(), Assert.Single(await world.Points(RogaId)).EntityId);
     }
+
+    /// <summary>Точка мимо источников — как её оставил прежний тип или снесённое пространство</summary>
+    private static Task Orphan(SearchWorld world, SearchEntityType type, Guid workspaceId) =>
+        world.Services.GetRequiredService<QdrantService>().UpsertChunks(
+            world.Collection, type, Guid.CreateVersion7().ToString(), workspaceId,
+            [(0, FakeEmbedder.Vector, "Котёл у соседей")], CancellationToken.None);
 }

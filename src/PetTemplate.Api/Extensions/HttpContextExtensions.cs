@@ -10,7 +10,7 @@ public static class HttpContextExtensions
     /// <summary>
     /// Активное пространство из заголовка <c>X-Workspace-Id</c> (спец. authorization, 1.2).
     /// Нет заголовка или в нём не <c>Guid</c> — <c>400</c>: без пространства запросу
-    /// внутри него делать нечего, а угадывать его по правам в токене значило бы
+    /// внутри него делать нечего, а угадывать его по правам пользователя значило бы
     /// молча выбрать за человека
     /// </summary>
     public static Guid GetWorkspaceId(this HttpContext context)

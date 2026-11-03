@@ -143,7 +143,7 @@ public class AuthService(ApplicationContext db, WorkspaceService workspaces, Ema
 
     /// <summary>
     /// Чей это логин — без проверки пароля. Ник, почта и телефон одной учётки отвечают одним
-    /// и тем же идентификатором: по нему лимит входа (<c>AdminLoginLimiter</c>, спец. accounts, 8.1;
+    /// и тем же идентификатором: по нему лимит входа (<c>LoginLimiter</c>, спец. accounts, 8.1;
     /// admin, 3.3) считает попытки. <c>null</c> — такого логина нет
     /// </summary>
     public async Task<Guid?> UserIdOf(LoginDto dto, CancellationToken ct = default) =>

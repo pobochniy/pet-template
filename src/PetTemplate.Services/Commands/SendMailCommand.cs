@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PetTemplate.Services.Mail;
 
 namespace PetTemplate.Services.Commands;
@@ -12,8 +11,10 @@ namespace PetTemplate.Services.Commands;
 /// Ключ идемпотентности — <see cref="TokenId"/>: письмо по токену уходит один раз.
 /// Адрес у писем со ссылкой — из токена, в команде его нет
 /// </summary>
-public class SendMailCommand
+public class SendMailCommand : ICommand
 {
+    public static string QueueName => "send-mail";
+
     public MailKind Kind { get; set; }
 
     /// <summary>Токен аккаунта — у писем со ссылкой сброса или подтверждения</summary>
@@ -26,6 +27,4 @@ public class SendMailCommand
     public string? To { get; set; }
 
     public string? Language { get; set; }
-
-    public override string ToString() => JsonSerializer.Serialize(this);
 }

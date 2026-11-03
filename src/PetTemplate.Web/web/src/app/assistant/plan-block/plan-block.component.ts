@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import {
   AssistantPlan, AssistantPlanStatus, PlanOperation, PlanOperationResult
 } from '../../shared/models/assistant.model';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from '../assistant.scopes';
 
 /** Строка блока плана — уже готовая к показу, без логики в шаблоне */
 export interface PlanRow {
@@ -70,7 +71,7 @@ export interface PlanRow {
   `]
 })
 export class PlanBlockComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
 
   /** Сколько строк показывать, пока человек не раскрыл остальные */
   private static readonly Visible = 10;

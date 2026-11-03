@@ -5,14 +5,16 @@ import {
   AssistantHistory, AssistantMemory, AssistantMessage, AssistantMessageRole, AssistantRun, AssistantRunStatus,
   AssistantSendResult, AssistantTrace
 } from '../models/assistant.model';
+import { assistantHistoryDto, assistantMessageDto, assistantRunDto } from './dto.mock';
 
 /** Отказы `Send` кодом, которые умеет сервер (спец. assistant, 13.6 и 14) */
-export type AssistantRefusal = 'dailyLimitReached' | 'monthlyLimitReached' | 'modelUnavailable';
+export type AssistantRefusal =
+  'dailyLimitReached' | 'monthlyLimitReached' | 'userDailyLimitReached' | 'modelUnavailable';
 
 /** Отказы `Transcribe` кодом (спец. assistant, 6) — лимит пространства тот же, что у `Send` */
 export type TranscribeRefusal =
   'transcriptionFailed' | 'transcriptionUnavailable' | 'audioTooLarge' | 'audioTooLong'
-  | 'dailyLimitReached' | 'monthlyLimitReached';
+  | 'dailyLimitReached' | 'monthlyLimitReached' | 'userDailyLimitReached';
 
 /** Потолок записи на сервере — минута (6.3) */
 const MAX_SECONDS = 60;
@@ -25,7 +27,7 @@ const MAX_SECONDS = 60;
  */
 @Injectable()
 export class AssistantApiServiceMock implements IAssistantApiService {
-  private history: AssistantHistory = { messages: [] };
+  private history: AssistantHistory = assistantHistoryDto({ messages: [] });
   private runs = new Map<string, AssistantRun>();
   private trace: AssistantTrace = { expired: false, steps: [] };
   private failure: string | null = null;
@@ -104,19 +106,19 @@ export class AssistantApiServiceMock implements IAssistantApiService {
     this.sent.push(text);
 
     const runId = `run-${this.sent.length}`;
-    const message: AssistantMessage = {
+    const message: AssistantMessage = assistantMessageDto({
       id: `message-${this.history.messages.length + 1}`,
       role: AssistantMessageRole.User,
       content: text,
       runId,
       createdAtUtc: new Date().toISOString()
-    };
+    });
     this.history = { ...this.history, messages: [...this.history.messages, message] };
 
     // Ход, заданный тестом заранее, не перетираем: так тест говорит, чем кончится
     // этот ход, — в жизни это решает модель
     if (!this.runs.has(runId))
-      this.setRun({ id: runId, status: AssistantRunStatus.Running, step: 0, stepsHard: 8, escalated: false });
+      this.setRun(assistantRunDto({ id: runId, status: AssistantRunStatus.Running, step: 0, stepsHard: 8, escalated: false }));
 
     return { runId, messageId: message.id };
   }
@@ -125,7 +127,7 @@ export class AssistantApiServiceMock implements IAssistantApiService {
     this.failIfConfigured();
 
     return this.runs.get(id)
-      ?? { id, status: AssistantRunStatus.Done, step: 1, stepsHard: 8, escalated: false };
+      ?? assistantRunDto({ id, status: AssistantRunStatus.Done, step: 1, stepsHard: 8, escalated: false });
   }
 
   public async Stop(id: string): Promise<void> {
@@ -144,7 +146,7 @@ export class AssistantApiServiceMock implements IAssistantApiService {
   public async Clear(): Promise<void> {
     this.failIfConfigured();
     this.cleared++;
-    this.history = { messages: [] };
+    this.history = assistantHistoryDto({ messages: [] });
   }
 
   public async Memory(): Promise<AssistantMemory> {

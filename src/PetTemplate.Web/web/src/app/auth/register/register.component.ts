@@ -1,15 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ReactiveFormsModule } from '@angular/forms';
-import { createRegisterForm, setWorkspaceSkipped } from '../../shared/form-models/register-form.model';
+import { createRegisterForm, setWorkspaceSkipped } from '../form-models/register-form.model';
 import { EMAIL_MAX_LENGTH, USER_NAME_MAX_LENGTH } from '../../shared/form-models/account-rules';
 import { AuthApiService } from '../../shared/api/auth-api.service';
+import { UserService } from '../../shared/core/user.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
 import { applyServerValidationErrors, serverValidationText } from '../../shared/core/server-validation.util';
 import { ExternalButtonsComponent } from '../external-buttons/external-buttons.component';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 @Component({
   selector: 'login-register',
@@ -19,7 +21,7 @@ import { ExternalButtonsComponent } from '../external-buttons/external-buttons.c
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RegisterComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
   public readonly registerForm = createRegisterForm();
 
   protected readonly userNameMaxLength = USER_NAME_MAX_LENGTH;
@@ -37,6 +39,7 @@ export class RegisterComponent {
 
   constructor(
     private service: AuthApiService,
+    private userService: UserService,
     private router: Router,
     private alerts: AlertsService
   ) {}
@@ -61,6 +64,7 @@ export class RegisterComponent {
 
     try {
       const result = await this.service.register(this.registerForm, this.i18n.lang());
+      this.userService.applySession(result);
 
       // С пространством — на его страницу участников, как после создания из настроек:
       // заведя пространство, человек чаще всего идёт звать остальных

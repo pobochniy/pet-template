@@ -438,7 +438,7 @@ public class AccountMergeTests
     public async Task PasswordProofIsRateLimited()
     {
         var (client, _) = await Client();
-        for (var i = 0; i < AdminLoginLimiter.ProductAttemptsPerUser; i++)
+        for (var i = 0; i < LoginLimiter.ProductAttemptsPerUser; i++)
         {
             await client.PostAsJsonAsync("/api/Account/MergePreview",
                 new MergeProofDto { Login = "Petya", Password = $"guess-{i}" });

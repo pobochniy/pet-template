@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using PetTemplate.Services.Assistant;
 using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Tests.Arranges;
@@ -380,7 +382,7 @@ public class AssistantThreadTests
         await world.Save();
 
         // Act
-        await new WorkspaceService(world.Db).Leave(world.Author, world.WorkspaceId, CancellationToken.None);
+        await new WorkspaceService(world.Db, new SessionGuard(world.Db, new MemoryCache(new MemoryCacheOptions()))).Leave(world.Author, world.WorkspaceId, CancellationToken.None);
 
         // Assert
         Assert.False(await world.Db.Workspaces.AnyAsync(x => x.Id == world.WorkspaceId, CancellationToken.None));
@@ -451,5 +453,218 @@ public class AssistantThreadTests
 
         // Assert
         Assert.True(DbErrors.IsDuplicate(error, DbErrors.AssistantRunningIndex));
+    }
+
+    /// <summary>
+    /// Остановленный, но ещё не дописанный ход — всё ещё живой: второй ход рядом с ним
+    /// индекс не пустит (раздел 3)
+    /// </summary>
+    [Fact]
+    public async Task StoppedUnfinishedRunStillHoldsIndex()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Ведёрки и Совочки");
+        world.StartRun().Status = AssistantRunStatus.Stopped;
+        await world.Save();
+        await using var other = world.NewContext();
+        other.AssistantRuns.Add(new PetTemplate.Db.Entity.AssistantRun
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = world.Author,
+            WorkspaceId = world.WorkspaceId,
+            TimeZone = "UTC",
+            Language = "ru",
+            Status = AssistantRunStatus.Running,
+            StartedAtUtc = world.Now
+        });
+
+        // Act
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => other.SaveChangesAsync(CancellationToken.None));
+
+        // Assert
+        Assert.True(DbErrors.IsDuplicate(error, DbErrors.AssistantRunningIndex));
+    }
+
+    /// <summary>
+    /// Реплика, пришедшая, пока остановленный ход дописывает конец, второго хода рядом
+    /// не заводит, а ждёт: её подхватит сам этот ход, закончившись (раздел 3)
+    /// </summary>
+    [Fact]
+    public async Task SendDuringStoppingWaitsForStoppedRun()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Кастрюли и Сковородки");
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "собери план", "UTC", CancellationToken.None);
+        await world.Threads.Stop(runId, world.Author, world.WorkspaceId, CancellationToken.None);
+
+        // Act
+        var (followed, messageId) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "а теперь другое", "UTC", CancellationToken.None);
+
+        // Assert
+        Assert.Equal(runId, followed);
+        Assert.Equal(1, await world.Db.AssistantRuns.CountAsync(CancellationToken.None));
+        var waiting = await world.NewContext().AssistantMessages.SingleAsync(x => x.Id == messageId, CancellationToken.None);
+        Assert.Null(waiting.RunId);
+
+        await world.Handler(new FakeChatClient().Says("не дойдёт"))
+            .Handle(new AssistantRunCommand { RunId = runId }, CancellationToken.None);
+        var started = await world.NewContext().AssistantMessages.SingleAsync(x => x.Id == messageId, CancellationToken.None);
+        Assert.NotNull(started.RunId);
+        Assert.NotEqual(runId, started.RunId);
+    }
+
+    /// <summary>
+    /// Попытки кончились, а ход не закончен — прошлая попытка умерла вместе с процессом,
+    /// не дойдя до catch. Ещё одного платного цикла нет: ход Failed без обращения к модели
+    /// (раздел 3)
+    /// </summary>
+    [Fact]
+    public async Task ExhaustedAttemptsFailWithoutCallingModel()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Кружки и Ложки");
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "как пригласить коллегу?", "UTC", CancellationToken.None);
+        await SetAttempts(world, runId, AssistantRunCommandHandler.MaxAttempts);
+        var chat = new FakeChatClient().Says("не дойдёт");
+
+        // Act
+        await world.Handler(chat).Handle(new AssistantRunCommand { RunId = runId }, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, chat.Calls);
+        var run = await world.NewContext().AssistantRuns.SingleAsync(CancellationToken.None);
+        Assert.Equal(AssistantRunStatus.Failed, run.Status);
+        Assert.Equal(AssistantStopReason.ProviderError, run.StopReason);
+        Assert.Equal(AssistantRunCommandHandler.MaxAttempts, run.Attempts);
+        var answer = await world.NewContext().AssistantMessages
+            .SingleAsync(x => x.Role == AssistantMessageRole.Assistant, CancellationToken.None);
+        Assert.Equal(AssistantTexts.ProviderError, answer.Content);
+    }
+
+    /// <summary>
+    /// Последняя попытка упала посреди сборки плана: собранное — черновик, а не план,
+    /// ждущий «да», — «да» на следующую реплику применило бы обрывок (раздел 3, 5.1)
+    /// </summary>
+    [Fact]
+    public async Task FailedRunKeepsCollectedPlanAsDraft()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Грабли и Лопаты");
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "заведи заметку про хлеб", "UTC", CancellationToken.None);
+        await SetAttempts(world, runId, AssistantRunCommandHandler.MaxAttempts - 1);
+        var chat = new FakeChatClient().Calling("create_test_note", new { title = "Хлеб" });
+        chat.OnAsk = n =>
+        {
+            if (n > 1) throw new HttpRequestException("connection refused");
+        };
+
+        // Act
+        await world.Handler(chat).Handle(new AssistantRunCommand { RunId = runId }, CancellationToken.None);
+
+        // Assert
+        var db = world.NewContext();
+        var run = await db.AssistantRuns.SingleAsync(CancellationToken.None);
+        Assert.Equal(AssistantRunStatus.Failed, run.Status);
+        var plan = await db.AssistantPlans.SingleAsync(CancellationToken.None);
+        Assert.Equal(AssistantPlanStatus.Draft, plan.Status);
+    }
+
+    /// <summary>
+    /// Остановка процесса посреди хода (выкатка) — не провал попытки: счёт попыток
+    /// возвращается, и ход начнётся заново со следующим запуском (раздел 3)
+    /// </summary>
+    [Fact]
+    public async Task ShutdownDoesNotSpendAttempt()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Вилки и Ножи");
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "как пригласить коллегу?", "UTC", CancellationToken.None);
+        using var shutdown = new CancellationTokenSource();
+        var chat = new FakeChatClient();
+        chat.OnAsk = _ =>
+        {
+            shutdown.Cancel();
+            shutdown.Token.ThrowIfCancellationRequested();
+        };
+
+        // Act
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            world.Handler(chat).Handle(new AssistantRunCommand { RunId = runId }, shutdown.Token));
+
+        // Assert
+        var run = await world.NewContext().AssistantRuns.SingleAsync(CancellationToken.None);
+        Assert.Equal(0, run.Attempts);
+        Assert.Equal(AssistantRunStatus.Running, run.Status);
+    }
+
+    /// <summary>
+    /// «Очистить», пока ход ещё шёл: ход заканчивается и пишет расход, но в пустую ленту
+    /// не кладёт ни ответа, ни трассы, дописанной после очистки (12.1.1)
+    /// </summary>
+    [Fact]
+    public async Task ClearDuringRunLeavesThreadEmpty()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Мётлы и Швабры");
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId,
+            "найди в справке про приглашения", "UTC", CancellationToken.None);
+        await using var other = world.NewContext();
+        var chat = new FakeChatClient()
+            .Calling("search_help", new { query = "приглашения" })
+            .Says("По справке — так.");
+        chat.OnAsk = n =>
+        {
+            if (n == 2)
+                world.ThreadsOver(other).Clear(world.Author, world.WorkspaceId, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+        };
+
+        // Act
+        await world.Handler(chat).Handle(new AssistantRunCommand { RunId = runId }, CancellationToken.None);
+
+        // Assert
+        var db = world.NewContext();
+        Assert.False(await db.AssistantMessages.AnyAsync(CancellationToken.None));
+        Assert.False(await db.AssistantTraceSteps.AnyAsync(x => x.RunId == runId, CancellationToken.None));
+        var run = await db.AssistantRuns.SingleAsync(CancellationToken.None);
+        Assert.Equal(AssistantRunStatus.Stopped, run.Status);
+        Assert.NotNull(run.FinishedAtUtc);
+        Assert.True(run.Cleared);
+    }
+
+    /// <summary>Счёт попыток прогона — мимо трекера, как его оставил бы прошлый запуск</summary>
+    private static async Task SetAttempts(AssistantWorld world, Guid runId, int attempts)
+    {
+        await world.Db.AssistantRuns
+            .Where(x => x.Id == runId)
+            .ExecuteUpdateAsync(x => x.SetProperty(r => r.Attempts, attempts), CancellationToken.None);
+        world.Db.ChangeTracker.Clear();
+    }
+
+    /// <summary>
+    /// Ждущая реплика того, кого убрали из пространства, хода не получает: иначе очередь
+    /// треда крутила бы по отказу на реплику (раздел 9)
+    /// </summary>
+    [Fact]
+    public async Task RemovedMembersWaitingMessageGetsNoRun()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Пончики и Плюшки");
+        world.Message(AssistantMessageRole.User, "ещё вопрос");
+        await world.Save();
+        await world.Db.UserInPermissions.Where(x => x.UserId == world.Author)
+            .ExecuteDeleteAsync(CancellationToken.None);
+
+        // Act
+        var started = await world.Threads.StartNextWaiting(world.Author, world.WorkspaceId, CancellationToken.None);
+
+        // Assert
+        Assert.Null(started);
+        Assert.False(await world.NewContext().AssistantRuns.AnyAsync(CancellationToken.None));
     }
 }

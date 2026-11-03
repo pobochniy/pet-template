@@ -1,16 +1,15 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Assistant.Hooks;
 using PetTemplate.Services.Assistant.Models;
-using PetTemplate.Services.Assistant.Plans;
-using PetTemplate.Services.Assistant.Tools;
 using PetTemplate.Services.Help;
+using PetTemplate.Services.Services;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Shared.Options;
 
@@ -18,23 +17,24 @@ namespace PetTemplate.Services.Assistant.Check;
 
 /// <summary>
 /// Одна фраза сверки — один настоящий ход в изолированном мире (спец. admin, 15.3):
-/// тот же цикл, те же инструменты, та же сборка промпта, что в бою, но поверх базы
-/// в памяти и своего контейнера сервисов, который живёт ровно одну фразу.
+/// тот же цикл, те же инструменты, та же сборка промпта, что в бою, — та же сборка
+/// <see cref="AssistantRuntime.AddAssistantRuntime"/> и те же разделы проекта, — но
+/// в своём контейнере сервисов, который живёт ровно одну фразу.
 ///
 /// Изоляция — не вежливость, а условие: в боевую базу из мира сверки не уходит ни
-/// строчки. Прогон, план, память, размыкатель — всё в памяти; трассы и учёта хода нет
-/// вовсе (<see cref="NullRunTrace"/>, <see cref="NullRunBilling"/>) — расход фразы
-/// пишет сама сверка служебной строкой. Метрики хода уходят под своим именем, которое
-/// приложение не публикует; спаны — под корневым спаном сверки. Наружу идёт только
-/// запрос к модели — ради него сверка и делается.
+/// строчки. Мир — настоящий Postgres, но внутри одной транзакции, которую откатывают
+/// после фразы: прогон, план, память, люди и копия модели живут только в ней и другим
+/// соединениям не видны. Транзакции, которые открывает сам ход (применение плана, конец
+/// хода), становятся точками сохранения внутри неё (<see cref="NestedTransaction"/>),
+/// а атомарные <c>UPDATE</c> размыкателя работают как в бою — по копии модели.
 ///
-/// База в памяти — <c>Microsoft.EntityFrameworkCore.InMemory</c>: Postgres
-/// ради одной фразы не нужен, а атомарные <c>UPDATE</c> размыкателя в мире сверки
-/// не случаются (копия модели замкнута) или глотаются им же (запись отказа).
+/// Трассы и учёта хода нет вовсе (<see cref="NullRunTrace"/>, <see cref="NullRunBilling"/>) —
+/// расход фразы пишет сама сверка служебной строкой. Метрики хода уходят под своим
+/// именем, которое приложение не публикует; спаны — под корневым спаном сверки. Наружу
+/// идёт только запрос к модели — ради него сверка и делается.
 ///
-/// Инструменты — ядра: <c>search_help</c>, <c>ask_user</c>, <c>remember_fact</c>.
-/// Раздел проекта со своими инструментами (спец. assistant, 7.1) регистрирует их здесь же,
-/// в <see cref="Build"/>, и сеет данные под свои фразы в <see cref="ModelCheckWorld"/>
+/// Раздел проекта (спец. assistant, 7.1) попадает сюда сам: его инструменты и операции —
+/// тем же <c>IAssistantSection.Register</c>, данные под фразы — <c>IAssistantSection.Seed</c>
 /// </summary>
 public static class ModelCheckRunner
 {
@@ -44,32 +44,28 @@ public static class ModelCheckRunner
     /// <summary>Зона, в которой фразы набора считают «завтра» и «в пятницу» (спец. assistant, 10)</summary>
     public const string TimeZone = "Europe/Moscow";
 
+    /// <summary>
+    /// Порядок копии модели в справочнике мира: первее любой настоящей строки. Боевые
+    /// модели внутри транзакции мира видны, и ход обязан выбрать копию, а не их — иначе
+    /// размыкатель мира писал бы в боевую строку
+    /// </summary>
+    private const int CopyPriority = int.MinValue;
+
     /// <param name="phrase">Фраза набора</param>
     /// <param name="model">
-    /// Строка справочника, которую сверяют. В мир едет её копия со сброшенным
-    /// размыкателем: состояние боевой строки сверку не останавливает и ею не меняется
+    /// Строка справочника, которую сверяют. В мир едет её копия под своим id и со
+    /// сброшенным размыкателем: состояние боевой строки сверку не останавливает и ею
+    /// не меняется
     /// </param>
     /// <param name="chat">Клиент модели; писарь поверх него — свой у каждой фразы</param>
-    /// <param name="assistant">
-    /// Настройки хода — бюджет шагов, поля поставщика, — как в бою. Копируются: мир
-    /// не должен менять настройки приложения
-    /// </param>
-    /// <param name="search">Настройки эмбеддера — справка мира ищет так же, как боевая</param>
-    /// <param name="embedder">Эмбеддер приложения — вектор запроса к справке</param>
-    /// <param name="help">
-    /// Справка мира — та, что сейчас в памяти API. Нет — «справка недоступна», и фраза
-    /// проверяет только, что её позвали
-    /// </param>
+    /// <param name="environment">Настройки и сервисы приложения, которые мир берёт как есть</param>
     /// <param name="extendLease">Продление аренды команды между шагами, как у хода</param>
     /// <param name="ct">Остановка воркера</param>
     public static async Task<ModelCheckOutcome> RunOne(
         ModelCheckPhrase phrase,
         AiModel model,
         IChatClient chat,
-        AssistantOptions assistant,
-        SearchOptions search,
-        IEmbeddingGenerator<string, Embedding<float>> embedder,
-        HelpIndex? help,
+        ModelCheckEnvironment environment,
         Func<Task>? extendLease,
         CancellationToken ct)
     {
@@ -80,23 +76,47 @@ public static class ModelCheckRunner
         span?.SetTag("model.id", model.Id);
 
         var recorder = new RecordingChatClient(chat);
-        await using var provider = Build(recorder, assistant, search, embedder);
-        if (help != null) provider.GetRequiredService<HelpSearch>().Use(help);
+        await using var provider = Build(recorder, environment);
+        if (environment.Help != null) provider.GetRequiredService<HelpSearch>().Use(environment.Help);
         await using var scope = provider.CreateAsyncScope();
         var services = scope.ServiceProvider;
 
         var context = services.GetRequiredService<ApplicationContext>();
-        var world = ModelCheckWorld.Seed(context);
 
-        // Справочник из одной строки — той модели, что сверяется: ход без справочника
+        // Весь мир — одна транзакция, и она не фиксируется никогда
+        await using var world = await context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            return await Run(phrase, model, recorder, environment, services, context, extendLease, ct);
+        }
+        finally
+        {
+            await world.RollbackAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<ModelCheckOutcome> Run(
+        ModelCheckPhrase phrase,
+        AiModel model,
+        RecordingChatClient recorder,
+        ModelCheckEnvironment environment,
+        IServiceProvider services,
+        ApplicationContext context,
+        Func<Task>? extendLease,
+        CancellationToken ct)
+    {
+        var (userId, workspaceId) = await ModelCheckWorld.Seed(context, ct);
+        foreach (var section in environment.Sections) await section.Seed(context, workspaceId, userId, ct);
+
+        // Справочник мира — копия той модели, что сверяется: ход без справочника
         // не пойдёт, а выключенную модель сверяют так же, как включённую
         context.AiModels.Add(new AiModel
         {
-            Id = model.Id,
+            Id = Guid.CreateVersion7(),
             Provider = model.Provider,
             Key = model.Key,
             DisplayName = model.DisplayName,
-            Priority = 1,
+            Priority = CopyPriority,
             CostIn = model.CostIn,
             CostCached = model.CostCached,
             CostOut = model.CostOut,
@@ -108,8 +128,8 @@ public static class ModelCheckRunner
         var run = new AssistantRun
         {
             Id = Guid.CreateVersion7(now),
-            UserId = world.UserId,
-            WorkspaceId = world.WorkspaceId,
+            UserId = userId,
+            WorkspaceId = workspaceId,
             TimeZone = TimeZone,
             Language = "ru",
             Status = AssistantRunStatus.Running,
@@ -119,8 +139,8 @@ public static class ModelCheckRunner
         context.AssistantMessages.Add(new AssistantMessage
         {
             Id = Guid.CreateVersion7(now),
-            UserId = world.UserId,
-            WorkspaceId = world.WorkspaceId,
+            UserId = userId,
+            WorkspaceId = workspaceId,
             Role = AssistantMessageRole.User,
             Content = phrase.Phrase,
             RunId = run.Id,
@@ -146,32 +166,32 @@ public static class ModelCheckRunner
     }
 
     /// <summary>
-    /// Минимальная проводка: то же, что в <c>ServicesExtensions.AddAssistant</c>,
-    /// но без веб-хоста, очереди и Postgres — фразе нужен один ход, а не приложение
+    /// Сборка хода — та же, что у приложения, и разделы те же; поверх — то, чем мир
+    /// отличается: своя база в транзакции, писарь вместо клиентов моделей, свои
+    /// метрики, ни трассы, ни учёта. Веб-хоста и очереди нет — фразе нужен один ход
     /// </summary>
-    private static ServiceProvider Build(
-        RecordingChatClient recorder,
-        AssistantOptions assistant,
-        SearchOptions search,
-        IEmbeddingGenerator<string, Embedding<float>> embedder)
+    private static ServiceProvider Build(RecordingChatClient recorder, ModelCheckEnvironment environment)
     {
         var services = new ServiceCollection();
 
-        services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
-        services.AddDbContext<ApplicationContext>(x => x
-            .UseInMemoryDatabase($"model-check-{Guid.NewGuid()}")
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        services.AddAssistantRuntime();
+        foreach (var section in environment.Sections) services.AddAssistantSection(section);
 
-        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(Copy(assistant)));
+        services.AddLogging(x => x.SetMinimumLevel(LogLevel.Warning));
+        services.AddDbContext<ApplicationContext>(x => ApplicationContextFactory.Configure(x, environment.ConnectionString));
+
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(Copy(environment.Assistant)));
         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ModelBreakerOptions()));
         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new HelpOptions()));
-        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(search));
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(environment.Search));
 
         services.AddSingleton(recorder);
-        services.AddSingleton<IModelChatClients>(new RecorderClients(recorder));
-        services.AddSingleton(embedder);
-        services.AddSingleton<RunNotifier>();
-        services.AddSingleton(new AssistantMetrics(MeterName));
+        services.AddSingleton(environment.Embedder);
+        services.Replace(ServiceDescriptor.Singleton<IModelChatClients>(new RecorderClients(recorder)));
+        services.Replace(ServiceDescriptor.Singleton(new AssistantMetrics(MeterName)));
+        services.Replace(ServiceDescriptor.Scoped<IRunTrace, NullRunTrace>());
+        services.Replace(ServiceDescriptor.Scoped<IRunBilling, NullRunBilling>());
+
         // Справка мира кэша векторов на диске не держит: индекс уже собран боевой справкой
         services.AddSingleton(sp => new HelpSearch(
             sp.GetRequiredService<IServiceScopeFactory>(),
@@ -179,23 +199,6 @@ public static class ModelCheckRunner
             sp.GetRequiredService<IOptions<SearchOptions>>(),
             sp.GetRequiredService<ILogger<HelpSearch>>(),
             sp.GetRequiredService<AssistantMetrics>()) { CacheDirectory = null });
-
-        services.AddTransient<AiModelCatalog>();
-        services.AddTransient<ModelBreaker>();
-        services.AddScoped<AssistantContext>();
-        services.AddScoped<PlanCollector>();
-        services.AddScoped<RunOutcome>();
-        services.AddScoped<LoopGuards>();
-        services.AddScoped<AssistantTools>();
-        services.AddScoped<AssistantRunService>();
-        services.AddTransient<MemoryService>();
-        services.AddTransient<PlanOperations>();
-        services.AddTransient<PlanExecutor>();
-        services.AddTransient<AssistantPermissions>();
-        services.AddTransient<SystemPromptBuilder>();
-        services.AddTransient<HistoryBuilder>();
-        services.AddScoped<IRunTrace, NullRunTrace>();
-        services.AddScoped<IRunBilling, NullRunBilling>();
 
         return services.BuildServiceProvider();
     }

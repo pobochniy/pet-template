@@ -82,16 +82,14 @@ public class AdminWiringTests
     /// прав не выбирает молча ни «требовать пространство у админки», ни «пускать без проверки»
     /// </summary>
     [Fact]
-    public void PermissionsRefuseEndpointOutsideWorkspace()
+    public async Task PermissionsRefuseEndpointOutsideWorkspace()
     {
         var descriptor = new ActionDescriptor { EndpointMetadata = [new OutsideWorkspace()], DisplayName = "Mixed" };
-        var context = new ActionExecutingContext(
+        var context = new AuthorizationFilterContext(
             new ActionContext(new DefaultHttpContext(), new RouteData(), descriptor),
-            new List<IFilterMetadata>(),
-            new Dictionary<string, object?>(),
-            controller: new object());
+            new List<IFilterMetadata>());
 
-        Assert.Throws<InvalidOperationException>(() => new PermissionsValidation().OnActionExecuting(context));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new PermissionsValidation(null!).OnAuthorizationAsync(context));
     }
 
     /// <summary>

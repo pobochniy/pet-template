@@ -30,7 +30,10 @@ public class AssistantRunCommandHandler(
 {
     /// <summary>
     /// Попыток на ход — две. Бесконечного повтора у хода нет: очередь повторяет
-    /// «пока не отработает» только то, что обязано отработать, а ход — не обязан
+    /// «пока не отработает» только то, что обязано отработать, а ход — не обязан.
+    /// Каждая попытка — весь платный цикл заново, поэтому попытка считается до обращения
+    /// к модели, а предел проверяется до него же: процесс, убитый посреди хода (OOM),
+    /// исключения не бросает, и счёт в одном <c>catch</c> пропустил бы его вечно
     /// </summary>
     public const int MaxAttempts = 2;
 
@@ -62,6 +65,19 @@ public class AssistantRunCommandHandler(
             return;
         }
 
+        if (run.Attempts >= MaxAttempts)
+        {
+            // Прошлая попытка не дошла ни до конца, ни до catch: процесс умер посреди хода.
+            // Модель не зовём — ещё один платный цикл по ходу, который уже дважды не
+            // кончился, не нужен никому; человек получает строку в ленте (12.3)
+            logger.LogError("Assistant run {RunId} is given up: {Attempts} attempts did not finish", run.Id,
+                run.Attempts);
+            await runs.FinishFailed(run.Id, CancellationToken.None);
+            await threads.StartNextWaiting(run.UserId, run.WorkspaceId, CancellationToken.None);
+
+            return;
+        }
+
         run.Attempts++;
         await context.SaveChangesAsync(ct);
 
@@ -77,7 +93,18 @@ public class AssistantRunCommandHandler(
             // Таймаут HTTP-клиента — тоже OperationCanceledException, но токен хода
             // при нём жив: это отказ поставщика, и он идёт в повтор, как любой другой (16.2)
             logger.LogInformation("Assistant run {RunId} was stopped by user", run.Id);
+            await Discard(run);
             await runs.FinishStopped(run.Id, CancellationToken.None);
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            // Остановка процесса (выкатка) — не провал попытки: ход начнётся заново
+            // со следующим запуском, и платить за это второй попыткой незачем
+            await context.AssistantRuns
+                .Where(x => x.Id == run.Id && x.Attempts > 0)
+                .ExecuteUpdateAsync(x => x.SetProperty(r => r.Attempts, r => r.Attempts - 1), CancellationToken.None);
+
+            throw;
         }
         catch (Exception e) when (!ct.IsCancellationRequested)
         {
@@ -87,6 +114,7 @@ public class AssistantRunCommandHandler(
             // получает строку в ленте вместо молчания (12.3)
             if (run.Attempts < MaxAttempts) throw;
 
+            await Discard(run);
             await runs.FinishFailed(run.Id, CancellationToken.None);
         }
         finally
@@ -101,6 +129,25 @@ public class AssistantRunCommandHandler(
         await Compact(run, CancellationToken.None);
         // Очередь треда: сообщение, пришедшее во время хода, ждало именно этого
         await threads.StartNextWaiting(run.UserId, run.WorkspaceId, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Оборванная попытка оставила в контексте несохранённое — недописанный шаг, план
+    /// из <c>Finish</c>, упавшего посреди: следующее сохранение (конец хода, очередь треда)
+    /// унесло бы это в базу. Конец хода перечитывает прогон сам. Из несохранённого остаются
+    /// только токены прогона: они уже израсходованы у поставщика и уйдут в учёт (13.5)
+    /// </summary>
+    private async Task Discard(AssistantRun run)
+    {
+        var (tokensIn, tokensCached, tokensOut) = (run.TokensIn, run.TokensCached, run.TokensOut);
+        context.ChangeTracker.Clear();
+
+        await context.AssistantRuns
+            .Where(x => x.Id == run.Id)
+            .ExecuteUpdateAsync(x => x
+                .SetProperty(r => r.TokensIn, tokensIn)
+                .SetProperty(r => r.TokensCached, tokensCached)
+                .SetProperty(r => r.TokensOut, tokensOut), CancellationToken.None);
     }
 
     /// <summary>

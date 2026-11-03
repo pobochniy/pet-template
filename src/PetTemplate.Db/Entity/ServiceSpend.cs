@@ -89,6 +89,9 @@ public class ServiceSpendConfiguration : IEntityTypeConfiguration<ServiceSpend>
         // Лимит пространства: расшифровки за сутки и за месяц (13.6)
         builder.HasIndex(x => new { x.WorkspaceId, x.CreatedUtc });
 
+        // Суточный потолок человека — по всем его пространствам (13.6)
+        builder.HasIndex(x => new { x.UserId, x.CreatedUtc });
+
         // Модель не удаляется, а выключается (16.2)
         builder
             .HasOne(x => x.Model)

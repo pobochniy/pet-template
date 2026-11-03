@@ -32,7 +32,7 @@ describe('ResetComponent', () => {
     router = TestBed.inject(Router);
     userService = TestBed.inject(UserService);
     recovery = TestBed.inject(RecoveryApiServiceMock);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     fixture = TestBed.createComponent(ResetComponent);
     fixture.componentRef.setInput('token', token);
     el = fixture.nativeElement;
@@ -56,7 +56,7 @@ describe('ResetComponent', () => {
 
     await submit('Novyi-parol-42');
 
-    expect(userService.isAuthenticated).toBeTrue();
+    expect(userService.isAuthenticated).toBe(true);
     expect(router.navigateByUrl).toHaveBeenCalledWith('/');
   });
 

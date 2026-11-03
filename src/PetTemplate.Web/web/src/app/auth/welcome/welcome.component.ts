@@ -3,14 +3,14 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { UserService } from '../../shared/core/user.service';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
 import { createPasswordForm, userNameValidators } from '../../shared/form-models/account-form.model';
 import { USER_NAME_MAX_LENGTH } from '../../shared/form-models/account-rules';
 import { applyServerValidationErrors } from '../../shared/core/server-validation.util';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /**
  * «Добро пожаловать» (`/welcome`, спец. accounts, 5.4) — то, что спросила бы форма
@@ -34,10 +34,9 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   styles: ['.auth-welcome { max-width: 560px; }']
 })
 export class WelcomeComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
   /** Полем, а не параметром конструктора: им заполняется поле логина ниже */
   private readonly userService = inject(UserService);
-  private readonly workspaceContext = inject(WorkspaceContextService);
 
   protected readonly userNameMaxLength = USER_NAME_MAX_LENGTH;
   protected readonly userName = new FormControl(this.savedUserName(), { nonNullable: true });
@@ -111,8 +110,8 @@ export class WelcomeComponent {
   }
 
   /** Перевыпуск сессии — тот же человек: активное пространство остаётся */
-  private applySession(session: Parameters<UserService['applySession']>[0]): void {
-    this.userService.applySession(session, this.workspaceContext.getCurrentWorkspaceId());
+  private applySession(session: Parameters<UserService['renewSession']>[0]): void {
+    this.userService.renewSession(session);
   }
 
   private savedUserName(): string {

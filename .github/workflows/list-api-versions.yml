@@ -1,5 +1,7 @@
 name: List Api Versions
 
+# Только смотрит: образы чистит cleanup-old-images.yml после каждой выкатки (publish-api.yml),
+# а не просмотр списка — иначе просмотр перед откатом удалял бы то, на что откатываются
 on:
   workflow_dispatch:
 
@@ -28,10 +30,3 @@ jobs:
           echo ""
           echo "💾 Total images: $(docker images pettemplate-api | tail -n +2 | wc -l)"
 
-  cleanup:
-    needs: list-versions
-    uses: ./.github/workflows/cleanup-old-images.yml
-    with:
-      image_name: pettemplate-api
-      keep_versions: 5
-      container_name: dapi

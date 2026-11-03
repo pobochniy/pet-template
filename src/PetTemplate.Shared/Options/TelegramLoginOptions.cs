@@ -26,7 +26,7 @@ public class TelegramLoginOptions
 
     /// <summary>
     /// Открытые ключи подписи <c>id_token</c> — копия <c>oauth.telegram.org/.well-known/jwks.json</c>.
-    /// Копия, а не запрос (спец. accounts, 5.2 и 14.1): сервер в Telegram не ходит. Telegram
+    /// Копия, а не запрос (спец. accounts, 5.2 и 14, вопрос 1): сервер в Telegram не ходит. Telegram
     /// сменил ключи — вход падает с незнакомым <c>kid</c> в логе, и копию обновляют вручную
     /// </summary>
     public List<SigningKeyOptions> Keys { get; set; } = [];

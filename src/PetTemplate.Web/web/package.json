@@ -7,6 +7,11 @@
     "i18n:check": "node tools/i18n-codegen.mjs --check",
     "i18n:lint": "node tools/i18n-lint.mjs",
     "i18n:codes": "node tools/i18n-server-codes.mjs",
+    "lint:storage": "node tools/storage-lint.mjs",
+    "enum:parity": "node tools/enum-parity.mjs",
+    "api:types": "node tools/api-types.mjs",
+    "test:tools": "node --test tools/*.test.mjs",
+    "csp:hash": "node tools/csp-hash.mjs",
     "prestart": "npm run i18n",
     "start": "ng serve pet-template",
     "prebuild": "npm run i18n",
@@ -16,7 +21,7 @@
     "test": "ng test pet-template",
     "start:admin": "ng serve admin",
     "build:admin": "ng build admin",
-    "test:admin": "ng test admin --watch=false --browsers=ChromeHeadless"
+    "test:admin": "ng test admin --watch=false"
   },
   "prettier": {
     "printWidth": 100,
@@ -47,13 +52,9 @@
     "@angular/build": "^21.2.29",
     "@angular/cli": "^21.2.29",
     "@angular/compiler-cli": "^21.2.25",
-    "@types/jasmine": "~5.1.0",
-    "jasmine-core": "~5.9.0",
-    "karma": "~6.4.0",
-    "karma-chrome-launcher": "~3.2.0",
-    "karma-coverage": "~2.2.0",
-    "karma-jasmine": "~5.1.0",
-    "karma-jasmine-html-reporter": "~2.3.0",
-    "typescript": "~6.0.3"
+    "jsdom": "^28.1.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.12"
   }
 }

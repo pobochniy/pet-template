@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace PetTemplate.Services.Commands;
 
 /// <summary>
@@ -7,9 +5,9 @@ namespace PetTemplate.Services.Commands;
 /// по очереди, и после каждой запуск записывает, сколько сделано, — повтор после падения
 /// продолжает с той же фразы, а не с начала и не вторым счётом
 /// </summary>
-public class ModelCheckCommand
+public class ModelCheckCommand : ICommand
 {
-    public Guid JobId { get; set; }
+    public static string QueueName => "model-check";
 
-    public override string ToString() => JsonSerializer.Serialize(this);
+    public Guid JobId { get; set; }
 }

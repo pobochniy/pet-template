@@ -1,13 +1,15 @@
 using System.ComponentModel;
-using Microsoft.Extensions.AI;
 using PetTemplate.Services.Assistant.Plans;
 using PetTemplate.Services.Assistant.Tools;
+using PetTemplate.Shared.Enums;
 
 namespace PetTemplate.Tests.Features.Assistant.TestPlan;
 
 /// <summary>
 /// Инструменты тестового раздела (спец. assistant, 7.1): так их приносит раздел проекта —
-/// пишущие кладут операцию в план и ничего не меняют сами
+/// читающий объявляет право раздела (в тестах его изображает
+/// <see cref="PermissionEnum.WorkspaceInfoCrud"/>), пишущие кладут операцию в план
+/// и ничего не меняют сами: их права проверит операция при применении
 /// </summary>
 public sealed class TestNoteTools(PlanCollector collector, TestNoteStore store) : IAssistantToolSource
 {
@@ -15,12 +17,12 @@ public sealed class TestNoteTools(PlanCollector collector, TestNoteStore store) 
 
     public string Instructions => Rules;
 
-    public IEnumerable<AITool> Tools() =>
+    public IEnumerable<AssistantTool> Tools() =>
     [
-        AIFunctionFactory.Create(FindNotes, "find_test_notes", null, AssistantTools.SchemaJson),
-        AIFunctionFactory.Create(CreateNote, "create_test_note", null, AssistantTools.SchemaJson),
-        AIFunctionFactory.Create(CreateBook, "create_test_book", null, AssistantTools.SchemaJson),
-        AIFunctionFactory.Create(RenameNote, "rename_test_note", null, AssistantTools.SchemaJson)
+        AssistantTool.Create(FindNotes, "find_test_notes", PermissionEnum.WorkspaceInfoCrud),
+        AssistantTool.Create(CreateNote, "create_test_note"),
+        AssistantTool.Create(CreateBook, "create_test_book"),
+        AssistantTool.Create(RenameNote, "rename_test_note")
     ];
 
     [Description("Заметки: id и название")]

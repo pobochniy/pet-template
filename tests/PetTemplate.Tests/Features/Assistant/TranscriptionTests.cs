@@ -109,7 +109,8 @@ public class TranscriptionTests
     }
 
     /// <summary>
-    /// Движок длительность не назвал — считаем по словам клиента: вызов был и стоил денег
+    /// Ни движок, ни контейнер длительность не назвали — считаем по словам клиента:
+    /// вызов был и стоил денег
     /// </summary>
     [Fact]
     public async Task ClientSecondsAreUsedWhenEngineIsSilent()
@@ -199,7 +200,8 @@ public class TranscriptionTests
         await world.Save();
 
         // Act
-        var (tokens, _) = await new WorkspaceLimits(world.Db, Microsoft.Extensions.Options.Options.Create(world.SpendSettings))
+        var (tokens, _) = await new WorkspaceLimits(world.Db, Microsoft.Extensions.Options.Options.Create(world.SpendSettings),
+                Microsoft.Extensions.Options.Options.Create(world.Settings))
             .Usage(world.WorkspaceId, WorkspaceLimits.DayStart(world.Now), CancellationToken.None);
 
         // Assert
@@ -241,6 +243,51 @@ public class TranscriptionTests
         // Assert
         Assert.Equal(AssistantErrors.AudioTooLong.Code, refused.Code);
         Assert.Equal(0, engine.Calls);
+    }
+
+    /// <summary>
+    /// Потолок длительности держит сервер (6.1): запись в полторы минуты получает отказ
+    /// по контейнеру, хотя клиент назвал три секунды
+    /// </summary>
+    [Fact]
+    public async Task TooLongContainerIsRefusedWhateverClientSays()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Пончики и Плюшки");
+        var engine = new FakeTranscription("привет");
+        var audio = AudioContainers.WebM(90);
+
+        // Act
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() => world.Voice(engine)
+            .Transcribe(world.Author, world.WorkspaceId, new MemoryStream(audio), audio.Length, "voice.webm",
+                "audio/webm", 3, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(AssistantErrors.AudioTooLong.Code, refused.Code);
+        Assert.Equal(0, engine.Calls);
+    }
+
+    /// <summary>
+    /// Движок длительность не назвал — учёт идёт по контейнеру, а не по занижённым
+    /// секундам клиента (13.5)
+    /// </summary>
+    [Fact]
+    public async Task ContainerSecondsBeatClientSeconds()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Шарики и Палочки");
+        world.Settings.Transcription.Model = "whisper-test";
+        world.Settings.Transcription.CostPerMinute = 6m;
+        var audio = AudioContainers.FragmentedMp4(30);
+
+        // Act
+        await world.Voice(new FakeTranscription("привет"))
+            .Transcribe(world.Author, world.WorkspaceId, new MemoryStream(audio), audio.Length, "voice.mp4",
+                "audio/mp4", 1, CancellationToken.None);
+
+        // Assert
+        var spend = await world.NewContext().ServiceSpend.SingleAsync(CancellationToken.None);
+        Assert.Equal(31, spend.Seconds);
     }
 
     /// <summary>

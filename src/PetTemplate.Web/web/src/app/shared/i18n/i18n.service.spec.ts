@@ -77,16 +77,16 @@ describe('I18nService', () => {
     it('should survive a screen dictionary that did not arrive', async () => {
       await i18n.loadScope('auth');
 
-      const loader = spyOn(LOADERS.en, 'auth').and.returnValue(Promise.reject(new Error('chunk 404')));
+      const loader = vi.spyOn(LOADERS.en, 'auth').mockReturnValue(Promise.reject(new Error('chunk 404')));
 
       // Отказ наружу не летит: иначе переключатель языка не закрыл бы окно
-      await expectAsync(i18n.setLang('en')).toBeResolved();
+      await expect(i18n.setLang('en')).resolves.toBeUndefined();
 
       expect(i18n.lang()).toBe('en');
       expect(i18n.t('core.action.save')).toBe('Save');
 
       // И язык не залипает: словарь экрана помечен старым, следующий заход его перезапросит
-      loader.and.callThrough();
+      loader.mockRestore();
       await i18n.loadScope('auth');
 
       expect(i18n.translateCode('auth.error.invalidCredentials')).toBe('Wrong username or password');
@@ -114,7 +114,7 @@ describe('I18nService', () => {
       const chunk = new Promise<{ default: Dict }>(resolve => {
         arrive = () => resolve({ default: { 'auth.error.invalidCredentials': 'Wrong username or password' } });
       });
-      spyOn(LOADERS.en, 'auth').and.returnValue(chunk);
+      vi.spyOn(LOADERS.en, 'auth').mockReturnValue(chunk);
 
       const switching = i18n.setLang('en');
 
@@ -122,7 +122,7 @@ describe('I18nService', () => {
       const loading = i18n.loadScope('auth').then(() => (loaded = true));
       await new Promise(resolve => setTimeout(resolve));
 
-      expect(loaded).withContext('словарь экрана ещё на прошлом языке').toBeFalse();
+      expect(loaded, 'словарь экрана ещё на прошлом языке').toBe(false);
 
       arrive();
       await Promise.all([switching, loading]);

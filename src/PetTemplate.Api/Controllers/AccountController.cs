@@ -29,7 +29,7 @@ public class AccountController(
     ExternalProof externalProof,
     AccountMergeService merge,
     AccountCards cards,
-    AdminLoginLimiter loginLimiter,
+    LoginLimiter loginLimiter,
     IOptions<AccountOptions> options) : ControllerBase
 {
     /// <summary>Блок «Основное» (раздел 6)</summary>
@@ -150,7 +150,7 @@ public class AccountController(
     /// и слиянием. Ответ — новая сессия с отметкой входа паролем: окно
     /// <c>AccountOptions.FreshLoginWindow</c> считается от неё. Прежние токены не отзываются.
     /// Неверный пароль — <c>422</c> по полю <c>password</c>. Неудачи считает лимит, общий со входом
-    /// (8.1, <see cref="AdminLoginLimiter"/>): сверх него — <c>400 auth.error.tooManyAttempts</c>
+    /// (8.1, <see cref="LoginLimiter"/>): сверх него — <c>400 auth.error.tooManyAttempts</c>
     /// и на верный пароль, иначе украденная сессия подбирала бы пароль без счёта
     /// </summary>
     [HttpPost]
@@ -311,9 +311,9 @@ public class AccountController(
     /// <summary>
     /// Проверка своего пароля под лимитом входа (8.1) — по своей учётке и адресу. Заперто —
     /// <c>400 auth.error.tooManyAttempts</c> до проверки. Попытка уже в счёте неудачей,
-    /// удачная зовёт <see cref="AdminLoginLimiter.Attempt.Succeeded"/>
+    /// удачная зовёт <see cref="LoginLimiter.Attempt.Succeeded"/>
     /// </summary>
-    private AdminLoginLimiter.Attempt BeginPasswordAttempt(Guid userId) =>
+    private LoginLimiter.Attempt BeginPasswordAttempt(Guid userId) =>
         loginLimiter.TryBeginProduct(userId, Address())
         ?? throw new BadRequestException(AuthMessages.TooManyAttempts);
 

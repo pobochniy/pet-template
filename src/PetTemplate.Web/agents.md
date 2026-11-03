@@ -17,6 +17,10 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Переходы между экранами — `withViewTransitions` с `onViewTransitionCreated` (`app.config.ts`):
   внутри одного маршрута (меняется только параметр) перелистывание пропускается, отменённое
   браузером не печатается как ошибка запуска (`isAbortedViewTransition` в `main.ts`).
+- **`shared/` — только то, что нужно двум разделам и больше** (или оболочке). Модель формы,
+  api-сервис, утилита одного раздела живут в его папке: `profile/profile-api.service.ts`,
+  `workspace/form-models/invitation-form.model.ts`, `miniapp/mini-app.util.ts`. Понадобилось
+  второму разделу — тогда и переезжает в `shared/`.
 - Use signals for state management.
 - Do NOT use the `@HostBinding` and `@HostListener` decorators. Put host bindings inside the `host` object of the `@Component` or `@Directive` decorator instead
 - Use `NgOptimizedImage` for all static images.
@@ -56,6 +60,26 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 | `col-xs-*`, `col-md-offset-*`, `input-group-append/prepend` | `col-*`, `offset-md-*`, элементы прямо в `input-group` |
 
 - `<select>` — `form-select`, не `form-control`.
+- **Тёмная тема — по системе** (`$color-mode-type: media-query` в `src/bootstrap.scss`). Цвета
+  своих стилей — только переменными `--bs-*` (`var(--bs-danger-bg-subtle)`), фон блока —
+  `bg-body-tertiary`, а не `bg-light`/`bg-white`: жёсткий цвет в тёмной теме останется светлым.
+
+### Markdown — только `shared/markdown`
+
+- Текст модели, статьи справки и любой недоверенный markdown рисует `<app-markdown [text]>`
+  (`shared/markdown`): разбор в дерево узлов и шаблон Angular, без `innerHTML`. Ссылка — только
+  на свой маршрут (`routerLink`), чужой адрес остаётся текстом. `[innerHTML]` с данными сервера
+  или модели не пишем: за ним осталась бы только CSP.
+- Рекурсия в шаблонах — компонентом с атрибутным селектором (`[mdInlines]`), а не
+  `ngTemplateOutlet`/`<ng-container>`: их код ложится в initial (`tech-debt/bundle.md`).
+
+### CSP и инлайн-скрипт `index.html`
+
+- nginx отдаёт CSP с `script-src 'self' 'sha256-…'` — хеш единственного инлайн-скрипта
+  `src/index.html` (`IaC/nginx/conf/nginx.conf`). Правите скрипт — `npm run csp:hash -- --write`;
+  `--check` стоит в `pre-commit`, `web-tests.yml` и после сборки в `publish-*.yml`.
+- Инлайн-обработчиков (`onclick="…"`) и новых инлайн-скриптов нет; поэтому в `angular.json`
+  выключен `inlineCritical` (его `onload` CSP не пустит).
 
 ### Иконки: lucide
 
@@ -133,7 +157,8 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - Prefer constructor injection in components for services.
   - Correct: `constructor(private newsService: NewsApiService) {}`
   - `inject()` may still be used in factory functions, providers, and tests when constructor DI is not applicable.
-  - `I18nService` берётся полем: `protected readonly i18n = inject(I18nService);` — им пользуется шаблон.
+  - Перевод берётся полем: `protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);` — им пользуется
+    шаблон, а `t` принимает ключи только `core` и словарей маршрута (см. «Язык интерфейса»).
 
 ## State Management
 
@@ -155,7 +180,9 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 
 ## Forms
 
-- **Reactive Forms models must be defined in `src/app/shared/form-models/`** (`*-form.model.ts`).
+- **Модели форм — в `form-models/`** (`*-form.model.ts`): своего раздела (`auth/form-models/`,
+  `profile/form-models/`…), а общие двум разделам и больше — в `src/app/shared/form-models/`
+  (`login-form.model.ts` нужен входу, приглашению и mini-app).
   - Модель формы — **фабрика**, а не общий экземпляр: `export function createProfileForm() { return new FormGroup({...}); }`,
     в компоненте `public readonly profileForm = createProfileForm();`. Общий `FormGroup` на модуль
     переживал уход с экрана и выход: следующий вошедший видел бы чужие значения.
@@ -186,8 +213,9 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
   сырые `{code, params, text}` лежат в `errors.serverError` и переводятся `form-validation`
   на каждой отрисовке. Возвращает отказы без поля (`payload`) — их экран показывает сам.
 - Правила логина, пароля, телефона и почты — `shared/form-models/account-rules.ts`, копия
-  `UserNameRule`/`PasswordRule`/`PhoneRule` сервера; ключи ошибок (`userNameFormat`,
+  `UserNameRule`/`PasswordRule`/`PhoneRule` и `[MaxLength]` почты сервера; ключи ошибок (`userNameFormat`,
   `userNameReserved`, `phoneFormat`) совпадают с хвостами кодов сервера — перевод один.
+  Длины и выражения сверяет с C# `npm run enum:parity`.
 
 - UX on submit
   - To reveal errors on submit, call `this.form.markAllAsTouched()` before checking `valid`.
@@ -200,24 +228,78 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - All API calls must be contained within services.
 - Services must implement methods that return a Promise, allowing them to be consumed by components using async/await.
 - Avoid using RxJS. Write code in an async/await style.
+- **Чтение — `contextResource`, команды — `async/await`.** Данные экрана, зависящие от
+  пространства или пользователя вкладки, читает `contextResource` (`shared/core/context-resource.ts`):
+  сменился контекст — прежний запрос обрывается (`abortSignal` → `BaseApiService` → `HttpClient`),
+  значение сразу пустое, ответ про прошлое пространство в экран не ляжет. После команды — `reload()`
+  (или `set()`, если ответ команды уже есть). Состояние экрана, которое при смене контекста
+  сбрасывается (раскрытая строка, подтверждение), — `contextSignal(initial)`. Эффект с флагом
+  «первый раз» и `untracked` ради перечитывания — не пишем. `resource()` из `@angular/core`
+  не берём: его код ложится в initial (+5 КБ, `tech-debt/bundle.md`), модель у `contextResource` та же.
+- Метод api-сервиса, который читает, принимает последним параметром `signal?: AbortSignal`
+  и передаёт его в `get/post` `BaseApiService`. `withCredentials` не ставим: вход — `Bearer`,
+  запросы того же origin, кук у продукта нет (кука шлюза админки — её дело).
+- Api-сервис **только спрашивает сервер**: возвращает DTO и сессию, профиль, активное
+  пространство не трогает. Раскладывает ответ экран через `UserService` (см. ниже).
+- **Типы DTO — из OpenAPI документа API, а не копией руками.** `npm run api:types`
+  (`tools/api-types.mjs`) собирает API, снимает документ `dotnet swagger tofile` (сервер
+  не запускается — ни базы, ни Qdrant не нужно) и пишет `shared/api/generated/schema.d.ts`
+  (`openapi-typescript`, только типы — в бандл не попадает). Модели в `shared/models/*.ts`
+  и `projects/admin/src/app/core/admin.model.ts` — алиасы: `type ProfileModel = ApiSchema<'ProfileDto'>`;
+  руками — только то, чего на проводе нет (`ExternalProvider`, признаки запросов `*Filter`).
+  Поля ответа обязательны все, `null` — в типе (`email: string | null`); у схемы, которая бывает
+  только телом запроса, необязательно то, что сервер примет и пустым. Перечисления в схеме — номера (`0 | 1 | 2`),
+  с `enum` клиента совместимы в обе стороны, имена сверяет `enum:parity`. Правите DTO на
+  сервере — `npm run api:types` и закоммитить сгенерированное; проверку `--check` гоняют
+  `pre-commit` (на `*.cs`/`*.csproj`) и `web-tests.yml`. Ответ сервера в спеке собирается
+  фабрикой из `shared/api/dto.mock.ts` (`profileDto`, `sessionDto`, `assistantMessageDto`…):
+  новое обязательное поле дописывается туда, а не в каждую спеку.
 - Naming for API-layer services: if a service resides under `src/app/shared/api/`, it MUST have the `ApiService` suffix (e.g., `NewsApiService`).
+  Api-сервис одного раздела лежит в папке раздела (`workspace/users-api.service.ts`) — с тем же суффиксом.
 - Токен в запрос ставит `authInterceptor` (только своему `/api/`), а не api-сервис; он же
   на 401 завершает сессию (`UserService.expireSession`) и уводит на `/auth/login`
   (спец. authorization, 2.1).
 
 ### Сессия и активное пространство
 
-- Ответ входа и любого перевыпуска сессии раскладывает только `UserService.applySession(result,
-  activeWorkspaceId?)`: токен, профиль, права по пространствам, активное пространство
-  (спец. authorization, 2.1–2.2). Пользователь сессии лежит в `localStorage` (`user`) и
-  переживает перезагрузку.
-- Активное пространство — `WorkspaceContextService` (`currentWorkspaceId`), заголовок
+- Сессия меняется **в одном месте — `UserService`**. Ответ входа раскладывает
+  `applySession(result, activeWorkspaceId?)`, перевыпуск того же человека (пароль, логин,
+  подтверждение паролем) — `renewSession(result)` (пространство вкладки остаётся), принятие
+  приглашения — `applyAcceptedInvitation(result)` (активным — принятое). Токен, профиль,
+  права по пространствам, активное пространство — спец. authorization, 2.1–2.2.
+- Токен и пользователь лежат **одной записью** `session` в `localStorage` (`shared/core/session-store.ts`),
+  пишутся и читаются целиком. `TokenService` своего кеша не держит — читает запись на каждый запрос.
+  Запись **общая у вкладок**, поэтому:
+  - соседняя вкладка вошла, вышла или перевыпустила токен — `UserService` узнаёт событием `storage`
+    и перечитывает запись, **не записывая в ответ**; сменился человек — разделы убираются
+    (`SessionResetService`, `canPersist: false`), открытый экран перепроверяет гарды;
+  - 401 стирает запись, только если в ней всё ещё отказанный токен (`expireSession(token)`):
+    свежий токен соседней вкладки устаревший запрос этой не сотрёт;
+  - `setProfile` не пишет профиль рядом с токеном другого человека: запись чужая — вкладка
+    просто перечитывает её.
+- Активное пространство — `WorkspaceContextService` (`currentWorkspaceId`), **своё у вкладки**:
+  `sessionStorage`, а `localStorage` — умолчание для новой вкладки. Заголовок
   `X-Workspace-Id` ставит `workspaceInterceptor` (только своему `/api/`; уже стоящий заголовок
   не трогает). Переключать — только `UserService.switchWorkspace(id)`: пространство и права
   меняются вместе, `PermissionsService` держит права **активного** пространства.
+- `UserService.context` — пользователь и пространство вкладки одним сигналом. От него зависят
+  `contextResource` экранов и `recheckRouteAccess` (`route-access.ts`): сменили пространство
+  в шапке — открытый экран проходит гарды заново и уводится, если прав больше нет.
+  Маршрут с правами объявляется фабрикой `requireRoles(MEMBERS_PAGE_PERMISSIONS)` (`roles.guard.ts`):
+  она ставит гард, типизированные `data` и `runGuardsAndResolvers: 'always'`; маршрут
+  с `signedInGuard` — тоже с `runGuardsAndResolvers: 'always'`.
 - Права не активного пространства — `UserService.permissionsIn(id)` (строка списка своих).
 - Экран, который берёт пространство из контекста, перечитывает данные при смене пространства
-  в шапке (образец — `workspace/members`).
+  в шапке через `contextResource` (образец — `workspace/members`).
+
+### Хранилище браузера — только `safeStorage`
+
+- `localStorage`/`sessionStorage` напрямую не трогаем: в фрейме mini-app VK, приватном режиме
+  и при запрете сторонних данных уже обращение к ним бросает. `safeStorage`
+  (`shared/core/safe-storage.ts`: `get/set/remove/getJson/setJson`, область `'local' | 'session'`)
+  ловит отказ и держит значение в памяти страницы. Это касается и админки.
+- Проверяет `npm run lint:storage` (`tools/storage-lint.mjs`, хук и `web-tests.yml`). Не проверяются
+  спеки (готовят хранилище напрямую) и инлайн-скрипт `index.html` (идёт до Angular, ловит отказ сам).
 
 ### Уборка состояния при выходе из аккаунта
 
@@ -257,18 +339,22 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - **`*.mock.ts` рядом с сервисом** — когда подмену просят **две и более** спеки **или** ей нужна
   память между вызовами. У такого сервиса заводится интерфейс, и мок его реализует — иначе
   подмена разъедется с настоящим сервисом молча.
-- **Подмена прямо в файле спеки** — когда она нужна одному экрану: класс или
-  `jasmine.createSpyObj` с ответом, заданным в самом тесте (`and.resolveTo(...)`).
+- **Подмена прямо в файле спеки** — когда она нужна одному экрану: класс или объект
+  из `vi.fn()` (`{ view: vi.fn() } as unknown as Mocked<ProfileApiService>`) с ответом,
+  заданным в самом тесте (`mockResolvedValue(...)`).
 
 Правила моков:
 
 - Мок повторяет **правила сервера**, а не только форму ответа. Тогда зелёная спека значит
   «так и работает», а не «подмена промолчала».
-- Спай без заданного ответа возвращает `undefined`, и экран «работает» на пустоте — ответ
-  задаётся явно в каждом тесте, где его читают.
+- `vi.fn()` без заданного ответа возвращает `undefined`, и экран «работает» на пустоте — ответ
+  задаётся явно в каждом тесте, где его читают. `vi.spyOn` же, в отличие от Jasmine, **зовёт
+  настоящий метод**: заглушить — `.mockImplementation(() => {})` или `.mockResolvedValue(...)`.
+  Шпионы `vi.spyOn` снимаются после каждого теста (`src/test-env.ts`).
 - Без `console.log` и искусственных задержек: они только замедляют прогон.
 - Состояние клиента (`UserService`, `PermissionsService`, `TokenService`) берётся настоящее
-  из `TestBed` и заполняется в тесте (`setProfile`, `initPermissions`).
+  из `TestBed` и заполняется в тесте (`applySession`, `setProfile`, `initPermissions`). Другую
+  вкладку изображает запись в `localStorage` и `window.dispatchEvent(new StorageEvent('storage', …))`.
 
 ## Отказы сервера
 
@@ -276,7 +362,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - Сервер отвечает на отказ `{ error, statusCode, code?, params? }` (`ErrorMessage(code, text)`
   на сервере). Показ — `serverErrorMessage(error, i18n, fallback)` из `shared/core/server-error.util.ts`:
   перевод кода, иначе текст сервера, иначе своя фраза. Код ищется в словаре по первому
-  сегменту — словарь с кодами раздела грузит его маршрут (`withScope(..., 'invite')`);
+  сегменту — словарь с кодами раздела грузит его маршрут (`'invite'` в `WORKSPACE_SCOPES`);
   `npm run i18n:codes` сверяет, что каждый код сервера есть в словаре.
 - 422 у поля — `{поле: [{code, params, text}]}`, имя поля в camelCase. У формы —
   `applyServerValidationErrors` (см. «Forms»); где поле не контрол (галки прав) —
@@ -310,8 +396,9 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
   `persist` молча сохраняет выбор из шапки (сервис грузится `import()`), `adopt` переключает
   интерфейс на язык профиля после входа и сброса пароля; регистрация шлёт `i18n.lang()`
 - **Форматы:** `shared/i18n/format.util.ts` и `formatters.ts` (кеш `Intl.*`)
-- **Защита:** `npm run i18n:lint` (текст мимо словаря), `npm run i18n:codes` (коды сервера есть
-  в словаре), `i18n-parity.spec.ts` (одинаковые ключи и подстановки во всех языках)
+- **Защита:** `npm run i18n:lint` (текст мимо словаря; разбор — компиляторы TypeScript
+  и Angular, самопроверка на образцах — `npm run test:tools`), `npm run i18n:codes` (коды сервера
+  есть в словаре), `i18n-parity.spec.ts` (одинаковые ключи и подстановки во всех языках)
 
 ### Нового текста в коде не бывает — только ключи
 
@@ -331,21 +418,40 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 - **Общее лежит в `core`**, своё — в словаре раздела. Подписи, которые рисуют два разных раздела,
   — только `core`: словарь соседнего раздела в этом чанке не загружен.
 - **Константа отдаёт ключ, а не текст.** Модуль читается один раз, и готовая строка застряла бы
-  на языке того момента. Образец: `PERMISSION_CATALOG` в `shared/permissions/permission-catalog.ts` (`labelKey`, `groupKey` — ключи).
+  на языке того момента. Образец: `PERMISSION_CATALOG` в `workspace/permission-catalog.ts` (`labelKey`, `groupKey` — ключи
+  типа `ScopedKey<'workspace'>`).
 - Строки с числом — `i18n.plural(key, n)`, формы `one/other` (en) и `one/few/many/other` (ru).
 - **Логи и `console.*` — английские.**
 - Пользовательское содержимое не переводится: имена, комментарии.
 - Бренды, которые проверка не трогает, — `BRANDS` в `tools/i18n-lint.mjs` (`PetTemplate`, `Telegram`).
+- Литерал в переводимом атрибуте отбивается на любом языке: `title="Save"` так же, как
+  `title="Сохранить"`, и в любой записи — `[title]="'…'"`, `[attr.aria-label]="'…'"`, ветви
+  `cond ? '…' : '…'`. Значение, которое человеку не показывают (`alt` картинки под `aria-hidden`), —
+  строкой в `ALLOWED_ATTRS` того же скрипта: атрибут, точное значение и причина; ключ на слово,
+  которого никто не увидит, не заводят.
 
 ### Словарь раздела едет со своим чанком
 
-В `app.routes.ts` раздел подключается через `withScope('profile', import('./profile/profile.routes'))`:
-словарь и чанк грузятся одним `Promise.all`. Резолвером так делать нельзя — фаза `RESOLVE`
+В `app.routes.ts` раздел подключается через `withScope(PROFILE_SCOPES, import('./profile/profile.routes'))`:
+словари и чанк грузятся одним `Promise.all`. Резолвером так делать нельзя — фаза `RESOLVE`
 идёт до загрузки компонентов, и словарь грузился бы перед чанком, а не вместе с ним.
-Новый раздел = новая папка + `i18n/{en,ru}/{scope}.json` + строка в `app.routes.ts`.
+Новый раздел = новая папка + `i18n/{en,ru}/{scope}.json` + `{раздел}/{раздел}.scopes.ts` + строка в `app.routes.ts`.
+
+**Словари маршрута проверяются на компиляции.** `I18nKey` — ключи всех словарей, и `t('invite.x')`
+скомпилировался бы на экране, чей маршрут `invite` не грузит. Поэтому список словарей маршрута —
+одна константа в `{раздел}/{раздел}.scopes.ts` (`export const PROFILE_SCOPES = ['profile', 'auth'] as const`),
+её грузит `withScope` и её же принимает экран:
+
+```ts
+protected readonly i18n = injectI18n(...PROFILE_SCOPES);   // t: только core.*, profile.*, auth.*
+```
+
+`injectI18n()` без аргументов — только `core` (оболочка, общие компоненты). Типы ключей по словарям
+(`ScopeKeys`, `ScopedKey<S>`) генерирует кодоген. `inject(I18nService)` с полным `I18nKey` — только
+там, где ключ приходит снаружи (`form-validation`). `npm run i18n:codes` читает константы `*.scopes.ts`.
 
 В юнит-тестах маршрута нет — словари грузит `loadAllScopes` из `shared/i18n/i18n.testing.ts`,
-а язык закреплён русским в `src/test-setup.spec.ts`.
+а язык закреплён русским в `src/test-setup.ts` (`setupFiles` в `angular.json`).
 
 ### Даты, числа и сортировка — мимо `DatePipe`/`DecimalPipe`
 
@@ -356,8 +462,22 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 
 ## Testing
 
-Angular 21, Karma + Jasmine (`@angular/build:karma`), ChromeHeadless, без Zone.js.
-Отдельного `test.ts` и `karma.conf.js` нет — общая настройка в `src/test-setup.spec.ts`.
+Angular 21, Vitest (`@angular/build:unit-test`, `runner: vitest`) в jsdom — без браузера,
+без Zone.js. Своего `vitest.config` нет — всё в `angular.json`. Общая настройка — `setupFiles`:
+`src/test-env.ts` (оба проекта: шпионы снимаются после теста, хранилище jsdom на Node 25,
+заглушка `scrollIntoView`) и `src/test-setup.ts` (продукт: русский язык и чистая сессия
+перед каждым тестом). Глобальные `describe`/`it`/`expect`/`vi` — из `vitest/globals`
+(`tsconfig.spec.json`), импортировать их не нужно; типы `Mock`, `Mocked` —
+`import type { Mocked } from 'vitest'`.
+
+- Раскладки в jsdom нет: размеры, `IntersectionObserver`, прокрутка и `matchMedia` не
+  работают — проверяйте классы и состояние, а не геометрию. Таймеры — `vi.useFakeTimers()`
+  и `vi.advanceTimersByTime(...)`, вернуть — `vi.useRealTimers()` в `finally`/`afterEach`.
+- Файлы спек одного воркера делят модули и окружение (`isolate: false` — по умолчанию
+  у Angular, как было в Karma): состояние на уровне модуля чистите сами.
+- Отказ навигации, оставленный тестом (`void router.navigateByUrl('/login')` без маршрута),
+  Vitest считает необработанной ошибкой и роняет прогон — даже при зелёных тестах. Дайте
+  маршрут (`provideRouter([{ path: 'login', children: [] }])`) или подмените переход.
 
 ### Zoneless configuration (important)
 - В каждой спеке, создающей компоненты: `providers: [provideZonelessChangeDetection()]`.
@@ -397,15 +517,18 @@ providers: [
 ### How to run tests
 
 ```bash
-npx ng test pet-template --watch=false --browsers=ChromeHeadless                       # все
-# одну спеку — обязательно вместе с test-setup, иначе язык будет английским и русские проверки упадут
-npx ng test pet-template --watch=false --browsers=ChromeHeadless --include=src/test-setup.spec.ts --include=src/app/shared/nav/top-nav/top-nav.component.spec.ts
-npx ng test pet-template --code-coverage --browsers=ChromeHeadless --watch=false        # покрытие → coverage/
+npx ng test pet-template --watch=false                                                  # все
+npx ng test pet-template --watch=false --include=src/app/shared/nav/top-nav/top-nav.component.spec.ts  # одну спеку
+npx ng test pet-template --watch=false --filter='TopNavComponent'                       # по имени describe/it
 ```
+
+Покрытия нет: `--coverage` требует `@vitest/coverage-v8`, а с `isolate: false` Angular
+`setupFiles` выполняются раз на воркер, и тесты падают. Понадобится — пакет и `--runner-config`
+с `test: { isolate: true }` (прогон вдвое дольше).
 
 Проект назван явно: в `angular.json` их два, второй — админка (раздел «Админка»).
 
-`ng test`, а не `npm test`: тот без флагов уходит в watch и открывает обычный Chrome.
+`ng test`, а не `npm test`: тот без `--watch=false` уходит в watch и ждёт правок.
 
 ### Перед коммитом
 
@@ -419,8 +542,9 @@ npx ng test pet-template --code-coverage --browsers=ChromeHeadless --watch=false
 `--no-verify`) — всё то же, что скажут хуки и деплой:
 
 ```bash
-npm run i18n:check && npm run i18n:lint && npm run i18n:codes
-npx ng test pet-template --watch=false --browsers=ChromeHeadless
+npm run i18n:check && npm run i18n:lint && npm run i18n:codes && npm run lint:storage && npm run enum:parity && npm run csp:hash -- --check
+npm run test:tools && npm run api:types -- --check
+npx ng test pet-template --watch=false
 npm run build        # сверить Initial total с tech-debt/bundle.md
 ```
 
@@ -434,7 +558,7 @@ npm run build        # сверить Initial total с tech-debt/bundle.md
 
 ```bash
 npm run start:admin   # дев-сервер на :4201 (его пускает CORS API), тот же proxy.conf.json
-npm run test:admin    # спеки админки, headless
+npm run test:admin    # спеки админки, Vitest в jsdom
 npm run build:admin   # сборка со своим бюджетом
 ```
 
@@ -467,5 +591,7 @@ npm run build:admin   # сборка со своим бюджетом
 вне оболочки и без `adminGuard`: у пришедшего по ссылке ни ролей, ни сессии (спец. admin, 3.4).
 Роли — копия `AdminRole` из
 `src/PetTemplate.Shared/Enums/AdminRole.cs` с теми же номерами в `core/admin-role.ts` (статус
-приглашения — так же, `core/admin-invitation-status.ts`); правите
-DTO админки — помните, что сборок две.
+приглашения — так же, `core/admin-invitation-status.ts`); номера и имена всех таких копий
+(и продукта, и админки) сверяет с C# `npm run enum:parity` — новое перечисление дописывается
+в его таблицу `ENUMS`. DTO админки — алиасы того же `schema.d.ts` продукта (документ у API
+один, `npm run api:types`); правите DTO — помните, что сборок две. Токен админки — тоже через `safeStorage`.

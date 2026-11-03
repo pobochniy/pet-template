@@ -32,6 +32,18 @@ public class MemoryService(ApplicationContext context, IOptions<AssistantOptions
     private const int TextLength = 200;
 
     /// <summary>
+    /// Доля значимых слов общего факта, которые обязаны найтись в реплике человека (12.5):
+    /// больше половины — пересказ того, что он сказал, а не чужой текст под его ключом
+    /// </summary>
+    public const double SharedFactGrounding = 0.6;
+
+    /// <summary>Короче — предлоги и союзы («в», «до», «и»): они не доказывают ничего</summary>
+    private const int GroundingWordLength = 3;
+
+    /// <summary>Общая основа двух форм слова — не короче четырёх букв</summary>
+    private const int GroundingStemLength = 4;
+
+    /// <summary>
     /// Что едет в промпт: все факты пространства плюс личные автора хода, но не больше
     /// потолка. Тридцать фактов модель ещё различает, триста — уже нет, и «память»
     /// превращается в фон, на котором теряется нужное
@@ -162,6 +174,28 @@ public class MemoryService(ApplicationContext context, IOptions<AssistantOptions
     }
 
     /// <summary>
+    /// Текст общего факта взят из реплики человека (12.5, раздел 9): не меньше
+    /// <see cref="SharedFactGrounding"/> его значимых слов нашлись в реплике. Слово —
+    /// от трёх букв или число; совпадение — до окончания («Насти» и «Настя», «отпуск»
+    /// и «отпуске»), а каждое число факта обязано прозвучать целиком. Мера грубая и без модели: пересказ своими
+    /// словами она отбивает, зато строка из чужой записи под прозвучавшим ключом
+    /// в общую память не уедет
+    /// </summary>
+    public static bool IsGrounded(string text, string userText)
+    {
+        var said = Words(userText);
+        var words = Words(text).Where(x => x.Length >= GroundingWordLength || x.All(char.IsDigit)).ToArray();
+        if (words.Length == 0) return false;
+
+        // Число — дата, сумма, номер — либо сказано, либо выдумано: долей его не добрать
+        if (words.Any(word => word.All(char.IsDigit) && !said.Contains(word))) return false;
+
+        var found = words.Count(word => said.Any(x => SameWord(word, x)));
+
+        return found >= words.Length * SharedFactGrounding;
+    }
+
+    /// <summary>
     /// Ключ — короткая нормализованная форма того, про что факт: нижний регистр,
     /// без кавычек и знаков препинания. На нём держатся и дедупликация, и счёт
     /// использования, поэтому нормализация одна на обе стороны
@@ -178,6 +212,21 @@ public class MemoryService(ApplicationContext context, IOptions<AssistantOptions
         }
 
         return string.Join(' ', text.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static string[] Words(string text) =>
+        Normalize(text).Replace('ё', 'е').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Одно слово с точностью до окончания: общая основа — всё, кроме двух последних букв</summary>
+    private static bool SameWord(string word, string said)
+    {
+        if (word == said) return true;
+        if (word.All(char.IsDigit) || said.All(char.IsDigit)) return false;
+
+        var common = 0;
+        while (common < word.Length && common < said.Length && word[common] == said[common]) common++;
+
+        return common >= Math.Max(GroundingStemLength, Math.Min(word.Length, said.Length) - 2);
     }
 
     private async Task<AssistantFact?> Find(

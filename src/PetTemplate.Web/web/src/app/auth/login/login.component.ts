@@ -2,13 +2,15 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ReactiveFormsModule } from '@angular/forms';
 import { AuthApiService } from '../../shared/api/auth-api.service';
+import { UserService } from '../../shared/core/user.service';
 import { createLoginForm } from '../../shared/form-models/login-form.model';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { LanguageService } from '../../shared/i18n/language.service';
 import { serverValidationErrors, serverValidationText } from '../../shared/core/server-validation.util';
 import { ExternalButtonsComponent } from '../external-buttons/external-buttons.component';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 @Component({
   selector: 'login-auth',
@@ -18,12 +20,13 @@ import { ExternalButtonsComponent } from '../external-buttons/external-buttons.c
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoginComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
   private readonly language = inject(LanguageService);
   public readonly loginForm = createLoginForm();
 
   constructor(
     private service: AuthApiService,
+    private userService: UserService,
     private router: Router,
     private alerts: AlertsService
   ) {}
@@ -34,6 +37,7 @@ export class LoginComponent {
 
     try {
       const result = await this.service.login(this.loginForm);
+      this.userService.applySession(result);
       // Язык профиля — выбор с другого устройства (спец. accounts, 8.4)
       await this.language.adopt(result?.profile?.language);
       await this.router.navigateByUrl('/');

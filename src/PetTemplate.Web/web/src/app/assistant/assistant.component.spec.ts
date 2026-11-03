@@ -14,6 +14,7 @@ import { SessionResetService } from '../shared/core/session-reset.service';
 import {
   AssistantFactKind, AssistantMessageRole, AssistantPlanStatus, AssistantRunStatus
 } from '../shared/models/assistant.model';
+import { assistantHistoryDto, assistantMessageDto, assistantPlanDto, assistantRunDto } from '../shared/api/dto.mock';
 
 /**
  * Экран чата (спец. assistant, 2, 3 и 14). Сети здесь нет: ответы ассистента
@@ -74,16 +75,16 @@ describe('AssistantComponent', () => {
 
   it('should show the answer after the run is over', async () => {
     await create();
-    api.setHistory({
-      messages: [{
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({
         id: 'answer',
         role: AssistantMessageRole.Assistant,
         content: 'Откройте страницу участников.',
         runId: 'run-1',
         createdAtUtc: new Date().toISOString()
-      }]
-    });
-    api.setRun({ id: 'run-1', status: AssistantRunStatus.Done, step: 1, stepsHard: 8, escalated: false });
+      })]
+    }));
+    api.setRun(assistantRunDto({ id: 'run-1', status: AssistantRunStatus.Done, step: 1, stepsHard: 8, escalated: false }));
 
     await component.send('как пригласить коллегу');
     await fixture.whenStable();
@@ -91,16 +92,54 @@ describe('AssistantComponent', () => {
 
     expect(element().textContent).toContain('Откройте страницу участников.');
     expect(element().querySelector('app-assistant-trace')).not.toBeNull();
-    expect(TestBed.inject(AssistantService).running()).toBeFalse();
+    expect(TestBed.inject(AssistantService).running()).toBe(false);
+  });
+
+  /** Ответ — markdown узлами: ссылка на свою страницу — переход, чужая и разметка HTML — текст (2.2, 9) */
+  it('should render the answer as markdown with links only to own pages', async () => {
+    await create();
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({
+        id: 'answer',
+        role: AssistantMessageRole.Assistant,
+        content: 'Откройте **[участников](/workspace/members)**:\n- *шаг* один\n- [чужой](https://evil.example) <img src=x onerror=alert(1)>',
+        runId: 'run-1'
+      })]
+    }));
+    api.setRun(assistantRunDto({ id: 'run-1', status: AssistantRunStatus.Done, step: 1 }));
+
+    await component.send('как пригласить коллегу');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const answer = element().querySelector('.assistant__answer') as HTMLElement;
+    expect(answer.querySelector('strong a')?.getAttribute('href')).toBe('/workspace/members');
+    expect(answer.querySelectorAll('li').length).toBe(2);
+    expect(answer.querySelector('li em')?.textContent).toBe('шаг');
+    expect(answer.querySelectorAll('a').length).toBe(1);
+    expect(answer.querySelector('img')).toBeNull();
+    expect(answer.textContent).toContain('чужой (https://evil.example) <img src=x onerror=alert(1)>');
+  });
+
+  it('should keep own message as plain text, not markdown', async () => {
+    await create();
+
+    await component.send('**не жирный**');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const mine = element().querySelector('.assistant__bubble--mine') as HTMLElement;
+    expect(mine.querySelector('strong')).toBeNull();
+    expect(mine.textContent).toContain('**не жирный**');
   });
 
   /** Плашка хода: подпись инструмента — из словаря по имени, а не от модели (раздел 3) */
   it('should label the current activity from the dictionary and show the step after escalation', async () => {
     await create();
-    api.setRun({
+    api.setRun(assistantRunDto({
       id: 'run-1', status: AssistantRunStatus.Running, step: 9, stepsHard: 30, escalated: true,
       currentActivity: 'search_help'
-    });
+    }));
 
     await component.send('расскажи про пространства');
     await fixture.whenStable();
@@ -113,20 +152,20 @@ describe('AssistantComponent', () => {
   });
 
   it('should render the plan block from the plan, not from the prose', async () => {
-    api.setHistory({
-      messages: [{
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({
         id: 'plan',
         role: AssistantMessageRole.Assistant,
         content: 'Делаем?',
         runId: 'run-0',
-        plan: {
+        plan: assistantPlanDto({
           id: 'p1',
           status: AssistantPlanStatus.Pending,
           operations: { operations: [{ index: 1, kind: 'CreateNote', args: { title: 'Шарлотка' } }] }
-        },
+        }),
         createdAtUtc: new Date().toISOString()
-      }]
-    });
+      })]
+    }));
 
     await create();
 
@@ -147,33 +186,33 @@ describe('AssistantComponent', () => {
   });
 
   it('should offer «Stop» only from the tenth second', async () => {
-    jasmine.clock().install();
+    vi.useFakeTimers();
     try {
       await create();
-      api.setRun({ id: 'run-1', status: AssistantRunStatus.Running, step: 1, stepsHard: 8, escalated: false });
+      api.setRun(assistantRunDto({ id: 'run-1', status: AssistantRunStatus.Running, step: 1, stepsHard: 8, escalated: false }));
 
       await component.send('расскажи про права');
-      expect(component.canStop()).toBeFalse();
+      expect(component.canStop()).toBe(false);
 
-      jasmine.clock().tick(10_000);
-      expect(component.canStop()).toBeTrue();
+      vi.advanceTimersByTime(10_000);
+      expect(component.canStop()).toBe(true);
       component.ngOnDestroy();
     } finally {
-      jasmine.clock().uninstall();
+      vi.useRealTimers();
     }
   });
 
   it('should send the option as the same reply the person would type', async () => {
-    api.setHistory({
-      messages: [{
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({
         id: 'question',
         role: AssistantMessageRole.Assistant,
         content: 'Какое пространство?',
         runId: 'run-0',
         options: ['Семья', 'Работа'],
         createdAtUtc: new Date().toISOString()
-      }]
-    });
+      })]
+    }));
     await create();
 
     const option = Array.from(element().querySelectorAll<HTMLButtonElement>('.assistant__options button'))
@@ -208,13 +247,13 @@ describe('AssistantComponent', () => {
     await fixture.whenStable();
 
     expect(api.sent).toEqual(['как удалить аккаунт']);
-    expect(prevented).withContext('отправку формы браузеру отдавать нельзя — это перезагрузка').toBeTrue();
+    expect(prevented, 'отправку формы браузеру отдавать нельзя — это перезагрузка').toBe(true);
   });
 
   it('should ask before clearing and clear on «Erase»', async () => {
-    api.setHistory({
-      messages: [{ id: 'm1', role: AssistantMessageRole.User, content: 'привет', createdAtUtc: new Date().toISOString() }]
-    });
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({ id: 'm1', role: AssistantMessageRole.User, content: 'привет', createdAtUtc: new Date().toISOString() })]
+    }));
     await create();
 
     (element().querySelector('#assistant-clear') as HTMLButtonElement).click();
@@ -245,14 +284,14 @@ describe('AssistantComponent', () => {
   /** Лимит пространства (13.6): отправить нельзя, читать — можно всё */
   describe('workspace limit', () => {
     beforeEach(() => {
-      api.setHistory({
-        messages: [{
+      api.setHistory(assistantHistoryDto({
+        messages: [assistantMessageDto({
           id: 'old-answer',
           role: AssistantMessageRole.Assistant,
           content: 'Откройте страницу участников.',
           createdAtUtc: new Date().toISOString()
-        }]
-      });
+        })]
+      }));
       api.refuseSend('dailyLimitReached', 'Семья Ивановых');
     });
 
@@ -296,22 +335,39 @@ describe('AssistantComponent', () => {
       await TestBed.inject(SessionResetService).run();
 
       const assistant = TestBed.inject(AssistantService);
-      expect(assistant.limitReached()).toBeFalse();
+      expect(assistant.limitReached()).toBe(false);
       expect(assistant.messages()).toEqual([]);
+    });
+  });
+
+  /** Личный лимит человека (13.6): та же плашка, но без пространства — лимит общий на все его */
+  describe('user limit', () => {
+    beforeEach(() => api.refuseSend('userDailyLimitReached'));
+
+    it('should put the plate in place of the input and say the limit spans all own spaces', async () => {
+      await create();
+
+      await component.send('как пригласить коллегу');
+      fixture.detectChanges();
+
+      expect(element().querySelector('form.assistant__input')).toBeNull();
+      const plate = element().querySelector('app-limit-reached') as HTMLElement;
+      expect(plate.textContent).toContain('ваш дневной лимит');
+      expect(plate.textContent).toContain('всех ваших пространств');
     });
   });
 
   /** Тред — пара «человек + пространство» (12.1): другое пространство — другой разговор */
   it('should show the other space own thread after switching', async () => {
-    api.setHistory({
-      messages: [{ id: 'm1', role: AssistantMessageRole.User, content: 'вопрос в семье', createdAtUtc: new Date().toISOString() }]
-    });
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({ id: 'm1', role: AssistantMessageRole.User, content: 'вопрос в семье', createdAtUtc: new Date().toISOString() })]
+    }));
     await create();
     expect(element().textContent).toContain('вопрос в семье');
 
-    api.setHistory({
-      messages: [{ id: 'm2', role: AssistantMessageRole.User, content: 'вопрос на работе', createdAtUtc: new Date().toISOString() }]
-    });
+    api.setHistory(assistantHistoryDto({
+      messages: [assistantMessageDto({ id: 'm2', role: AssistantMessageRole.User, content: 'вопрос на работе', createdAtUtc: new Date().toISOString() })]
+    }));
     workspace.setCurrentWorkspaceId('ws-rabota');
     TestBed.tick();
     await fixture.whenStable();
@@ -330,12 +386,12 @@ describe('AssistantComponent', () => {
 
     beforeEach(() => {
       api.setMemory({ shared: [fact], personal: [] });
-      api.setHistory({
-        messages: [{
+      api.setHistory(assistantHistoryDto({
+        messages: [assistantMessageDto({
           id: 'answer', role: AssistantMessageRole.Assistant, content: 'Хорошо.', runId: 'run-1',
           facts: [fact], createdAtUtc: new Date().toISOString()
-        }]
-      });
+        })]
+      }));
     });
 
     it('should show the remembered fact as a line under the answer', async () => {

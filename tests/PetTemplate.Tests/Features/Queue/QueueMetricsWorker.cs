@@ -4,6 +4,7 @@ using LocalQueue.Diagnostics;
 using LocalQueue.Processing;
 using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
+using PetTemplate.Services.Commands;
 using PetTemplate.Tests.Arranges;
 
 namespace PetTemplate.Tests.Features.Queue;
@@ -92,7 +93,10 @@ public class QueueMetricsWorker
         TryCount = tryCount
     };
 
-    public class PingCommand;
+    public class PingCommand : ICommand
+    {
+        public static string QueueName => "test-metrics-ping";
+    }
 
     private class PingHandler : ICommandHandler<PingCommand>
     {

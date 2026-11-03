@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, input, signal } from '@angular/core';
 import { ExternalLoginService } from '../../shared/core/external-login.service';
 import { ExternalProvider, ExternalPurpose } from '../../shared/models/external-login.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /**
  * «Войти через Telegram» и «Войти через VK» под формой входа, регистрации, восстановления
@@ -37,7 +38,7 @@ import { I18nService } from '../../shared/i18n/i18n.service';
   `
 })
 export class ExternalButtonsComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
 
   /** Куда вернуться после входа: главная или приглашение, с которого начали */
   readonly returnUrl = input('/');

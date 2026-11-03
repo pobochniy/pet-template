@@ -4,6 +4,7 @@ using PetTemplate.Db.Entity;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 
 namespace PetTemplate.Services.Admin;
 
@@ -43,7 +44,7 @@ public class AdminJobService(ApplicationContext db)
         await CloseStale(job.Kind, ct);
 
         if (await db.AdminJobs.AnyAsync(x => x.Kind == job.Kind && x.Status == AdminJobStatus.Running, ct))
-            throw new ArgumentException(Busy(job.Kind));
+            throw new AdminRejectionException(Busy(job.Kind));
 
         db.AdminJobs.Add(job);
         try
@@ -52,7 +53,7 @@ public class AdminJobService(ApplicationContext db)
         }
         catch (DbUpdateException e) when (DbErrors.IsDuplicate(e, AdminJobConfiguration.RunningIndex))
         {
-            throw new ArgumentException(Busy(job.Kind));
+            throw new AdminRejectionException(Busy(job.Kind));
         }
     }
 

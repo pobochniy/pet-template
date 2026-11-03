@@ -44,7 +44,7 @@ describe('workspaceInterceptor', () => {
     req.flush({});
     await request;
 
-    expect(req.request.headers.has(WORKSPACE_HEADER)).toBeFalse();
+    expect(req.request.headers.has(WORKSPACE_HEADER)).toBe(false);
   });
 
   it('should send nothing without an active workspace', async () => {
@@ -55,7 +55,7 @@ describe('workspaceInterceptor', () => {
     req.flush([]);
     await request;
 
-    expect(req.request.headers.has(WORKSPACE_HEADER)).toBeFalse();
+    expect(req.request.headers.has(WORKSPACE_HEADER)).toBe(false);
   });
 
   /** Переименование не активного пространства шлёт его заголовок само */

@@ -64,11 +64,12 @@ npm run build                     # прод-сборка
 npm run start:admin               # админка на :4201, тот же proxy.conf.json (specs/admin.md)
 npm run test:admin                # её тесты — свой прогон, не на pre-push
 npm run build:admin               # её сборка со своим бюджетом (600 КБ)
+npm run api:types                 # типы DTO клиента из OpenAPI документа API — после правки DTO на сервере
 ```
 
 Тесты сервера — `dotnet test --solution PetTemplate.slnx` (нужен запущенный Docker: тесты идут на настоящем
 PostgreSQL и Qdrant в Testcontainers, [`tests/PetTemplate.Tests/agents.md`](tests/PetTemplate.Tests/agents.md)).
-Тесты клиента — только headless: `npx ng test pet-template --watch=false --browsers=ChromeHeadless`
+Тесты клиента — Vitest в jsdom, без браузера: `npx ng test pet-template --watch=false`
 в `src/PetTemplate.Web/web` (проект назван явно: второй в `angular.json` — админка).
 
 ### Проверки до коммита и до пуша
@@ -77,46 +78,31 @@ PostgreSQL и Qdrant в Testcontainers, [`tests/PetTemplate.Tests/agents.md`](te
 git config core.hooksPath .githooks
 ```
 
-Один раз на клон: хуки лежат в [`.githooks/`](.githooks), но git сам их не включает.
+Один раз на клон: хуки лежат в [`.githooks/`](.githooks), но git сам их не включает. Что
+и когда они гоняют — `specs/infrastructure.md`, раздел 4; обойти на один раз — `--no-verify`.
+`dotnet test` в хуках нет: тесты сервера идут в ПР и воротами выкатки.
 
-| Когда | Что | Сколько |
-|---|---|---|
-| `pre-commit`, тронут `src/PetTemplate.Web/web/{src,i18n,tools}` | `i18n:check` (словари сгенерированы и совпадают), `i18n:lint` (текст только через `t()`) | секунды |
-| `pre-commit`, тронуты `*.cs`, словари, `*.routes.ts` | `i18n:codes` — у кода отказа сервера есть перевод, словарь грузится маршрутом | секунды |
-| `pre-commit`, тронуты `*.cs`, `*.csproj`, `*.props`, `*.slnx` | `dotnet build PetTemplate.slnx -v q` | секунды |
-| `pre-push`, тронут `src/PetTemplate.Web/web/` | `npx ng test pet-template --watch=false --browsers=ChromeHeadless` | секунды (≈6 с вместе со сборкой) |
-| — (руками) | `npm run test:admin` — спеки админки; на `pre-push` не вешаются, ворота — `web-tests.yml` | секунды |
+### ПР и выкатка
 
-В хуках только то, что укладывается в секунды; тесты клиента — на пуше, а не на коммите:
-коммитов за день много. `dotnet test` в хуки не вешается: тесты
-на настоящей базе — это докер под ними на каждый пуш, а те же тесты стоят воротами
-в `publish-api.yml`; тесты клиента — воротами выкатки клиента (`.github/workflows/web-tests.yml`).
-Полная таблица — `specs/infrastructure.md`, разделы 4–5. Обойти хук на один раз — `--no-verify`.
+В каждом ПР на облачном раннере — тесты сервера (`api-tests.yml`), клиента (`web-tests.yml`)
+и справки (`help-check.yml`: `HelpCheck lint`, `map`, `refs`). Выкатка — руками, Actions →
+Run workflow; push в `main` ничего не выкатывает, а красная ветка до прода не доезжает: те же
+тесты стоят воротами в workflow выкатки. Выкатка API ждёт `/health` (база и Qdrant) и сама
+возвращает прежний образ, если новый не ответил. Таблица ворот —
+`specs/infrastructure.md`, раздел 5; выкатка API — 6, клиента — 7.
 
-### Ворота выкатки
-
-Красная ветка до прода не доезжает: проверки стоят в самих workflow выкатки. Выкатка —
-руками, Actions → Run workflow; push в `main` ничего не выкатывает. Откат API —
-`Rollback Api`, версии — `List Api Versions`, дамп базы — `Backup Db`
-([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), раздел 7). Админка (`adminka.example.com`) почти
-всё время закрыта на nginx; открыть на 1–8 часов — `Admin Access` (`open`/`close`,
-просроченное закрывает запуск по расписанию раз в 15 минут; `IaC/DEPLOYMENT.md`, раздел 8,
-и [`tech-debt/admin-perimeter.md`](tech-debt/admin-perimeter.md)).
-
-| Workflow | Что проверяет до выкатки |
-|---|---|
-| `publish-api.yml` | `dotnet test --solution PetTemplate.slnx` — PostgreSQL через Testcontainers, в фоне параллельно сборке; упали — образ не собирается |
-| `publish-angular.yml` | `web-tests.yml`; затем `npm run build`, которую роняет превышение `maximumError` бюджета бандла в `angular.json` |
-| `publish-admin.yml` | `web-tests.yml`; `ng build admin`, которую роняет превышение своего бюджета (`maximumError` 600 КБ) |
-| `web-tests.yml` | на облачном раннере (там есть Chrome): `i18n:check`, `i18n:lint`, `i18n:codes`, `ng test pet-template`, `ng test admin` |
+Откат API — `Rollback Api`, версии — `List Api Versions`, дамп базы — `Backup Db` (ещё и каждую
+ночь, копия вне VM — по настройке; [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), разделы 7 и 10).
+Админка (`adminka.example.com`) почти всё время закрыта на nginx; открыть на 1–8 часов —
+`Admin Access` (`IaC/DEPLOYMENT.md`, раздел 8, и
+[`tech-debt/admin-perimeter.md`](tech-debt/admin-perimeter.md)).
 
 ### Конфигурация и секреты
 
 `appsettings*.json` в репозитории — примеры и значения для разработки, а не секреты.
-Боевые значения (строка подключения, ключи подписи JWT, токен бота, пароль SMTP) живут в секретах
-GitHub и приходят в контейнер переменными окружения при выкатке (`publish-api.yml`
-и `rollback-api.yml` — один набор) — список в `specs/infrastructure.md`, раздел 9,
-и [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), раздел 6. Адреса соседних контейнеров —
+Боевые значения живут в секретах и переменных GitHub и приходят в контейнер переменными
+окружения при выкатке — таблицы в `specs/infrastructure.md`, раздел 9, и
+[`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), раздел 6. Адреса соседних контейнеров —
 и настройки почты без пароля — не секреты: `src/PetTemplate.Api/appsettings.Release.json`
 ([`src/PetTemplate.Api/agents.md`](src/PetTemplate.Api/agents.md), «Конфигурация и секреты»).
 
@@ -133,7 +119,7 @@ GitHub и приходят в контейнер переменными окру
 3. **Источник текста** — `ISearchSource` своего типа (`Load`: `# Заголовок` + тело и `WorkspaceId`;
    `AllIds` — для реиндекса), регистрация — `services.AddSearchSource<T>()`.
 4. **Индексация** — `db.Enqueue(SearchIndex.Of(тип, id))` тем же `SaveChanges`, что создание,
-   правка и удаление; при удалении пространства — до удаления своих сущностей.
+   правка и удаление; точки снесённого пространства уносит ядро (`WorkspaceService.PurgeContents`).
 5. **Поиск** — `HybridSearch.Vector` (фильтр по пространству — обязательное поле `VectorQuery`)
    плюс свой запрос по `SearchVector` **с фильтром по `WorkspaceId`**, слияние — `HybridSearch.Ranked`.
 6. **Эндпоинт и экран** — `GET {Раздел}/Search?q=` под правами списка, `shared-search-box` над списком.
@@ -166,25 +152,22 @@ dotnet new pet -n MyAwesomeProject -o folderName --domain myawesome.ru
 
 ### Новый проект из шаблона: что настроить
 
-1. **Git и хуки** — хуки шаблон сам не включает:
+1. **Git, хуки и биты исполнения** — `dotnet new` снимает бит исполнения со скриптов, а git
+   хук без него молча пропускает (`specs/infrastructure.md`, 13):
    ```bash
    cd folderName && git init && git config core.hooksPath .githooks
+   chmod +x .githooks/* IaC/*.sh IaC/postgres/init/*.sh   # бит уйдёт в git с первым коммитом
    ```
 2. **Домен** — проект создан без `--domain`: домен сейчас `example.com`, заменить его поиском
    по всему репозиторию.
    DNS: A-записи домена, `www.`, `adminka.`, `grafana.` на виртуалку ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 3, 8, 11).
-3. **GitHub → Settings → Secrets and variables → Actions** ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6):
-   - секреты: `API_DB_CONNECTION_STRING`, `MIGRATIONS_DB_CONNECTION_STRING` (владелец базы —
-     под ним выкатка накатывает миграции), `JWT_SIGNING_KEY`, `ADMIN_JWT_SIGNING_KEY` (другой,
-     чем `JWT_SIGNING_KEY`), `SMTP_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `VK_MINIAPP_PRIVATE_KEY`,
-     `ASSISTANT_API_KEY`;
-     пустые `TELEGRAM_BOT_TOKEN`, `VK_MINIAPP_PRIVATE_KEY`, `SMTP_PASSWORD`, `ASSISTANT_API_KEY`
-     выключают свою функцию, API стартует;
-   - переменные: `TELEGRAM_BOT_ID`, `VK_ID_APP_ID`, `ASSISTANT_ENDPOINT`, `ASSISTANT_MODEL`,
-     `ASSISTANT_TRANSCRIPTION_MODEL` — пустая выключает свою кнопку или функцию.
+3. **GitHub → Settings → Secrets and variables → Actions** — секреты и переменные по таблицам
+   [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6 (без `MIGRATIONS_DB_CONNECTION_STRING` выкатка
+   не идёт, пустые ключи площадок и ассистента выключают свою функцию); копия бэкапа вне VM —
+   `BACKUP_S3_*`, там же, 10.
 4. **Сервер** — self-hosted runner, `IaC/.env` (`POSTGRES_PASSWORD`, `APP_DB_PASSWORD`,
-   `POSTGRES_EXPORTER_PASSWORD`), сертификат, первый админ, адреса замка админки —
-   [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md) по порядку разделов.
+   `APP_DB_OWNER_PASSWORD`, `POSTGRES_EXPORTER_PASSWORD`), сертификат, первый админ, адреса
+   замка админки — [`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md) по порядку разделов.
 5. **Почта** — `MailOptions` в `src/PetTemplate.Api/appsettings.Release.json` и DNS-записи
    SPF/DKIM/DMARC ([`IaC/DEPLOYMENT.md`](IaC/DEPLOYMENT.md), 6, «Почта»; `specs/mail.md`).
 6. **Telegram и VK** — бот, mini-app, приложение VK ID и адреса возврата

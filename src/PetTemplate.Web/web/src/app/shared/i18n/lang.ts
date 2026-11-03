@@ -1,3 +1,5 @@
+import { safeStorage } from '../core/safe-storage';
+
 /**
  * Язык интерфейса.
  *
@@ -72,14 +74,9 @@ export function resolveInitialLang(): Lang {
   return fromStorage() ?? matchLang(navigator.languages) ?? DEFAULT_LANG;
 }
 
+/** Хранилище бывает закрыто целиком — `safeStorage` отвечает `null`, а не бросает */
 function fromStorage(): Lang | null {
-  try {
-    const stored = localStorage.getItem(LANG_STORAGE_KEY);
+  const stored = safeStorage.get(LANG_STORAGE_KEY);
 
-    return isLang(stored) ? stored : null;
-  } catch {
-    // `localStorage` бывает недоступен целиком — приватный режим Safari,
-    // запрет сторонних данных. Язык интерфейса не повод падать при старте
-    return null;
-  }
+  return isLang(stored) ? stored : null;
 }

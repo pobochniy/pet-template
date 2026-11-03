@@ -21,6 +21,7 @@ export const LOADERS: Readonly<Record<Lang, Readonly<Record<LazyScope, () => Pro
   en: {
     "assistant": () => import('./en.assistant'),
     "auth": () => import('./en.auth'),
+    "help": () => import('./en.help'),
     "home": () => import('./en.home'),
     "invite": () => import('./en.invite'),
     "miniapp": () => import('./en.miniapp'),
@@ -30,6 +31,7 @@ export const LOADERS: Readonly<Record<Lang, Readonly<Record<LazyScope, () => Pro
   ru: {
     "assistant": () => import('./ru.assistant'),
     "auth": () => import('./ru.auth'),
+    "help": () => import('./ru.help'),
     "home": () => import('./ru.home'),
     "invite": () => import('./ru.invite'),
     "miniapp": () => import('./ru.miniapp'),
@@ -39,4 +41,4 @@ export const LOADERS: Readonly<Record<Lang, Readonly<Record<LazyScope, () => Pro
 };
 
 /** Все словари по именам — состав проверяет `i18n-parity.spec.ts` */
-export const SCOPES: readonly Scope[] = ["assistant","auth","core","home","invite","miniapp","profile","workspace"];
+export const SCOPES: readonly Scope[] = ["assistant","auth","core","help","home","invite","miniapp","profile","workspace"];

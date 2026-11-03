@@ -9,6 +9,7 @@ import { MergeStateService } from '../../shared/core/merge-state.service';
 import { UserService } from '../../shared/core/user.service';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto, sessionDto } from '../../shared/api/dto.mock';
 
 describe('MergeComponent', () => {
   let fixture: ComponentFixture<MergeComponent>;
@@ -32,16 +33,15 @@ describe('MergeComponent', () => {
     api = TestBed.inject(AccountApiServiceMock);
     arrange(api);
     user = TestBed.inject(UserService);
-    TestBed.inject(TokenService).Token = 'token-0';
     if (signedIn) {
-      user.setProfile({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true });
+      user.applySession(sessionDto({ token: 'token-0', profile: profileDto({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true }), permissionsByWorkspace: {} }));
     } else {
       user.clearProfile();
     }
     state = TestBed.inject(MergeStateService);
     if (withPreview) state.open(api.preview);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     await loadAllScopes(TestBed.inject(I18nService));
     fixture = TestBed.createComponent(MergeComponent);
     el = fixture.nativeElement;
@@ -50,7 +50,6 @@ describe('MergeComponent', () => {
 
   afterEach(() => {
     user.clearProfile();
-    TestBed.inject(TokenService).Token = '';
   });
 
   async function render() {
@@ -106,16 +105,16 @@ describe('MergeComponent', () => {
   it('should not let an admin account be removed', async () => {
     await setup(mock => mock.other = { ...mock.other, canBeRemoved: false });
 
-    expect(el.querySelector<HTMLInputElement>('#keep-user-1')!.disabled).toBeTrue();
-    expect(el.querySelector<HTMLInputElement>('#keep-user-2')!.disabled).toBeFalse();
+    expect(el.querySelector<HTMLInputElement>('#keep-user-1')!.disabled).toBe(true);
+    expect(el.querySelector<HTMLInputElement>('#keep-user-2')!.disabled).toBe(false);
   });
 
   /** Второй заведён меньше суток назад — остаться может только текущий (7.3) */
   it('should not let a young other account be kept', async () => {
     await setup(mock => mock.canKeepOther = false);
 
-    expect(el.querySelector<HTMLInputElement>('#keep-user-2')!.disabled).toBeTrue();
-    expect(el.querySelector<HTMLInputElement>('#keep-user-1')!.disabled).toBeFalse();
+    expect(el.querySelector<HTMLInputElement>('#keep-user-2')!.disabled).toBe(true);
+    expect(el.querySelector<HTMLInputElement>('#keep-user-1')!.disabled).toBe(false);
     expect(el.querySelector('.young-account')).not.toBeNull();
   });
 

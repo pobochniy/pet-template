@@ -1,29 +1,31 @@
+import type { Mocked } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ViewComponent } from './view.component';
-import { ProfileApiService } from '../../shared/api/profile-api.service';
+import { ProfileApiService } from '../profile-api.service';
 import { ProfileModel } from '../../shared/models/profile.model';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('ViewComponent', () => {
-  let profileApi: jasmine.SpyObj<ProfileApiService>;
-  let router: jasmine.SpyObj<Router>;
+  let profileApi: Mocked<ProfileApiService>;
+  let router: Mocked<Router>;
 
-  const profile: ProfileModel = {
+  const profile: ProfileModel = profileDto({
     id: '456',
     userName: 'OtherUser',
     avatarId: 2,
     comment: null,
     isAdult: true,
     hasAcceptedTerms: false
-  };
+  });
 
   async function create(userId: string | null) {
-    profileApi = jasmine.createSpyObj<ProfileApiService>('ProfileApiService', ['view']);
-    router = jasmine.createSpyObj<Router>('Router', ['navigateByUrl']);
-    router.navigateByUrl.and.resolveTo(true);
+    profileApi = { view: vi.fn() } as unknown as Mocked<ProfileApiService>;
+    router = { navigateByUrl: vi.fn() } as unknown as Mocked<Router>;
+    router.navigateByUrl.mockResolvedValue(true);
 
     await TestBed.configureTestingModule({
       imports: [ViewComponent],
@@ -42,7 +44,7 @@ describe('ViewComponent', () => {
 
   it('should show the profile by userId', async () => {
     const fixture = await create('456');
-    profileApi.view.and.resolveTo(profile);
+    profileApi.view.mockResolvedValue(profile);
 
     await fixture.whenStable();
     await fixture.whenStable();
@@ -64,7 +66,7 @@ describe('ViewComponent', () => {
 
   it('should go home when the profile is not found', async () => {
     const fixture = await create('456');
-    profileApi.view.and.resolveTo(undefined as never);
+    profileApi.view.mockResolvedValue(undefined as never);
 
     await fixture.componentInstance.ngOnInit();
 

@@ -5,6 +5,7 @@ using PetTemplate.Services.Billing;
 using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 
 namespace PetTemplate.Services.Admin;
@@ -55,7 +56,7 @@ public class AdminBillingService(
 
         var models = await Models(runs, spends, ct);
         var picked = modelId == null ? models : models.Where(x => x.ModelId == modelId).ToArray();
-        if (modelId != null && picked.Length == 0) throw new ArgumentException("Такой модели нет");
+        if (modelId != null && picked.Length == 0) throw new AdminRejectionException("Такой модели нет");
 
         // Служебные расходы — наши, в лимит пространства не идут (кроме расшифровки голоса:
         // её просил человек, 13.6). Пока вызовов не было,
@@ -173,7 +174,7 @@ public class AdminBillingService(
         CancellationToken ct = default)
     {
         if (dto.TokensPerDay < 0 || dto.TokensPerMonth < 0 || dto.CostPerDay < 0 || dto.CostPerMonth < 0)
-            throw new ArgumentException("Лимит не может быть отрицательным; без потолка — пустое поле");
+            throw new AdminRejectionException("Лимит не может быть отрицательным; без потолка — пустое поле");
 
         if (!await db.Workspaces.AnyAsync(x => x.Id == workspaceId, ct)) return false;
 
@@ -199,7 +200,7 @@ public class AdminBillingService(
         {
             // Первую строку пространству одновременно завёл другой админ: молча
             // перезаписать его потолок своим было бы сюрпризом для обоих
-            throw new ArgumentException("Лимит этого пространства только что поменял другой админ — откройте его заново");
+            throw new AdminRejectionException("Лимит этого пространства только что поменял другой админ — откройте его заново");
         }
 
         return true;
@@ -223,13 +224,13 @@ public class AdminBillingService(
     public async Task<Guid> Record(AdminLedgerEntryDto dto, Guid adminId, CancellationToken ct = default)
     {
         var provider = dto.Provider?.Trim() ?? string.Empty;
-        if (provider.Length == 0) throw new ArgumentException("Не указан поставщик");
+        if (provider.Length == 0) throw new AdminRejectionException("Не указан поставщик");
         if (!await db.AiModels.AnyAsync(x => x.Provider == provider, ct))
-            throw new ArgumentException($"В справочнике моделей нет поставщика «{provider}»");
+            throw new AdminRejectionException($"В справочнике моделей нет поставщика «{provider}»");
 
         var comment = string.IsNullOrWhiteSpace(dto.Comment) ? null : dto.Comment.Trim();
         if (comment?.Length > CommentMaxLength)
-            throw new ArgumentException($"Комментарий длиннее {CommentMaxLength} символов");
+            throw new AdminRejectionException($"Комментарий длиннее {CommentMaxLength} символов");
 
         var now = DateTime.UtcNow;
         var entry = new ProviderLedgerEntry
@@ -247,19 +248,19 @@ public class AdminBillingService(
         {
             case ProviderLedgerKind.Payment:
                 if (dto.PeriodFrom != null || dto.PeriodTo != null)
-                    throw new ArgumentException("У платежа периода нет — он есть только у факта расхода");
-                if (dto.Amount == 0) throw new ArgumentException("Сумма не может быть нулевой");
+                    throw new AdminRejectionException("У платежа периода нет — он есть только у факта расхода");
+                if (dto.Amount == 0) throw new AdminRejectionException("Сумма не может быть нулевой");
                 if (dto.Amount < 0 && comment == null)
-                    throw new ArgumentException("Платёж с минусом исправляет ошибочный — напишите, какой");
+                    throw new AdminRejectionException("Платёж с минусом исправляет ошибочный — напишите, какой");
                 break;
 
             case ProviderLedgerKind.ActualSpend:
                 if (dto.PeriodFrom is not { } periodFrom || dto.PeriodTo is not { } periodTo)
-                    throw new ArgumentException("У факта расхода нужен период");
-                if (periodFrom > periodTo) throw new ArgumentException("Начало периода позже его конца");
+                    throw new AdminRejectionException("У факта расхода нужен период");
+                if (periodFrom > periodTo) throw new AdminRejectionException("Начало периода позже его конца");
                 if (periodTo > DateOnly.FromDateTime(now))
-                    throw new ArgumentException("Факт за дни, которые ещё не прошли, не вводится");
-                if (dto.Amount < 0) throw new ArgumentException("Расход не может быть отрицательным");
+                    throw new AdminRejectionException("Факт за дни, которые ещё не прошли, не вводится");
+                if (dto.Amount < 0) throw new AdminRejectionException("Расход не может быть отрицательным");
 
                 entry.PeriodFrom = ProviderLedger.Utc(periodFrom);
                 entry.PeriodTo = ProviderLedger.Utc(periodTo.AddDays(1));
@@ -272,14 +273,14 @@ public class AdminBillingService(
                     && (x.PeriodFrom != entry.PeriodFrom || x.PeriodTo != entry.PeriodTo));
                 if (overlap != null)
                 {
-                    throw new ArgumentException(
+                    throw new AdminRejectionException(
                         $"Период задевает факт за {Days(overlap)}: исправьте тот факт или возьмите дни без пересечения");
                 }
 
                 break;
 
             default:
-                throw new ArgumentException("Неизвестный вид записи");
+                throw new AdminRejectionException("Неизвестный вид записи");
         }
 
         db.ProviderLedger.Add(entry);
@@ -292,7 +293,7 @@ public class AdminBillingService(
     {
         var last = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var first = from ?? last.AddDays(1 - DefaultDays);
-        if (first > last) throw new ArgumentException("Начало периода позже его конца");
+        if (first > last) throw new AdminRejectionException("Начало периода позже его конца");
 
         return (first, last);
     }

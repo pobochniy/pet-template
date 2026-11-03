@@ -48,7 +48,7 @@ public static class AuthMessages
 
     /// <summary>
     /// Неудачных проверок пароля больше лимита — на учётку или с адреса (спец. accounts, 8.1;
-    /// <c>AdminLoginLimiter</c>): вход, подтверждение, смена пароля и проверка пароля второго
+    /// <c>LoginLimiter</c>): вход, подтверждение, смена пароля и проверка пароля второго
     /// аккаунта при слиянии заперты, пока не сползёт окно. Верный пароль в это время тоже не пускает
     /// </summary>
     public static readonly ErrorMessage TooManyAttempts = new(

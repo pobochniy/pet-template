@@ -9,12 +9,23 @@ namespace PetTemplate.Api.Middlewares;
 /// Без аргументов — достаточно быть участником пространства, с любым правом:
 /// так закрыт список участников, у которого своего права нет (спец. authorization, 5).
 ///
-/// Проверку делает <see cref="PermissionsValidation"/>: он же сверяет пространство
-/// из заголовка с <c>workspaceId</c> в query и <c>WorkspaceId</c> в теле
+/// Проверку делает <see cref="PermissionsValidation"/>: права — фильтром авторизации,
+/// до разбора тела; сверку пространства из заголовка с <c>workspaceId</c> в query
+/// и <c>WorkspaceId</c> в теле — фильтром действия раньше <c>[ValidateRequest]</c>
 /// </summary>
-public class AuthorizePermissions : Attribute, IFilterFactory
+public class AuthorizePermissions : Attribute, IFilterFactory, IOrderedFilter
 {
+    /// <summary>
+    /// Порядок фильтра. MVC сортирует фильтры по дескриптору — по этому атрибуту, а не
+    /// по созданному им фильтру. Раньше <c>[ValidateRequest]</c> (порядок 0) на любом уровне:
+    /// чужое пространство в теле — <c>403</c>, а не <c>422</c>
+    /// </summary>
+    public const int FilterOrder = -1000;
+
     public bool IsReusable => false;
+
+    public int Order => FilterOrder;
+
     private PermissionEnum[] Permissions { get; }
 
     public AuthorizePermissions(params PermissionEnum[] permissions)

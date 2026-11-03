@@ -17,5 +17,9 @@
         <a routerLink="/workspace/members" (click)="onItemClick()"><i-lucide name="users"></i-lucide>{{ i18n.t('core.nav.members') }}</a>
       </li>
     }
+    <!-- Справка — всем, и гостю: статьи общие (спец. help, 6.5) -->
+    <li routerLinkActive="link-active">
+      <a routerLink="/help" (click)="onItemClick()"><i-lucide name="circle-question-mark"></i-lucide>{{ i18n.t('core.nav.help') }}</a>
+    </li>
   </ul>
 </nav>

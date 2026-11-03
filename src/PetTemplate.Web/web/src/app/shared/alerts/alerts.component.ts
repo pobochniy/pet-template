@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { AlertsService } from './alerts.service';
-import { I18nService } from '../i18n/i18n.service';
+import { injectI18n } from '../i18n/inject-i18n';
 
 @Component({
   selector: 'shared-alerts',
@@ -9,7 +9,7 @@ import { I18nService } from '../i18n/i18n.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AlertsComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n();
 
   constructor(public alertsService: AlertsService) { }
 

@@ -10,24 +10,24 @@ accounts.md:
   "Логин": { article: account, hash: 28a72a7aad8efac7 }
   "Правила": { article: account, hash: a5bc6ae4e352bd3e }
   "Автоматический логин": { article: account, hash: 0496f36760652d48 }
-  "Смена логина": { article: account, hash: de0ebf0d74b71488 }
+  "Смена логина": { article: account, hash: 5a0c8bd3bcaa8e16 }
   "Кнопки": { article: account, hash: 3ce5b03807844445 }
   "Telegram — «Log In with Telegram» во всплывающем окне": skip
   "VK — VK ID": skip
   "Возврат и первый экран": { article: account, hash: 763542a28a5d29b6 }
   "Ответ сервера": skip
   "В mini-app": { article: account, hash: 35831e2f958e5e3c }
-  "Профиль: блок «Основное»": { article: account, hash: 06a1d1e70a089812 }
+  "Профиль: блок «Основное»": { article: account, hash: 8495950dddcca0e6 }
   "Когда": { article: account, hash: 1cbc8182dfaaf56b }
   "Что переносится, а что нет": { article: account, hash: d3147cb6d0cc4640 }
   "Экран слияния": { article: account, hash: 0520b92c3e500d9d }
   "Сервер": skip
-  "Задать и сменить": { article: account, hash: b8f3315354d277a4 }
+  "Задать и сменить": { article: account, hash: 37c83d28898ab3f4 }
   "Восстановление: три пути": { article: account, hash: e6d025f20067393e }
   "Через привязанный вход": { article: account, hash: a2a47af999a5d7cf }
   "По почте": { article: account, hash: 2103bc50491f3c56 }
   "Через поддержку — в админке": { article: account, hash: a22842ebde2c11dd }
-  "Подтверждение владения": { article: account, hash: 925176cc4d58f993 }
+  "Подтверждение владения": { article: account, hash: 3f95b654160868ec }
   "Удаление аккаунта": { article: account, hash: 51e10f8be786f984 }
   "Как удаляется аккаунт": { article: account, hash: 4b91cae45b6bb13d }
   "Модель данных": skip
@@ -44,36 +44,36 @@ assistant.md:
   "Концепция": { article: assistant, hash: 348be9c016d3a8b9 }
   "Точка входа и раскладка": skip
   "Строка ввода на главной": { article: assistant, hash: bfd62ac98788a8ab }
-  "Страница чата": { article: assistant, hash: fabdfe5af50eac4b }
-  "Один ход и растущий бюджет": { article: assistant, hash: 761bf4cdb8e796a7 }
+  "Страница чата": { article: assistant, hash: 1a7929e63e2aa49f }
+  "Один ход и растущий бюджет": { article: assistant, hash: dcce72bf10df6e9c }
   "Что ассистент умеет": { article: assistant, hash: 220b681c11249090 }
   "Согласие репликой, а не нажатием": skip
-  "Уточняющий вопрос": { article: assistant, hash: d02d9d7dac70fbde }
+  "Уточняющий вопрос": { article: assistant, hash: c2ce659ee1eb05b8 }
   "Состояние хода живёт в базе, а не в памяти процесса": skip
-  "Ожидание не протухает, но стареет": { article: assistant, hash: 9186113db2a4009b }
+  "Ожидание не протухает, но стареет": { article: assistant, hash: 10f671167c56e8c7 }
   "Голос": { article: assistant, hash: 8b52389f7dc6385d }
-  "Поведение и контракт": { article: assistant, hash: c390908d7d285294 }
+  "Поведение и контракт": { article: assistant, hash: df5c3ce537ba3d15 }
   "Чем расшифровывать": skip
   "В интерфейсе": { article: assistant, hash: 75b76ea2ad59e4cb }
   "Каталог инструментов": skip
   "Как раздел проекта добавляет свои инструменты": skip
   "Гигиена цикла и лимиты": skip
-  "Права и недоверенный ввод": { article: assistant, hash: 2b856699cd7f3cfd }
+  "Права и недоверенный ввод": { article: assistant, hash: 1718248e1d638d6b }
   "Время и часовой пояс": { article: assistant, hash: fdb0b129ebf06472 }
   "Поиск и контекст": skip
   "Хранение: тред, прогоны, компакция": skip
-  "Один тред на пару «человек + пространство»": { article: assistant, hash: 4d54edf5308312a5 }
+  "Один тред на пару «человек + пространство»": { article: assistant, hash: 23b9a92a22446145 }
   "Сообщения": skip
   "Прогоны": skip
   "Компакция длинного контекста": skip
-  "Память о человеке": { article: assistant, hash: aca35c741a34107e }
+  "Память о человеке": { article: assistant, hash: 1620fa352952cdf5 }
   "Наблюдаемость: трасса, метрики, расход и лимиты": skip
   "Трасса прогона": skip
-  "«Показать ход мысли»": { article: assistant, hash: b8da95728b688284 }
+  "«Показать ход мысли»": { article: assistant, hash: e3743b2cff549061 }
   "Что куда уезжает": skip
   "Метрики": skip
   "Учёт расхода — без баланса": skip
-  "Лимит расхода на пространство": { article: assistant, hash: 816c698416774312 }
+  "Лимит расхода на пространство": { article: assistant, hash: b8b1a2efad829226 }
   "API": skip
   "Решение": skip
   "Как это устроено": skip
@@ -93,20 +93,20 @@ authorization.md:
   "Контекст пространства": skip
   "JWT": skip
   "Перевыпуск сессии": skip
-  "Устаревание прав": skip
-  "Регистрация и создание пространства": { article: workspace, hash: 6a4d58160c15c080 }
+  "Права — из базы на каждом запросе": skip
+  "Регистрация и создание пространства": { article: workspace, hash: 850ba38afae852ee }
   "Пространство: модель данных": skip
-  "Выдача прав участникам": { article: workspace, hash: 58a252a5b2cb35ec }
+  "Выдача прав участникам": { article: workspace, hash: 1fe62c911f0be315 }
   "Приглашения по ссылке": { article: workspace, hash: 6a26f6287d9e86a9 }
   "Выдача": { article: workspace, hash: b0b5c5cdbf57cad9 }
   "Жизненный цикл": { article: workspace, hash: d3964ad4c16c5e6e }
-  "Лендинг `/invite/:token`": { article: workspace, hash: 9adbd2142a0230e8 }
-  "Тексты отказов": { article: workspace, hash: a19c863a7a51af8f }
+  "Лендинг `/invite/:token`": { article: workspace, hash: a7668a59bfefba20 }
+  "Тексты отказов": { article: workspace, hash: 8f961e90c675ba00 }
   "Переключение и основное пространство (Primary Workspace)": { article: workspace, hash: 57e2bd2bf410f1c7 }
   "`Profile.PrimaryWorkspaceId` — требования": { article: workspace, hash: 0ec11387316769a3 }
-  "Страница настроек пространств": { article: workspace, hash: 987170a12305d819 }
+  "Страница настроек пространств": { article: workspace, hash: 0b498c9850c82c04 }
   "Страница участников": { article: workspace, hash: 6af8a29811f40546 }
-  "Выход из пространства и фоновая очистка": { article: workspace, hash: 9616247d127eedb4 }
+  "Выход из пространства и фоновая очистка": { article: workspace, hash: 91c2b4afa42eb936 }
   "API (сводка)": skip
   "Решения шаблона": skip
   "Устройство в коде и точки расширения": skip
@@ -125,7 +125,7 @@ home.md:
   "Переключатель пространства в шапке": { article: workspace, hash: 6163ad9a394fbd38 }
   "Кнопка «Выйти» в шапке": { article: account, hash: 45ecb4226433a18a }
   "Сессия истекла": { article: account, hash: 315e6e687c9e8fe4 }
-  "Боковое меню": { article: home, hash: a8d7856da10b407b }
+  "Боковое меню": { article: home, hash: b26e68e7f217ec13 }
   "Язык интерфейса": { article: account, hash: fbaa565075dbbe59 }
   "Маршруты верхнего уровня": skip
   "Всплывающие плашки (`shared/alerts`)": skip

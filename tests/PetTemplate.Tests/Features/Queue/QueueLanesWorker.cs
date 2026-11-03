@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PetTemplate.Api.Workers;
 using PetTemplate.Db.Entity;
+using PetTemplate.Services.Commands;
 using PetTemplate.Tests.Arranges;
 
 namespace PetTemplate.Tests.Features.Queue;
@@ -74,7 +75,9 @@ public class QueueLanesWorker
             .Where(x => x.Id == row.Id)
             .Select(x => x.LockedTillUtc)
             .SingleAsync(CancellationToken.None);
-        Assert.InRange(locked!.Value, before.AddHours(1), DateTime.UtcNow.AddHours(1.5));
+        // Аренду ставит время базы, а не хоста: часы контейнера расходятся с хостом на миллисекунды,
+        // поэтому нижней границе — запас в секунды, при часовой аренде он ничего не скрывает
+        Assert.InRange(locked!.Value, before.AddHours(1).AddSeconds(-5), DateTime.UtcNow.AddHours(1.5));
         gate.Release.SetResult();
         await WaitGone(db, row.Id);
     }
@@ -105,11 +108,20 @@ public class QueueLanesWorker
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public class SlowCommand;
+    public class SlowCommand : ICommand
+    {
+        public static string QueueName => "test-lanes-slow";
+    }
 
-    public class FastCommand;
+    public class FastCommand : ICommand
+    {
+        public static string QueueName => "test-lanes-fast";
+    }
 
-    public class LeasingCommand;
+    public class LeasingCommand : ICommand
+    {
+        public static string QueueName => "test-lanes-leasing";
+    }
 
     private sealed class SlowHandler(Gate gate) : ICommandHandler<SlowCommand>
     {

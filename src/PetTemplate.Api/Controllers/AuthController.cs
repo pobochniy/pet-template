@@ -24,7 +24,7 @@ public class AuthController(
     PasswordReset passwordReset,
     EmailConfirmation emails,
     ResetIpLimiter resetLimiter,
-    AdminLoginLimiter loginLimiter,
+    LoginLimiter loginLimiter,
     MiniAppLaunch launch,
     ExternalProof externalProof,
     TelegramLogin telegramLogin,
@@ -289,7 +289,7 @@ public class AuthController(
     public async Task<IActionResult> Register([FromBody] RegisterDto model, CancellationToken ct)
     {
         // С названием пространства — аккаунт и пространство одним сохранением,
-        // и токен входа уже несёт права нового пространства (спец. authorization, 3, п. 1)
+        // и ответ входа уже несёт права нового пространства (спец. authorization, 3, п. 1)
         await service.Register(model, ct);
         var user = await service.LogIn(new LoginDto { Login = model.UserName, Password = model.Password }, ct);
         return Ok(authResult.Build(user, SessionLogin.Password()));
@@ -319,11 +319,11 @@ public class AuthController(
 
     /// <summary>
     /// Вход паролем под лимитом неудач (спец. accounts, 8.1): счёт общий со входом в админку
-    /// (<see cref="AdminLoginLimiter"/>) — пароль у админа тот же, и без этого лимит админки
+    /// (<see cref="LoginLimiter"/>) — пароль у админа тот же, и без этого лимит админки
     /// обходился бы подбором здесь. Считает по учётке, чей это логин, и по адресу. Заперто —
     /// <c>400 auth.error.tooManyAttempts</c> и на верный пароль
     /// </summary>
-    private async Task<AdminLoginLimiter.Attempt> BeginLoginAttempt(LoginDto login, CancellationToken ct) =>
+    private async Task<LoginLimiter.Attempt> BeginLoginAttempt(LoginDto login, CancellationToken ct) =>
         loginLimiter.TryBeginProduct(
             await service.UserIdOf(login, ct), ClientAddress.Key(HttpContext.Connection.RemoteIpAddress))
         ?? throw new BadRequestException(AuthMessages.TooManyAttempts);

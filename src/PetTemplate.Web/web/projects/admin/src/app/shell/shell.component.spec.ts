@@ -61,7 +61,7 @@ describe('ShellComponent', () => {
   describe('«Выйти»', () => {
     async function logOut(answer: 'ok' | 'gone') {
       const fixture = await render([AdminRole.AdminManagement]);
-      const navigate = spyOn(TestBed.inject(Router), 'navigateByUrl').and.resolveTo(true);
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
       const http = TestBed.inject(HttpTestingController);
 
       (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('#logout')!.click();
@@ -77,7 +77,7 @@ describe('ShellComponent', () => {
     it('should tell the server and end the session', async () => {
       const navigate = await logOut('ok');
 
-      expect(TestBed.inject(AdminSessionService).isActive()).toBeFalse();
+      expect(TestBed.inject(AdminSessionService).isActive()).toBe(false);
       expect(navigate).toHaveBeenCalledWith('/login');
     });
 

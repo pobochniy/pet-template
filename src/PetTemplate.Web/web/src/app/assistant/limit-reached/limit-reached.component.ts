@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from '../assistant.scopes';
 
 /**
  * Плашка «лимит пространства исчерпан» на месте поля ввода ассистента (спец. assistant,
@@ -28,7 +29,7 @@ import { I18nService } from '../../shared/i18n/i18n.service';
   `
 })
 export class LimitReachedComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
 
   public readonly text = input.required<string>();
 

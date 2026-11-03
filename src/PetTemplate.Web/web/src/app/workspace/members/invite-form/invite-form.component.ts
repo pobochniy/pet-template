@@ -6,15 +6,16 @@ import { PermissionsService } from '../../../shared/services/permissions.service
 import { AlertsService } from '../../../shared/alerts/alerts.service';
 import { serverErrorMessage, serverFieldErrors } from '../../../shared/core/server-error.util';
 import { WorkspaceInvitationModel } from '../../../shared/models/workspace-invitation.model';
-import { PERMISSION_CATALOG, PermissionInfo } from '../../../shared/permissions/permission-catalog';
+import { PERMISSION_CATALOG, PermissionInfo } from '../../permission-catalog';
 import { PermissionEnum } from '../../../shared/enums/permission.enum';
 import {
   createInvitationForm,
   selectedPermissions,
   syncInvitationPermissions
-} from '../../../shared/form-models/invitation-form.model';
+} from '../../form-models/invitation-form.model';
 import { FormValidationComponent } from '../../../shared/form-validation/form-validation.component';
-import { I18nService } from '../../../shared/i18n/i18n.service';
+import { injectI18n } from '../../../shared/i18n/inject-i18n';
+import { WORKSPACE_SCOPES } from '../../workspace.scopes';
 
 /**
  * Форма выдачи ссылки-приглашения (спец. authorization, 6.1).
@@ -34,7 +35,7 @@ import { I18nService } from '../../../shared/i18n/i18n.service';
   imports: [ReactiveFormsModule, FormValidationComponent]
 })
 export class WorkspaceInviteFormComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...WORKSPACE_SCOPES);
   private readonly invitationApi = inject(InvitationApiService);
   private readonly workspaceContext = inject(WorkspaceContextService);
   private readonly permissionsService = inject(PermissionsService);

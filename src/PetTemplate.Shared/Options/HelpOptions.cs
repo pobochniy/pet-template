@@ -22,6 +22,16 @@ public class HelpOptions
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// Первая пауза перед пересборкой того же выпуска, если разделы встали без векторов
+    /// (эмбеддер лежал, 6.4). Каждая неудачная попытка удваивает паузу до
+    /// <see cref="VectorRetryMaxDelay"/>: долго лежащий эмбеддер не держит опрос на таймаутах
+    /// </summary>
+    public TimeSpan VectorRetryDelay { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Потолок паузы между пересборками ради недостающих векторов</summary>
+    public TimeSpan VectorRetryMaxDelay { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
     /// Нижний порог косинусной близости векторной половины. Без порога ближайшие
     /// разделы находятся на любой вопрос, и «в справке этого нет» не прозвучало бы
     /// никогда — ассистент получал бы три случайных раздела и додумывал по ним.

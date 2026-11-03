@@ -1,6 +1,6 @@
 name: Cleanup Old Docker Images
 
-# Зовётся из publish-api.yml и list-api-versions.yml: пять последних версий плюс latest,
+# Зовётся из publish-api.yml после выкатки: пять последних версий плюс latest,
 # бегущий контейнер не трогается (спец. infrastructure, 6). Тег — дата сборки, поэтому
 # порядок docker images (новые сверху) совпадает с порядком выкаток
 

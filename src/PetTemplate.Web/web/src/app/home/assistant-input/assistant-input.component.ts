@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { Router } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
 import { SendHorizontal, Sparkles } from 'lucide-angular/src/icons';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { AssistantService } from '../../assistant/assistant.service';
 import { LimitReachedComponent } from '../../assistant/limit-reached/limit-reached.component';
 import { ASSISTANT_TEXT_STATE } from '../../assistant/assistant-text';
 import { provideIcons } from '../../shared/icons/lucide-icons.provider';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { HOME_SCOPES } from '../home.scopes';
 
 /**
  * Строка ввода ассистента на главной (спец. assistant, 2).
@@ -60,7 +61,7 @@ import { provideIcons } from '../../shared/icons/lucide-icons.provider';
   `
 })
 export class HomeAssistantInputComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...HOME_SCOPES);
   protected readonly assistant = inject(AssistantService);
   private readonly router = inject(Router);
 

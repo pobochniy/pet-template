@@ -32,13 +32,13 @@
             <div class="border-top pt-4 mb-4">
               <h6 class="fw-semibold mb-3">{{ i18n.t('profile.edit.confirmations') }}</h6>
 
-              <div class="form-check mb-3 p-3 bg-light rounded">
+              <div class="form-check mb-3 p-3 bg-body-tertiary rounded">
                 <input class="form-check-input ms-0 me-2" type="checkbox" id="isAdult" formControlName="isAdult">
                 <label class="form-check-label fw-semibold" for="isAdult">{{ i18n.t('profile.field.isAdult') }}</label>
                 <form-validation [model]="profileForm.controls.isAdult" fieldKey="profile.field.isAdult"></form-validation>
               </div>
 
-              <div class="form-check p-3 bg-light rounded">
+              <div class="form-check p-3 bg-body-tertiary rounded">
                 <input class="form-check-input ms-0 me-2" type="checkbox" id="hasAcceptedTerms" formControlName="hasAcceptedTerms">
                 <label class="form-check-label fw-semibold" for="hasAcceptedTerms">{{ i18n.t('profile.field.hasAcceptedTerms') }}</label>
                 <form-validation [model]="profileForm.controls.hasAcceptedTerms" fieldKey="profile.field.hasAcceptedTerms"></form-validation>

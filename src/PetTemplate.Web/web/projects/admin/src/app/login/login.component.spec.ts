@@ -53,18 +53,18 @@ describe('LoginComponent', () => {
 
   it('should not offer to sign in until both fields are filled', async () => {
     const { fixture, element } = await render();
-    expect(submitButton(element).disabled).toBeTrue();
+    expect(submitButton(element).disabled).toBe(true);
 
     await fill(fixture, element, 'Oleg', '');
-    expect(submitButton(element).disabled).toBeTrue();
+    expect(submitButton(element).disabled).toBe(true);
 
     await fill(fixture, element, 'Oleg', 'secret');
-    expect(submitButton(element).disabled).toBeFalse();
+    expect(submitButton(element).disabled).toBe(false);
   });
 
   it('should start the session and open the shell', async () => {
     const { fixture, element } = await render();
-    const navigate = spyOn(TestBed.inject(Router), 'navigateByUrl').and.resolveTo(true);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     await fill(fixture, element, 'Oleg', 'secret');
 
     element.querySelector('form')!.dispatchEvent(new Event('submit'));
@@ -93,6 +93,6 @@ describe('LoginComponent', () => {
     expect(element.querySelector('.alert-danger')!.textContent).toContain('неверный логин или пароль');
     expect(element.querySelector('.alert-danger')!.textContent).not.toContain('404');
     expect(TestBed.inject(AdminSessionService).token).toBeNull();
-    expect(submitButton(element).disabled).toBeFalse();
+    expect(submitButton(element).disabled).toBe(false);
   });
 });

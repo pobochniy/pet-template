@@ -69,11 +69,6 @@ out/
 # Личные рабочие файлы в корне (нарезка задачи, открытые вопросы, ревью) — не коммитятся
 /plan/
 
-# фоновый прогон тестов из publish-api workflow
-.artifacts-tests/
-tests.log
-tests.exit
-
 # Разрешённые адреса админки — только на сервере (IaC/nginx/conf/admin-allow.inc.example)
 IaC/nginx/conf/admin-allow.inc
 # Открытие админки на время — его пишет и стирает workflow Admin Access

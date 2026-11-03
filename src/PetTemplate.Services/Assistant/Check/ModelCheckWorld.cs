@@ -6,14 +6,18 @@ namespace PetTemplate.Services.Assistant.Check;
 /// <summary>
 /// Пространство для фразы сверки (спец. admin, 15.3): люди с именами, которые встречаются
 /// во фразах набора, и полные права у автора — сверять надо разбор фразы, а не разрешения.
-/// Живёт оно в базе в памяти и с ней же умирает.
+/// Живёт оно в транзакции мира и умирает с её откатом.
+///
+/// Имена — кириллицей и с пробелом: такого логина правила ввода не пропустят
+/// (<c>UserNameRule</c>), и с уникальным индексом логинов настоящих людей мир
+/// не столкнётся — ни ошибкой, ни ожиданием чужой регистрации на замке индекса.
 ///
 /// В ядре здесь только люди: предметных записей у шаблона нет. Раздел проекта со своими
-/// инструментами сеет сюда то, о чём говорят его фразы
+/// инструментами сеет сюда то, о чём говорят его фразы (<c>IAssistantSection.Seed</c>)
 /// </summary>
 public static class ModelCheckWorld
 {
-    public static (Guid UserId, Guid WorkspaceId) Seed(ApplicationContext context)
+    public static async Task<(Guid UserId, Guid WorkspaceId)> Seed(ApplicationContext context, CancellationToken ct)
     {
         var workspaceId = Guid.CreateVersion7();
         context.Workspaces.Add(new Workspace
@@ -27,7 +31,7 @@ public static class ModelCheckWorld
         Person(context, workspaceId, "Илья Петров", all: false);
         Person(context, workspaceId, "Настя", all: false);
 
-        context.SaveChanges();
+        await context.SaveChangesAsync(ct);
 
         return (oleg, workspaceId);
     }

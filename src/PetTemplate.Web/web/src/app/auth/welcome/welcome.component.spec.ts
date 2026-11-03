@@ -9,6 +9,7 @@ import { TokenService } from '../../shared/api/token.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('WelcomeComponent', () => {
   let fixture: ComponentFixture<WelcomeComponent>;
@@ -28,17 +29,16 @@ describe('WelcomeComponent', () => {
       ]
     });
     user = TestBed.inject(UserService);
-    TestBed.inject(TokenService).Token = '';
-    user.setProfile({
+    user.setProfile(profileDto({
       id: 'user-1', userName: 'tg12345678', userNameIsGenerated: true, avatarId: 0, comment: null,
       isAdult: false, hasAcceptedTerms: false
-    });
+    }));
     await loadAllScopes(TestBed.inject(I18nService));
     api = TestBed.inject(AccountApiServiceMock);
     // Аккаунт из Telegram: логин автоматический, пароля нет, вход — один
     api.account = { ...api.account, userName: 'tg12345678', userNameIsGenerated: true, hasPassword: false, telegramLinked: true };
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(WelcomeComponent);
     el = fixture.nativeElement;
@@ -48,7 +48,6 @@ describe('WelcomeComponent', () => {
 
   afterEach(() => {
     user.clearProfile();
-    TestBed.inject(TokenService).Token = '';
   });
 
   function type(id: string, value: string) {
@@ -84,7 +83,7 @@ describe('WelcomeComponent', () => {
     await submit();
 
     expect(api.account.userName).toBe('masha');
-    expect(api.account.hasPassword).toBeTrue();
+    expect(api.account.hasPassword).toBe(true);
     expect(user.profile()?.userName).toBe('masha');
     expect(router.navigateByUrl).toHaveBeenCalledWith('/');
   });
@@ -97,7 +96,7 @@ describe('WelcomeComponent', () => {
     await submit();
 
     expect(el.querySelector('#welcome-user-name-refusal')?.textContent).toContain('уже занято');
-    expect(api.account.hasPassword).toBeFalse();
+    expect(api.account.hasPassword).toBe(false);
     expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 
@@ -116,7 +115,7 @@ describe('WelcomeComponent', () => {
 
     expect(sessionsAfterFirst).toBe(1);
     expect(api.issuedSessions).toBe(2);
-    expect(api.account.hasPassword).toBeTrue();
+    expect(api.account.hasPassword).toBe(true);
   });
 
   it('should require the password twice once it is started', async () => {
@@ -124,7 +123,7 @@ describe('WelcomeComponent', () => {
 
     await submit();
 
-    expect(api.account.hasPassword).toBeFalse();
+    expect(api.account.hasPassword).toBe(false);
     expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 

@@ -84,9 +84,15 @@ describe('BillingComponent', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // `end()` в `afterEach` уводит на `/login`: без маршрута переход падает уже после теста
     TestBed.configureTestingModule({
       imports: [BillingComponent],
-      providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()]
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([{ path: 'login', children: [] }]),
+        provideHttpClient(),
+        provideHttpClientTesting()
+      ]
     });
     httpMock = TestBed.inject(HttpTestingController);
   });
@@ -119,7 +125,7 @@ describe('BillingComponent', () => {
     const { element, request } = await render([AdminRole.Accounts]);
 
     expect(request.request.params.get('from')).toMatch(/^\d{4}-\d\d-\d\d$/);
-    expect(request.request.params.has('modelId')).toBeFalse();
+    expect(request.request.params.has('modelId')).toBe(false);
     expect(element.querySelector('#total-cost')!.textContent!.trim()).toBe('43,75');
     expect(element.querySelector('#default-limit')!.textContent).toContain('2 млн ток. в сутки');
   });

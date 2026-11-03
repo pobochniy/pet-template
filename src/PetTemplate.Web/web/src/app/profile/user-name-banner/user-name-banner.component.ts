@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import { I18nService } from '../../shared/i18n/i18n.service';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { safeStorage } from '../../shared/core/safe-storage';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /** «Не сейчас» прячет плашку на сутки (спец. accounts, 4.2) */
 export const USER_NAME_BANNER_SNOOZE_MS = 24 * 60 * 60 * 1000;
@@ -40,7 +42,7 @@ export function userNameBannerKey(userId: string): string {
   `
 })
 export class UserNameBannerComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   readonly userId = input.required<string>();
   readonly userName = input.required<string>();
@@ -56,22 +58,14 @@ export class UserNameBannerComponent {
     this.generated() && this.userId().length > 0 && !this.snoozed() && !isSnoozed(this.userId(), Date.now()));
 
   protected snooze(): void {
-    try {
-      localStorage.setItem(userNameBannerKey(this.userId()), String(Date.now()));
-    } catch {
-      // Хранилище недоступно — на этом экране плашка всё равно уйдёт, а в следующий раз
-      // покажется снова: запомнить «не сейчас» негде
-    }
+    // Хранилище недоступно — «не сейчас» живёт в памяти страницы (`safeStorage`)
+    safeStorage.set(userNameBannerKey(this.userId()), String(Date.now()));
 
     this.snoozed.set(true);
   }
 }
 
 function isSnoozed(userId: string, now: number): boolean {
-  try {
-    const stored = Number(localStorage.getItem(userNameBannerKey(userId)));
-    return Number.isFinite(stored) && stored > 0 && now - stored < USER_NAME_BANNER_SNOOZE_MS;
-  } catch {
-    return false;
-  }
+  const stored = Number(safeStorage.get(userNameBannerKey(userId)));
+  return Number.isFinite(stored) && stored > 0 && now - stored < USER_NAME_BANNER_SNOOZE_MS;
 }

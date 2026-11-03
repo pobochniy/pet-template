@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
-import { I18nService } from '../i18n/i18n.service';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { injectI18n } from '../i18n/inject-i18n';
 
 /**
  * Строка поиска над списком раздела (спец. search, 8): запрос уходит по «Найти»
@@ -31,7 +31,7 @@ import { I18nService } from '../i18n/i18n.service';
   styles: `.search-box { max-width: 32rem; flex: 1 1 12rem; }`
 })
 export class SearchBoxComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n();
 
   /** Поиск в пути — второй не запускаем */
   readonly busy = input(false);

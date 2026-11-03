@@ -220,7 +220,7 @@ public class AdminAccountService(
         if (await db.UserInAdminRoles.AnyAsync(x => x.UserId == userId, ct))
             throw new BadRequestException(AuthMessages.AdminCannotBeDeleted);
         if (!await HasWorkspaces(userId, ct))
-            throw new ArgumentException("У аккаунта нет пространств — восстанавливать нечего, такой аккаунт удаляют");
+            throw new AdminRejectionException("У аккаунта нет пространств — восстанавливать нечего, такой аккаунт удаляют");
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -277,18 +277,18 @@ public class AdminAccountService(
         var why = RequireReason(dto.Reason);
 
         var email = dto.Email?.Trim() ?? string.Empty;
-        if (email.Length == 0) throw new ArgumentException("Укажите адрес почты");
+        if (email.Length == 0) throw new AdminRejectionException("Укажите адрес почты");
 
         var userName = await db.Profiles.Where(x => x.Id == userId).Select(x => x.UserName).SingleOrDefaultAsync(ct);
         if (userName == null) return null;
 
         // Регистр не различает тип колонки — citext; на нём же держится уникальный индекс (8.4)
         var holder = await db.Profiles.SingleOrDefaultAsync(x => x.Email == email, ct)
-                     ?? throw new ArgumentException("Этот адрес не вписан ни в один аккаунт — освобождать нечего");
+                     ?? throw new AdminRejectionException("Этот адрес не вписан ни в один аккаунт — освобождать нечего");
         if (holder.Id == userId)
-            throw new ArgumentException("Этот адрес уже у этого аккаунта");
+            throw new AdminRejectionException("Этот адрес уже у этого аккаунта");
         if (holder.EmailConfirmed)
-            throw new ArgumentException(
+            throw new AdminRejectionException(
                 $"У аккаунта {holder.UserName} адрес подтверждён — ящик его, а не захвачен; снять такой адрес нельзя");
 
         var released = holder.Email!;
@@ -322,7 +322,7 @@ public class AdminAccountService(
                 .SetProperty(p => p.Email, (string?)null)
                 .SetProperty(p => p.EmailConfirmed, false), ct);
         if (released == 0)
-            throw new ArgumentException("Адрес у этого аккаунта только что подтвердили или сменили — откройте карточку заново");
+            throw new AdminRejectionException("Адрес у этого аккаунта только что подтвердили или сменили — откройте карточку заново");
     }
 
     /// <summary>
@@ -342,7 +342,7 @@ public class AdminAccountService(
         var why = RequireReason(dto.Reason);
 
         var phone = dto.Phone?.Trim() ?? string.Empty;
-        if (phone.Length == 0) throw new ArgumentException("Укажите телефон");
+        if (phone.Length == 0) throw new AdminRejectionException("Укажите телефон");
 
         var user = await db.Profiles.Where(x => x.Id == userId).Select(x => new { x.UserName, x.PhoneNumber }).SingleOrDefaultAsync(ct);
         if (user == null) return null;
@@ -351,7 +351,7 @@ public class AdminAccountService(
                          .Where(x => x.PhoneNumber == phone && x.Id != userId)
                          .OrderBy(x => x.Id)
                          .FirstOrDefaultAsync(ct)
-                     ?? throw new ArgumentException(user.PhoneNumber == phone
+                     ?? throw new AdminRejectionException(user.PhoneNumber == phone
                          ? "Этот телефон уже у этого аккаунта"
                          : "Этот телефон не вписан ни в один аккаунт — освобождать нечего");
 
@@ -381,7 +381,7 @@ public class AdminAccountService(
             .Where(x => x.Id == holderId && x.PhoneNumber == phone)
             .ExecuteUpdateAsync(x => x.SetProperty(p => p.PhoneNumber, (string?)null), ct);
         if (released == 0)
-            throw new ArgumentException("Телефон у этого аккаунта только что сменили — откройте карточку заново");
+            throw new AdminRejectionException("Телефон у этого аккаунта только что сменили — откройте карточку заново");
     }
 
     /// <summary>
@@ -432,7 +432,7 @@ public class AdminAccountService(
         await deletion.Delete(userId, ct, precondition: async token =>
         {
             if (await HasWorkspaces(userId, token))
-                throw new ArgumentException("У аккаунта есть пространства — его восстанавливают ссылкой сброса, а не удаляют");
+                throw new AdminRejectionException("У аккаунта есть пространства — его восстанавливают ссылкой сброса, а не удаляют");
         }, journal: context => context.AccountAdminActions.Add(new AccountAdminAction
         {
             Id = Guid.CreateVersion7(),
@@ -451,9 +451,9 @@ public class AdminAccountService(
     public static string RequireReason(string? reason)
     {
         var why = reason?.Trim();
-        if (string.IsNullOrEmpty(why)) throw new ArgumentException("Укажите причину");
+        if (string.IsNullOrEmpty(why)) throw new AdminRejectionException("Укажите причину");
         if (why.Length > AccountAdminAction.ReasonMaxLength)
-            throw new ArgumentException($"Причина — не длиннее {AccountAdminAction.ReasonMaxLength} символов");
+            throw new AdminRejectionException($"Причина — не длиннее {AccountAdminAction.ReasonMaxLength} символов");
         return why;
     }
 

@@ -1,3 +1,5 @@
+import { safeStorage } from './safe-storage';
+
 /**
  * Параметры запуска mini-app, которые снял инлайн-скрипт `index.html` до старта Angular
  * (спец. accounts, 5.6):
@@ -19,10 +21,6 @@ export function launchParam(name: LaunchParam): string | undefined {
   const fromPage = (window as { __pettemplateLaunch?: Partial<Record<LaunchParam, string>> }).__pettemplateLaunch?.[name];
   if (fromPage) return fromPage;
 
-  try {
-    return sessionStorage.getItem(LAUNCH_STORAGE_PREFIX + name) || undefined;
-  } catch {
-    // Стороннему фрейму VK хранилище могут не дать
-    return undefined;
-  }
+  // Стороннему фрейму VK хранилище могут не дать — `safeStorage` это переживает
+  return safeStorage.get(LAUNCH_STORAGE_PREFIX + name, 'session') || undefined;
 }

@@ -42,10 +42,9 @@ describe('MiniappComponent', () => {
       ]
     });
     await loadAllScopes(TestBed.inject(I18nService));
-    TestBed.inject(TokenService).Token = '';
     api = TestBed.inject(ExternalLoginApiServiceMock);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     arrange(api);
 
     fixture = TestBed.createComponent(MiniappComponent);
@@ -72,14 +71,13 @@ describe('MiniappComponent', () => {
   afterEach(() => {
     for (const name of ['tg', 'vk', 'vkHash']) sessionStorage.removeItem(LAUNCH_STORAGE_PREFIX + name);
     TestBed.inject(UserService).clearProfile();
-    TestBed.inject(TokenService).Token = '';
   });
 
   it('should explain on the screen that the app is opened outside Telegram', async () => {
     await render('telegram');
 
     expect(TestBed.inject(AlertsService).alerts().map(x => x.content)).toContain('Не удалось подключиться к Telegram');
-    expect(fixture.componentInstance.isLoading()).toBeFalse();
+    expect(fixture.componentInstance.isLoading()).toBe(false);
   });
 
   /** Известный Telegram — вход и главная */
@@ -169,8 +167,8 @@ describe('MiniappComponent', () => {
   /** Сервер недоступен — объяснение на экране, а не вечный лоадер */
   it('should explain the failure on the screen when the server is unreachable', async () => {
     launch('tg', INIT_DATA);
-    spyOn(console, 'error');
-    await render('telegram', mock => spyOn(mock, 'telegramAuth').and.rejectWith(new Error('Network error')));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await render('telegram', mock => vi.spyOn(mock, 'telegramAuth').mockRejectedValue(new Error('Network error')));
 
     expect(el.querySelector('h3')?.textContent).toBe('Ошибка входа');
   });

@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, Injector, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { LogOut, LucideAngularModule, Menu, Settings, User } from 'lucide-angular';
-import { EventEmitterService } from '../event-emitter.service';
+import { MenuStateService } from '../menu-state.service';
 import { UserService } from '../../core/user.service';
 import { WorkspaceContextService } from '../../core/workspace-context.service';
 import { WorkspaceModel } from '../../models/workspace.model';
-import { I18nService } from '../../i18n/i18n.service';
 import { Lang, langMeta } from '../../i18n/lang';
 import { LangFlagComponent } from '../../i18n/flags/lang-flag.component';
 import { LanguagePickerComponent } from '../../language-picker/language-picker.component';
 import { provideIcons } from '../../icons/lucide-icons.provider';
+import { injectI18n } from '../../i18n/inject-i18n';
 
 @Component({
   selector: 'top-nav',
@@ -20,7 +20,7 @@ import { provideIcons } from '../../icons/lucide-icons.provider';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TopNavComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n();
 
   protected readonly workspaceContext = inject(WorkspaceContextService);
   private readonly injector = inject(Injector);
@@ -33,7 +33,7 @@ export class TopNavComponent {
   readonly workspaces = signal<WorkspaceModel[]>([]);
 
   constructor(
-    private eventEmitterService: EventEmitterService,
+    private menu: MenuStateService,
     public userService: UserService,
     private router: Router
   ) {
@@ -84,7 +84,7 @@ export class TopNavComponent {
   }
 
   toggleMenu() {
-    this.eventEmitterService.onToggleMenuButtonClick();
+    this.menu.toggle();
   }
 
   /** Состояние разделов и саму сессию убирает `UserService.logOut` (`SessionResetService`) */

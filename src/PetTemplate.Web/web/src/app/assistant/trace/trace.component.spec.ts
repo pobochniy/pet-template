@@ -37,8 +37,8 @@ describe('AssistantTraceComponent', () => {
     api.setTrace({
       expired: false,
       steps: [
-        { step: 1, kind: 'model', summary: '', durationMs: 1500 },
-        { step: 2, kind: 'tool', toolName: 'search_help', summary: 'искал в справке: как пригласить коллегу', durationMs: 120 }
+        { step: 1, kind: 'model', toolName: null, summary: '', durationMs: 1500, error: null },
+        { step: 2, kind: 'tool', toolName: 'search_help', summary: 'искал в справке: как пригласить коллегу', durationMs: 120, error: null }
       ]
     });
 

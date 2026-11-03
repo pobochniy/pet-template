@@ -29,6 +29,7 @@ export default {
   "core.language.current": "Язык интерфейса: {language}",
   "core.language.search": "Найти язык",
   "core.language.title": "Язык интерфейса",
+  "core.nav.help": "Справка",
   "core.nav.home": "Главная",
   "core.nav.logOut": "Выйти",
   "core.nav.members": "Участники",

@@ -33,7 +33,7 @@ describe('ProfileMergeStartComponent', () => {
     api = TestBed.inject(AccountApiServiceMock);
     if (!fresh) api.account = { ...api.account, freshLoginUntilUtc: null };
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     await loadAllScopes(TestBed.inject(I18nService));
     // Окно свежего входа (8.6) — из «Основное», как его кладёт блок профиля
     TestBed.inject(FreshLoginService).track(await api.logins());
@@ -93,12 +93,12 @@ describe('ProfileMergeStartComponent', () => {
   /** Через площадку — тот же путь, что вход, с пометкой «слияние» */
   it('should go to the platform to prove the other account', async () => {
     await setup();
-    const start = spyOn(TestBed.inject(ExternalLoginService), 'start').and.resolveTo();
+    const start = vi.spyOn(TestBed.inject(ExternalLoginService), 'start').mockResolvedValue(undefined);
 
     el.querySelector<HTMLButtonElement>('#merge-by-telegram')!.click();
     await render();
 
-    expect(start).toHaveBeenCalledWith('telegram', 'merge', '/profile/merge');
+    expect(start).toHaveBeenCalledWith('telegram', 'merge', '/profile/merge', undefined);
   });
 
   /**
@@ -107,19 +107,25 @@ describe('ProfileMergeStartComponent', () => {
    */
   it('should ask for the fresh login before going to the platform', async () => {
     await setup(false);
-    const start = spyOn(TestBed.inject(ExternalLoginService), 'start').and.resolveTo();
+    const start = vi.spyOn(TestBed.inject(ExternalLoginService), 'start').mockResolvedValue(undefined);
     const fresh = TestBed.inject(FreshLoginService);
 
     el.querySelector<HTMLButtonElement>('#merge-by-telegram')!.click();
     await render();
 
-    expect(fresh.pending()).toBeTrue();
+    expect(fresh.pending()).toBe(true);
     expect(start).not.toHaveBeenCalled();
+
+    // Клик «Подтвердить» открывает окно Telegram сразу, до запросов подтверждения
+    const popup = { closed: false, close: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(TestBed.inject(ExternalLoginService), 'openPopup').mockReturnValue(popup);
+    fresh.confirming();
+    expect(open).toHaveBeenCalledTimes(1);
 
     fresh.confirmed(await api.confirmPassword(api.password).then(() => api.logins()));
     await render();
 
-    expect(start).toHaveBeenCalledWith('telegram', 'merge', '/profile/merge');
+    expect(start).toHaveBeenCalledWith('telegram', 'merge', '/profile/merge', popup);
   });
 
   /** Просмотр по паролю без свежего входа — ждёт подтверждения, а не уходит в отказ сервера */
@@ -132,7 +138,7 @@ describe('ProfileMergeStartComponent', () => {
     el.querySelector<HTMLButtonElement>('#merge-by-password')!.click();
     await render();
 
-    expect(fresh.pending()).toBeTrue();
+    expect(fresh.pending()).toBe(true);
     expect(router.navigateByUrl).not.toHaveBeenCalled();
 
     fresh.confirmed(await api.confirmPassword(api.password).then(() => api.logins()));

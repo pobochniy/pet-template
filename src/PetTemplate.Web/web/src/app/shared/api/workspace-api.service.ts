@@ -3,8 +3,11 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { BaseApiService } from './base-api.service';
 import { WorkspaceCreatedModel, WorkspaceModel } from '../models/workspace.model';
-import { AuthenticationResultModel } from '../models/authentication-result.model';
+import { AuthenticationResultModel, PermissionsByWorkspace } from '../models/authentication-result.model';
 import { WORKSPACE_HEADER } from '../interceptors/workspace.interceptor';
+
+/** Адрес «моих прав» — его 403 перечитывание прав не запускает (`authInterceptor`) */
+export const MY_PERMISSIONS_PATH = 'MyPermissions';
 
 /**
  * Пространства пользователя (спец. authorization, 3, 7 и 8). Лежит в initial: список
@@ -27,6 +30,15 @@ export class WorkspaceApiService extends BaseApiService {
 
   async getList(): Promise<WorkspaceModel[]> {
     return (await this.get<WorkspaceModel[]>('GetList')) ?? [];
+  }
+
+  /**
+   * Свои права по пространствам — как они лежат в базе сейчас, без перевыпуска токена:
+   * их могли поменять чужими руками (выдача и отзыв прав, удаление участника).
+   * Перечитывает `PermissionsRefreshService` (спец. authorization, 2.2)
+   */
+  async myPermissions(signal?: AbortSignal): Promise<PermissionsByWorkspace> {
+    return (await this.get<PermissionsByWorkspace>(MY_PERMISSIONS_PATH, signal)) ?? {};
   }
 
   /**

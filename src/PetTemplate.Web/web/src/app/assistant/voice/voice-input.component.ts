@@ -5,10 +5,11 @@ import { LucideAngularModule } from 'lucide-angular';
 import { Mic, Square, X } from 'lucide-angular/src/icons';
 import { AssistantApiService } from '../../shared/api/assistant-api.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
 import { provideIcons } from '../../shared/icons/lucide-icons.provider';
 import { AssistantService } from '../assistant.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from '../assistant.scopes';
 
 /** Сколько держится всплывающее сообщение о записи */
 const ALERT_MS = 5000;
@@ -81,7 +82,7 @@ export class VoiceInputComponent implements OnDestroy {
 
   private static readonly MimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
 
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
   private readonly api = inject(AssistantApiService);
   private readonly alerts = inject(AlertsService);
   private readonly assistant = inject(AssistantService);

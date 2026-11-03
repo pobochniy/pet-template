@@ -1,11 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { ExternalLoginService } from '../../shared/core/external-login.service';
 import { AccountLoginsModel } from '../../shared/models/account.model';
 import { EXTERNAL_PROVIDER_CODES, ExternalProvider } from '../../shared/models/external-login.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
 import { FreshLoginService } from '../fresh-login/fresh-login.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * Строка Telegram или VK в блоке «Основное» (спец. accounts, раздел 6): «Привязан · Отвязать»
@@ -13,7 +14,8 @@ import { FreshLoginService } from '../fresh-login/fresh-login.service';
  * с пометкой «привязка»: вернётся человек на `/auth/{площадка}`, а оттуда — сюда.
  * «Отвязать» у последнего способа войти недоступна — с подсказкой (раздел 3).
  * И то и другое — после подтверждения владения (8.6): привязка — до ухода на площадку,
- * её код одноразовый, и отказ после возврата потратил бы его зря
+ * её код одноразовый, и отказ после возврата потратил бы его зря. Окно Telegram при этом
+ * открывается в клике «Подтвердить» (`FreshLoginPrepare`)
  */
 @Component({
   selector: 'profile-external-login',
@@ -46,7 +48,7 @@ import { FreshLoginService } from '../fresh-login/fresh-login.service';
   `
 })
 export class ProfileExternalLoginComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
 
   readonly provider = input.required<ExternalProvider>();
   readonly logins = input.required<AccountLoginsModel>();
@@ -76,13 +78,17 @@ export class ProfileExternalLoginComponent {
   ) {}
 
   protected async link(): Promise<void> {
-    if (!(await this.fresh.ensure())) return;
+    // Окно свежего входа закрыто — окно Telegram открывается в клике «Подтвердить»,
+    // до запросов подтверждения, иначе браузер его заблокирует
+    const confirmed = await this.fresh.ensureBeforePlatform(this.provider(), () => this.external.openPopup());
+    if (!confirmed) return;
 
     this.error.set(null);
     this.busy.set(true);
     try {
-      // Уход на площадку (Telegram — окно); вернётся человек на `/auth/{площадка}`
-      await this.external.start(this.provider(), 'link', '/profile/edit');
+      // Уход на площадку (Telegram — окно, уже открытое подтверждением, или новое);
+      // вернётся человек на `/auth/{площадка}`
+      await this.external.start(this.provider(), 'link', '/profile/edit', confirmed.popup);
     } catch (e) {
       this.error.set(serverErrorMessage(e, this.i18n, this.i18n.t('profile.external.failed')));
     } finally {

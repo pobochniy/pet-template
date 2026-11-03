@@ -71,7 +71,8 @@ public sealed class HelpIndexTests : IDisposable
         Directory.CreateSymbolicLink(current, Path.Combine("releases", commit));
     }
 
-    private HelpSearch Search(IEmbeddingGenerator<string, Embedding<float>> embedder, bool embeddings = true) =>
+    private HelpSearch Search(IEmbeddingGenerator<string, Embedding<float>> embedder, bool embeddings = true,
+        TimeProvider? time = null) =>
         new(
             new ServiceCollection().AddSingleton(embedder).BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new HelpOptions { Path = Path.Combine(_root, "current") }),
@@ -80,7 +81,8 @@ public sealed class HelpIndexTests : IDisposable
                 EmbeddingsEndpoint = embeddings ? "http://embeddings.test/v1" : "",
                 EmbeddingsModel = "test-model"
             }),
-            NullLogger<HelpSearch>.Instance)
+            NullLogger<HelpSearch>.Instance,
+            time: time)
         {
             CacheDirectory = Path.Combine(_root, "cache")
         };
@@ -275,6 +277,108 @@ public sealed class HelpIndexTests : IDisposable
         Assert.Same(index, help.Current);
     }
 
+    /// <summary>
+    /// Эмбеддер лежал при сборке — тот же выпуск пересобирается, когда пауза вышла,
+    /// и разделы догоняют векторы без нового выпуска и рестарта (6.4)
+    /// </summary>
+    [Fact]
+    public async Task SameCommitCatchesUpMissingVectors()
+    {
+        // Arrange
+        var embedder = new FlakyEmbedder { IsDown = true };
+        var clock = new ManualClock();
+        Release("a1", ("account", Password), ("workspace", Workspace));
+        Switch("a1");
+        var help = Search(embedder, time: clock);
+        await help.Refresh(CancellationToken.None);
+        var missing = help.Current!.MissingVectors;
+        embedder.IsDown = false;
+        clock.Advance(new HelpOptions().VectorRetryDelay);
+
+        // Act
+        await help.Refresh(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(3, missing);
+        Assert.Equal("a1", help.Current?.Commit);
+        Assert.Equal(0, help.Current?.MissingVectors);
+    }
+
+    /// <summary>
+    /// Пока эмбеддер лежит, повтор ждёт паузу, и каждая неудача её удваивает: опрос раз
+    /// в минуту не упирается каждый раз в таймауты (6.4)
+    /// </summary>
+    [Fact]
+    public async Task MissingVectorsRetryWithGrowingDelay()
+    {
+        // Arrange
+        var embedder = new FlakyEmbedder { IsDown = true };
+        var clock = new ManualClock();
+        var delay = new HelpOptions().VectorRetryDelay;
+        Release("a1", ("account", Password), ("workspace", Workspace));
+        Switch("a1");
+        var help = Search(embedder, time: clock);
+        await help.Refresh(CancellationToken.None);
+        var attempts = new List<int> { embedder.Attempts };
+
+        // Act
+        await help.Refresh(CancellationToken.None);
+        attempts.Add(embedder.Attempts);
+        clock.Advance(delay);
+        await help.Refresh(CancellationToken.None);
+        attempts.Add(embedder.Attempts);
+        clock.Advance(delay);
+        await help.Refresh(CancellationToken.None);
+        attempts.Add(embedder.Attempts);
+        clock.Advance(delay);
+        await help.Refresh(CancellationToken.None);
+        attempts.Add(embedder.Attempts);
+
+        // Assert: сразу — нет, через паузу — да, через ту же паузу — нет (она удвоилась), через две — да
+        Assert.Equal([1, 1, 2, 2, 3], attempts);
+    }
+
+    /// <summary>Эмбеддер не настроен — векторов не ждём и тот же выпуск не пересобираем</summary>
+    [Fact]
+    public async Task NoEmbedderMeansNoVectorRetry()
+    {
+        // Arrange
+        var clock = new ManualClock();
+        Release("a1", ("account", Password), ("workspace", Workspace));
+        Switch("a1");
+        var help = Search(new KeywordEmbedder(), embeddings: false, time: clock);
+        await help.Refresh(CancellationToken.None);
+        var index = help.Current;
+        clock.Advance(TimeSpan.FromDays(1));
+
+        // Act
+        await help.Refresh(CancellationToken.None);
+
+        // Assert
+        Assert.Same(index, help.Current);
+    }
+
+    /// <summary>
+    /// Статья для сайта (6.5): разделы markdown-текстом, без фронтматтера и строк
+    /// «Как спрашивают» — они только для поиска
+    /// </summary>
+    [Fact]
+    public async Task PagesCarryMarkdownWithoutAsks()
+    {
+        // Arrange
+        var help = await Published();
+
+        // Act
+        var page = help.Current!.Pages.Single(x => x.Slug == "account");
+
+        // Assert
+        Assert.Equal("Пароль", page.Title);
+        Assert.StartsWith("## Как сменить пароль\n\nВ профиле нажмите", page.Markdown);
+        Assert.Contains("## Что делать, если забыли пароль", page.Markdown);
+        Assert.DoesNotContain("Как спрашивают", page.Markdown);
+        Assert.DoesNotContain("page:", page.Markdown);
+    }
+
     /// <summary>Ключ раздела — пара «статья + заголовок»: правка тела его не меняет</summary>
     [Fact]
     public void SectionIdIgnoresBody()
@@ -324,6 +428,34 @@ public sealed class HelpIndexTests : IDisposable
         public override Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
             IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default) =>
             throw new HttpRequestException("embedder is down");
+    }
+
+    /// <summary>Эмбеддер, который лежит, пока <see cref="IsDown"/>; считает попытки сборки</summary>
+    private sealed class FlakyEmbedder : KeywordEmbedder
+    {
+        public bool IsDown { get; set; }
+
+        public int Attempts { get; private set; }
+
+        public override Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
+            IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            Attempts++;
+
+            return IsDown
+                ? throw new HttpRequestException("embedder is down")
+                : base.GenerateAsync(values, options, cancellationToken);
+        }
+    }
+
+    /// <summary>Часы, которые двигает тест</summary>
+    private sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 11, 1, 10, 0, 0, TimeSpan.Zero);
+
+        public void Advance(TimeSpan by) => _now += by;
+
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 
     /// <summary>Эмбеддер, который можно задержать — чтобы поймать поиск посреди пересборки</summary>

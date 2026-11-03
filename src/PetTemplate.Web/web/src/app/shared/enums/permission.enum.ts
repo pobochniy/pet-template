@@ -4,7 +4,7 @@
  * в конец — числа хранятся в базе и едут в токене.
  *
  * Права разделов проекта — точка расширения: раздел дописывает их сюда, на сервер
- * и в `PERMISSION_CATALOG` (`shared/permissions/permission-catalog.ts`) с подписью
+ * и в `PERMISSION_CATALOG` (`workspace/permission-catalog.ts`) с подписью
  */
 export enum PermissionEnum {
   None = 0,

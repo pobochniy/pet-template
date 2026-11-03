@@ -65,6 +65,72 @@ public class WorkspaceLimitTests
     }
 
     /// <summary>
+    /// Суточный потолок человека — по всем его пространствам: новое пустое пространство
+    /// со своим нетронутым лимитом его не обходит (13.6)
+    /// </summary>
+    [Fact]
+    public async Task UserDailyLimitCountsAllWorkspaces()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Рога и Копыта");
+        world.SpendSettings.UserDailyLimit.TokensPerDay = 1000;
+        var spend = Spend(world, world.Author, world.Now, tokens: 1000);
+        spend.WorkspaceId = Guid.CreateVersion7();
+        world.Db.RunSpend.Add(spend);
+        await world.Save();
+
+        // Act
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() =>
+            world.Threads.Send(world.Author, world.WorkspaceId, "как пригласить?", "UTC", CancellationToken.None));
+
+        // Assert
+        Assert.Equal(AssistantErrors.UserDailyLimitReached.Code, refused.Code);
+        Assert.Null(refused.Params);
+    }
+
+    /// <summary>Чужой расход в потолок человека не идёт</summary>
+    [Fact]
+    public async Task UserDailyLimitIgnoresOtherPeople()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Тапки и Носки");
+        world.SpendSettings.UserDailyLimit.TokensPerDay = 1000;
+        var vasya = await Member(world, "Vasya");
+        world.Db.RunSpend.Add(Spend(world, vasya, world.Now, tokens: 5000));
+        await world.Save();
+
+        // Act
+        var refused = await Record.ExceptionAsync(() => world.Threads.CheckLimit(
+            world.Author, world.WorkspaceId, world.Now, CancellationToken.None));
+
+        // Assert
+        Assert.Null(refused);
+    }
+
+    /// <summary>
+    /// Потолок установки съеден кем угодно и где угодно — ассистент недоступен всем,
+    /// тем же отказом, что и без моделей (13.6, 16.2)
+    /// </summary>
+    [Fact]
+    public async Task InstallationDailyLimitDisablesAssistant()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Ложки и Поварёшки");
+        world.SpendSettings.InstallationDailyLimit.TokensPerDay = 1000;
+        var stranger = Spend(world, Guid.CreateVersion7(), world.Now, tokens: 1000);
+        stranger.WorkspaceId = Guid.CreateVersion7();
+        world.Db.RunSpend.Add(stranger);
+        await world.Save();
+
+        // Act
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() => world.Threads.CheckLimit(
+            world.Author, world.WorkspaceId, world.Now, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(AssistantErrors.ModelUnavailable.Code, refused.Code);
+    }
+
+    /// <summary>
     /// Расход прошлых дней месяца в дневной лимит не идёт, а в месячный — идёт:
     /// месяц съеден, отказ — месячный. Даты свои, а не часы теста: на первое число
     /// «прошлых дней месяца» не бывает
@@ -83,7 +149,7 @@ public class WorkspaceLimitTests
 
         // Act
         var refused = await Assert.ThrowsAsync<BadRequestException>(() => world.Threads.CheckLimit(
-            world.WorkspaceId, new DateTime(2026, 3, 15, 12, 0, 0, DateTimeKind.Utc), CancellationToken.None));
+            world.Author, world.WorkspaceId, new DateTime(2026, 3, 15, 12, 0, 0, DateTimeKind.Utc), CancellationToken.None));
 
         // Assert
         Assert.Equal(AssistantErrors.MonthlyLimitReached.Code, refused.Code);
@@ -101,7 +167,7 @@ public class WorkspaceLimitTests
 
         // Act
         var refused = await Record.ExceptionAsync(() => world.Threads.CheckLimit(
-            world.WorkspaceId, new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Utc), CancellationToken.None));
+            world.Author, world.WorkspaceId, new DateTime(2026, 3, 1, 1, 0, 0, DateTimeKind.Utc), CancellationToken.None));
 
         // Assert
         Assert.Null(refused);
@@ -157,6 +223,94 @@ public class WorkspaceLimitTests
         Assert.Equal(AssistantErrors.DailyLimitReached.Code, refused.Code);
     }
 
+    /// <summary>
+    /// Резерв на старте (13.6): ход Васи ещё идёт и расхода не записал, но потолок хода
+    /// уже занят — Олегу в том же пространстве отказ, перешагнуть потолок вдвоём нельзя
+    /// </summary>
+    [Fact]
+    public async Task LiveRunReservesTheLimit()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Бублики и Сушки");
+        world.SpendSettings.DefaultLimit.TokensPerDay = 1000;
+        var vasya = await Member(world, "Vasya");
+        await world.ThreadsOver(world.NewContext())
+            .Send(vasya, world.WorkspaceId, "как пригласить?", "UTC", CancellationToken.None);
+
+        // Act
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() =>
+            world.Threads.Send(world.Author, world.WorkspaceId, "и мне", "UTC", CancellationToken.None));
+
+        // Assert
+        Assert.Equal(AssistantErrors.DailyLimitReached.Code, refused.Code);
+    }
+
+    /// <summary>
+    /// Конец хода сверяет резерв по факту: потолок хода освобождается, в лимит ложатся
+    /// настоящие токены, и следующий ход проходит (13.6)
+    /// </summary>
+    [Fact]
+    public async Task FinishedRunReleasesReserve()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Котики и Собачки");
+        world.SpendSettings.DefaultLimit.TokensPerDay = world.Settings.TokensPerRun + 1000;
+        var (runId, _) = await world.Threads.Send(world.Author, world.WorkspaceId, "привет", "UTC",
+            CancellationToken.None);
+        var reserved = await Reserved(world);
+        await world.Handler(new FakeChatClient().Says("Привет.").Costing(500, 50))
+            .Handle(new Services.Commands.AssistantRunCommand { RunId = runId }, CancellationToken.None);
+
+        // Act
+        var settled = await Reserved(world);
+
+        // Assert
+        Assert.Equal(world.Settings.TokensPerRun, reserved);
+        Assert.Equal(0, settled);
+    }
+
+    /// <summary>
+    /// Реплика, вставшая в очередь своего треда, тоже держит резерв: её ход начнётся
+    /// без второй проверки (13.6)
+    /// </summary>
+    [Fact]
+    public async Task WaitingReplyReservesTheLimit()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Крылышки и Ножки");
+        await world.Threads.Send(world.Author, world.WorkspaceId, "привет", "UTC", CancellationToken.None);
+
+        // Act
+        await world.Threads.Send(world.Author, world.WorkspaceId, "и ещё", "UTC", CancellationToken.None);
+
+        // Assert: живой ход и ждущая реплика
+        Assert.Equal(2L * world.Settings.TokensPerRun, await Reserved(world));
+    }
+
+    /// <summary>
+    /// Два участника отправляют одновременно, места — на один ход: проверка и резерв идут
+    /// под замком пространства, и второй видит резерв первого (13.6)
+    /// </summary>
+    [Fact]
+    public async Task ParallelSendsDoNotOvershoot()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Винтики и Шпунтики");
+        world.SpendSettings.DefaultLimit.TokensPerDay = 1000;
+        var vasya = await Member(world, "Vasya");
+        var petya = await Member(world, "Petya");
+
+        async Task<Exception?> Attempt(Guid who) => await Record.ExceptionAsync(() => world.ThreadsOver(world.NewContext())
+            .Send(who, world.WorkspaceId, "привет", "UTC", CancellationToken.None));
+
+        // Act
+        var sends = await Task.WhenAll(Attempt(vasya), Attempt(petya));
+
+        // Assert
+        Assert.Single(sends, x => x == null);
+        Assert.Single(sends, x => x is BadRequestException { Code: var code } && code == AssistantErrors.DailyLimitReached.Code);
+    }
+
     /// <summary>Отказ на <c>Send</c> — <c>400</c> с кодом словаря <c>assistant</c></summary>
     [Fact]
     public async Task SendAnswersLimitCode()
@@ -180,6 +334,16 @@ public class WorkspaceLimitTests
 
         // Assert
         await response.ShouldBeBadRequestWith(AssistantErrors.DailyLimitReached);
+    }
+
+    private static async Task<long> Reserved(AssistantWorld world)
+    {
+        var limits = new Services.Billing.WorkspaceLimits(world.NewContext(),
+            Microsoft.Extensions.Options.Options.Create(world.SpendSettings),
+            Microsoft.Extensions.Options.Options.Create(world.Settings));
+        var (tokens, _) = await limits.Reserved(world.WorkspaceId, null, CancellationToken.None);
+
+        return tokens;
     }
 
     private static async Task<Guid> Member(AssistantWorld world, string name)

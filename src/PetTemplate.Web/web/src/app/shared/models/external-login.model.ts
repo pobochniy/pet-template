@@ -1,3 +1,4 @@
+import type { ApiSchema } from '../api/generated/schema';
 import { ExternalProviderEnum } from '../enums/external-provider.enum';
 
 /** Площадки, через которые входят на сайте и в mini-app (спец. accounts, 5.1, 5.6) */
@@ -17,33 +18,26 @@ export const EXTERNAL_PROVIDER_CODES: Record<ExternalProvider, ExternalProviderE
   vk: ExternalProviderEnum.Vk
 };
 
-/** Публичные параметры площадок с сервера (`Auth/ExternalLogins`). Пустой id — вход выключен */
-export interface ExternalLoginsConfigModel {
-  /** Id бота — `client_id` окна входа Telegram; начало токена до двоеточия, не секрет */
-  telegramBotId: string;
-  telegramAuthorizationEndpoint: string;
-  telegramRedirectUri: string;
-  vkAppId: string;
-  vkAuthorizationEndpoint: string;
-  vkRedirectUri: string;
-}
+/*
+ * Ниже — алиасы схем OpenAPI документа API (`npm run api:types`, `api/generated/schema.d.ts`);
+ * выше — типы клиента, которых на проводе нет
+ */
+
+/**
+ * Публичные параметры площадок с сервера (`Auth/ExternalLogins`). Пустой id — вход выключен.
+ * `telegramBotId` — `client_id` окна входа Telegram: начало токена до двоеточия, не секрет
+ */
+export type ExternalLoginsConfigModel = ApiSchema<'ExternalLoginsConfigDto'>;
 
 /**
  * Что вернула площадка (`Auth/TelegramLogin`, `Auth/VkId`): Telegram — `id_token` окна
- * входа в `code`, VK ID — код и PKCE-verifier
+ * входа в `code`, VK ID — код и PKCE-verifier.
+ *
+ * - `state` — `state` входа: VK ждёт его при обмене кода, у Telegram это `nonce` внутри `id_token`;
+ * - `existingOnly` — только войти в существующий аккаунт (восстановление доступа, 8.3):
+ *   неизвестный вход — `404 auth.error.loginNotLinked`, аккаунт не заводится
  */
-export interface ExternalCodeModel {
-  code: string;
-  verifier?: string | null;
-  deviceId?: string | null;
-  /** `state` входа: VK ждёт его при обмене кода, у Telegram это `nonce` внутри `id_token` */
-  state?: string | null;
-  /**
-   * Только войти в существующий аккаунт (восстановление доступа, 8.3): неизвестный вход —
-   * `404 auth.error.loginNotLinked`, аккаунт не заводится
-   */
-  existingOnly?: boolean;
-}
+export type ExternalCodeModel = ApiSchema<'ExternalCodeDto'>;
 
 /**
  * Доказательство владения входом площадки — `ExternalProofDto` сервера (спец. accounts, 6):
@@ -52,12 +46,4 @@ export interface ExternalCodeModel {
  * (`Account/Link`), слияние (`Account/MergePreview`) и развилку mini-app
  * (`Auth/RegisterExternal`, `Auth/LogInAndLink`)
  */
-export interface ExternalProofModel {
-  provider: ExternalProviderEnum;
-  code?: string | null;
-  verifier?: string | null;
-  deviceId?: string | null;
-  state?: string | null;
-  initData?: string | null;
-  vkLaunchParams?: string | null;
-}
+export type ExternalProofModel = ApiSchema<'ExternalProofDto'>;

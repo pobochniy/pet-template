@@ -1,79 +1,52 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { FormControl, FormGroup } from '@angular/forms';
 import { authInterceptor } from '../interceptors/auth.interceptor';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { AuthApiService } from './auth-api.service';
 import { TokenService } from './token.service';
 import { UserService } from '../core/user.service';
-import { PermissionsService } from '../services/permissions.service';
-import { PermissionEnum } from '../enums/permission.enum';
+import { AuthenticationResultModel } from '../models/authentication-result.model';
+import { profileDto, sessionDto } from './dto.mock';
 
 describe('AuthApiService', () => {
   let service: AuthApiService;
   let httpMock: HttpTestingController;
-  let tokenService: TokenService;
-  let userService: UserService;
-  let permissionsService: PermissionsService;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(withInterceptors([authInterceptor])),
-        provideHttpClientTesting(),
-        AuthApiService,
-        TokenService,
-        UserService,
-        PermissionsService
+        provideHttpClientTesting()
       ]
     });
 
     service = TestBed.inject(AuthApiService);
     httpMock = TestBed.inject(HttpTestingController);
-    tokenService = TestBed.inject(TokenService);
-    userService = TestBed.inject(UserService);
-    permissionsService = TestBed.inject(PermissionsService);
   });
 
   afterEach(() => {
     httpMock.verify();
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
-
-  describe('isAuth', () => {
-    it('should return true when token exists', () => {
-      tokenService.Token = 'test_token';
-      expect(service.isAuth).toBe(true);
+  // Api-сервис только спрашивает сервер: сессию раскладывает экран через `UserService`
+  it('should return the login response without touching the session', async () => {
+    const form = new FormGroup({ login: new FormControl('tester'), password: new FormControl('secret-1') });
+    const response: AuthenticationResultModel = sessionDto({
+      token: 'fresh',
+      profile: profileDto({ id: 'u-1', userName: 'tester', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true }),
+      permissionsByWorkspace: { 'ws-1': [] }
     });
 
-    it('should return false when token is empty', () => {
-      tokenService.Token = '';
-      expect(service.isAuth).toBe(false);
-    });
-  });
+    const promise = service.login(form);
+    const req = httpMock.expectOne('/api/Auth/Login');
+    expect(req.request.withCredentials).toBe(false);
+    req.flush(response);
 
-  describe('logout', () => {
-    it('should clear token, profile, and permissions', async () => {
-      tokenService.Token = 'test_token';
-      userService.setProfile({
-        id: '123',
-        userName: 'testuser',
-        avatarId: null,
-        comment: null,
-        isAdult: false,
-        hasAcceptedTerms: false,
-      });
-      permissionsService.initPermissions([PermissionEnum.PermissionManagement]);
-
-      await service.logout();
-
-      expect(tokenService.Token).toBe('');
-      expect(userService.profile()).toBeNull();
-      expect(permissionsService.permissions()).toEqual([]);
-    });
+    expect(await promise).toEqual(response);
+    expect(TestBed.inject(UserService).isAuthenticated).toBe(false);
+    expect(TestBed.inject(TokenService).Token).toBe('');
   });
 });

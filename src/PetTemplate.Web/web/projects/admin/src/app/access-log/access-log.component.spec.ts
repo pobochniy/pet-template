@@ -91,7 +91,7 @@ describe('AccessLogComponent', () => {
     const request = httpMock.expectOne(r => r.url === '/api/Admin/AccessLog');
     expect(request.request.params.get('adminUserId')).toBe('u-2');
     expect(request.request.params.get('from')).toBe('2026-09-01');
-    expect(request.request.params.has('to')).toBeFalse();
+    expect(request.request.params.has('to')).toBe(false);
     request.flush({ entries: [], nextBefore: null });
     await settle(fixture);
   });
@@ -114,7 +114,7 @@ describe('AccessLogComponent', () => {
     const request = httpMock.expectOne(r => r.url === '/api/Admin/AccessLog');
 
     expect(request.request.params.get('before')).toBe('l-1');
-    expect(request.request.params.has('from')).toBeFalse();
+    expect(request.request.params.has('from')).toBe(false);
     request.flush({ entries: [{ ...entry, id: 'l-0', runId: 'run-0', workspaceName: null }], nextBefore: null });
     await settle(fixture);
 

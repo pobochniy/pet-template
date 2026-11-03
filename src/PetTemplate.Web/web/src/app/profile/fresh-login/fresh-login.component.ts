@@ -5,12 +5,12 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { ExternalLoginService } from '../../shared/core/external-login.service';
 import { UserService } from '../../shared/core/user.service';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
 import { AccountLoginsModel } from '../../shared/models/account.model';
 import { ExternalProvider } from '../../shared/models/external-login.model';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
 import { FreshLoginService } from './fresh-login.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * «Подтвердите, что это вы» в блоке «Основное» (спец. accounts, 8.6): появляется, когда
@@ -63,9 +63,8 @@ import { FreshLoginService } from './fresh-login.service';
   `
 })
 export class ProfileFreshLoginComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
   protected readonly fresh = inject(FreshLoginService);
-  private readonly workspaceContext = inject(WorkspaceContextService);
 
   readonly logins = input.required<AccountLoginsModel>();
 
@@ -112,15 +111,17 @@ export class ProfileFreshLoginComponent {
     this.password.markAsTouched();
     if (this.password.invalid || this.busy()) return;
 
+    // До первого `await`: действие (окно Telegram) готовится, пока клик ещё «свежий»
+    this.fresh.confirming();
     this.busy.set(true);
     this.error.set(null);
     try {
-      this.userService.applySession(
-        await this.account.confirmPassword(this.password.value), this.workspaceContext.getCurrentWorkspaceId());
+      this.userService.renewSession(await this.account.confirmPassword(this.password.value));
       const logins = await this.account.logins();
       this.changed.emit(logins);
       this.fresh.confirmed(logins);
     } catch (e: unknown) {
+      this.fresh.confirmFailed();
       this.error.set((e as { status?: number } | null)?.status === 422
         ? this.i18n.t('auth.error.wrongPassword')
         : serverErrorMessage(e, this.i18n, this.i18n.t('profile.fresh.failed')));

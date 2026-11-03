@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { rolesGuard } from '../roles.guard';
+import { requireRoles } from '../roles.guard';
 import { MEMBERS_PAGE_PERMISSIONS } from './workspace-permissions';
 
 /**
@@ -21,7 +21,6 @@ export const workspaceRoutes: Routes = [
   {
     path: 'members',
     loadComponent: () => import('./members/members.component').then(m => m.WorkspaceMembersComponent),
-    canActivate: [rolesGuard],
-    data: { allowedRoles: MEMBERS_PAGE_PERMISSIONS }
+    ...requireRoles(MEMBERS_PAGE_PERMISSIONS)
   }
 ];

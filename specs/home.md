@@ -30,6 +30,10 @@
 - Сессия переживает перезагрузку: пользователь и права по пространствам лежат в
   `localStorage['user']`, токен — отдельно (`TokenService`), активное пространство —
   `localStorage['currentWorkspaceId']`. Битая запись — просто «не вошёл».
+- Тема — светлая или тёмная по настройке системы (`prefers-color-scheme`, Bootstrap 5.3
+  `$color-mode-type: media-query` в `src/bootstrap.scss`); переключателя нет. Цвета своих
+  стилей — переменными `--bs-*`, фон блоков — `bg-body-tertiary`: иначе в тёмной теме они
+  остались бы светлыми. Значок вкладки — `public/favicon.svg` (буква «P» в цвет меню).
 - Переходы между разделами — с `View Transitions`; внутри одного маршрута (меняется только
   параметр адреса) — без анимации, иначе страница моргала (`app.config.ts`). Отменённое
   браузером перелистывание не печатается как ошибка запуска (`isAbortedViewTransition`,
@@ -127,6 +131,7 @@
 | Главная | `/` | всем |
 | Профиль | `/profile` (→ `/profile/edit`) | вошедшему |
 | Участники | `/workspace/members` | есть любое из `WorkspaceMemberCrud`, `WorkspaceMemberRead`, `PermissionManagement` (`MEMBERS_PAGE_PERMISSIONS`) |
+| Справка | `/help` | всем, и гостю |
 
 - Пункта ассистента нет: вход в чат — строка на главной (`assistant.md`, 2).
 - Активный пункт подсвечен («Главная» — только на точном `/`).
@@ -171,6 +176,7 @@
 | `profile/*` | правка, аватар, слияние, удаление аккаунта, память ассистента, чужой профиль | — | `profile.routes`; `profile`, `auth` (+ `assistant` для памяти) |
 | `workspace/*` | настройки пространств, участники | `signedInGuard`; участники — ещё `rolesGuard` по `MEMBERS_PAGE_PERMISSIONS` | `workspace.routes`; `workspace`, `invite` |
 | `invite/:token` | лендинг приглашения (`authorization.md`, 6.3) | — | `InviteComponent`; `invite`, `auth` |
+| `help`, `help/:slug` | справка: список статей и статья (`help.md`, 6.5) | — | `help.routes`; `help` |
 | `rolemanagement` | → `workspace/members` | — | редирект |
 
 - **`signedInGuard`** уводит гостя на `/auth/login`. Это барьер интерфейса, а не безопасности:
@@ -213,8 +219,9 @@
 | Сессия, выход, `401` | `shared/core/user.service.ts`, `shared/core/session-reset.service.ts`, `shared/interceptors/auth.interceptor.ts` |
 | Язык | `shared/i18n` (`lang.ts`, `i18n.service.ts`, `language.service.ts`, `flags/`), `shared/language-picker`; словари `i18n/{ru,en}/core.json`, `home.json` |
 | Плашки | `shared/alerts` |
+| Справка и markdown | `help/` (`help-list`, `help-article`, `help-api.service.ts`), `shared/markdown` (разбор и отрисовка — общие с чатом ассистента) |
 | Сервер | `src/PetTemplate.Api/Program.cs`, `IaC/nginx/conf/nginx.conf` |
-| Тесты | `app.spec.ts`, `app.config.spec.ts`, `app.routes.spec.ts`, `roles.guard.spec.ts`, `home/home.component.spec.ts`, `home/assistant-input/assistant-input.component.spec.ts`, `shared/nav/top-nav/top-nav.component.spec.ts`, `shared/language-picker/language-picker.component.spec.ts`, `shared/interceptors/workspace.interceptor.spec.ts`, `shared/core/user.service.spec.ts`, `shared/core/session-reset.service.spec.ts`, `shared/i18n/*.spec.ts` |
+| Тесты | `app.spec.ts`, `app.config.spec.ts`, `app.routes.spec.ts`, `roles.guard.spec.ts`, `home/home.component.spec.ts`, `home/assistant-input/assistant-input.component.spec.ts`, `shared/nav/top-nav/top-nav.component.spec.ts`, `shared/language-picker/language-picker.component.spec.ts`, `shared/interceptors/workspace.interceptor.spec.ts`, `shared/core/user.service.spec.ts`, `shared/core/session-reset.service.spec.ts`, `shared/i18n/*.spec.ts`, `help/help.component.spec.ts`, `shared/markdown/markdown.spec.ts` |
 
 ## 11. Не реализовано
 

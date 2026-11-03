@@ -5,10 +5,11 @@ import { provideRouter } from '@angular/router';
 import { AssistantMemoryComponent } from './assistant-memory.component';
 import { AssistantApiService } from '../../shared/api/assistant-api.service';
 import { AssistantApiServiceMock } from '../../shared/api/assistant-api.service.mock';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
+import { UserService } from '../../shared/core/user.service';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
 import { AssistantFact, AssistantFactKind } from '../../shared/models/assistant.model';
+import { profileDto, sessionDto } from '../../shared/api/dto.mock';
 
 /**
  * «Память ассистента» (спец. assistant, 12.5): память обязана быть видимой,
@@ -17,7 +18,7 @@ import { AssistantFact, AssistantFactKind } from '../../shared/models/assistant.
 describe('AssistantMemoryComponent', () => {
   let fixture: ComponentFixture<AssistantMemoryComponent>;
   let api: AssistantApiServiceMock;
-  let workspace: WorkspaceContextService;
+  let user: UserService;
 
   const fact = (id: string, text: string, personal: boolean, sourceRunId: string | null = null): AssistantFact => ({
     id, kind: AssistantFactKind.Alias, text, personal, createdAtUtc: '2026-10-01T10:00:00Z', sourceRunId
@@ -37,11 +38,16 @@ describe('AssistantMemoryComponent', () => {
 
     await loadAllScopes(TestBed.inject(I18nService));
     api = TestBed.inject(AssistantApiServiceMock);
-    workspace = TestBed.inject(WorkspaceContextService);
-    workspace.setCurrentWorkspaceId('ws-1');
+    // Память читается по пространству вкладки — оно бывает только у вошедшего
+    user = TestBed.inject(UserService);
+    user.applySession(sessionDto({
+      token: 'token',
+      profile: profileDto({ id: 'me', userName: 'Vasya', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true }),
+      permissionsByWorkspace: { 'ws-1': [], 'ws-2': [] }
+    }), 'ws-1');
   });
 
-  afterEach(() => workspace.setCurrentWorkspaceId(null));
+  afterEach(() => user.clearProfile());
 
   async function create() {
     fixture = TestBed.createComponent(AssistantMemoryComponent);
@@ -101,7 +107,7 @@ describe('AssistantMemoryComponent', () => {
     expect(element().textContent).toContain('факт первого');
 
     api.setMemory({ shared: [fact('f2', 'факт второго', false)], personal: [] });
-    workspace.setCurrentWorkspaceId('ws-2');
+    user.switchWorkspace('ws-2');
     TestBed.tick();
     await fixture.whenStable();
     fixture.detectChanges();

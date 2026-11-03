@@ -106,12 +106,20 @@
   новые записываются. Сущность — неделимая единица индекса, обрывков прежнего текста
   не остаётся;
 - **удаление** — она же: источник сущности уже не находит, и обработчик уносит её точки.
-  Так же — если текста у сущности не осталось или у типа больше нет источника.
-  Удаление пространства — забота раздела (`authorization.md`, 8 и 11): он ставит команды
-  на свои сущности до того, как удалит их; иначе точки остаются сиротами
-  (`tech-debt/qdrant-orphan-points.md`);
-- **отказ эмбеддера или Qdrant** — команда падает и повторяется очередью через минуту
-  (повтор по умолчанию у `AddCommandQueueWorker`, `h.Add<…>()`);
+  Так же — если текста у сущности не осталось или у типа больше нет источника;
+- **снос пространства** (`authorization.md`, 8; удаление аккаунта — `accounts.md`, 10) —
+  забота ядра, а не раздела: `WorkspaceService.PurgeContents` той же транзакцией ставит
+  `SearchPurgeWorkspaceCommand { WorkspaceId }`, и обработчик удаляет из коллекции все точки
+  пространства по фильтру `workspaceId` — какие бы сущности их ни положили. В payload точки
+  лежит текст чанка, и снесённое пространство не должно оставаться в индексе. Строка очереди
+  уходит только с зафиксированным сносом; повтор безопасен — у пустого пространства удалять нечего.
+  Исчерпала попытки — точки снесённого пространства уносит полный реиндекс (раздел 5);
+- **отказ эмбеддера или Qdrant** — команда падает и повторяется очередью: через минуту,
+  дальше пауза удваивается до часа (повтор по умолчанию у `AddCommandQueueWorker`, `h.Add<…>()`).
+  После `CommandQueueOptions.MaxAttempts` выдач (25 — около суток) команда бросается: ошибка
+  в лог, счётчик `pettemplate.queue.gave_up`, строка остаётся в `local_queue` отложенной
+  насовсем (`infrastructure.md`, 2.2). Чанк, который эмбеддер не возьмёт никогда (слишком
+  плотный для окна модели, `tech-debt/embeddings-model.md`), так не ходит к нему вечно;
   эмбеддер вернул не столько векторов, сколько чанков, — тоже отказ, а не частичная запись;
 - пока индекс не построен, поиск находит меньше. Отдельного состояния «индексируется»
   в интерфейсе нет.
@@ -135,6 +143,16 @@
   стоит одной сущности, а не всего прохода; эмбеддер разбирает их с той же скоростью, что и
   обычную индексацию; «как индексируется сущность» по-прежнему живёт в одном месте. Повторное
   нажатие безвредно.
+- **Сначала — сироты.** До постановки команд обработчик уносит точки, которых пообъектная
+  индексация не найдёт: типа, которого нет среди зарегистрированных источников (значение
+  `SearchEntityType` переименовали или убрали, раздел 10), — фильтром `must_not` по их именам
+  (`QdrantService.DeleteUnknownTypes`), и пространств, которых нет в базе (команда сноса
+  исчерпала попытки, раздел 4), — пространства берутся выборкой по payload-индексу
+  `workspaceId` (`IndexedWorkspaces`) и сверяются с таблицей `workspaces`. Эмбеддер не
+  настроен — индекс не ведётся, и чистки нет. Упала чистка — повтор команды проходит её заново.
+- **Своим воркером очереди.** Команды поиска — индексация, реиндекс, снос пространства —
+  разбирает отдельный воркер в один цикл, а не общий с письмами: реиндекс ставит команду
+  на каждую сущность, и письмо подтверждения иначе ждало бы за тысячами чанков.
 - **Ответ** значит «в очереди», а не «готово».
 
 ## 6. Изоляция пространств
@@ -222,8 +240,8 @@
    `services.AddSearchSource<NoteSearchSource>()`.
 4. **Индексация** — в сервисе раздела при создании, правке и удалении
    `db.Enqueue(SearchIndex.Of(SearchEntityType.Note, note.Id))` до того же `SaveChanges`.
-   В `WorkspaceService.PurgeContents` — команды на все сущности пространства до их удаления
-   (раздел 4).
+   При сносе пространства точки раздела уносит ядро (раздел 4) — в `WorkspaceService.PurgeContents`
+   раздел удаляет только свои строки.
 5. **Поиск** — сервис раздела: `HybridSearch.Normalize`, векторная половина
    `HybridSearch.Vector(new VectorQuery(workspaceId, type, query, HybridSearch.MaxResults), …)`,
    полнотекстовая — свой запрос по `SearchVector` **с фильтром по `WorkspaceId`**
@@ -256,19 +274,20 @@
 | `text` | текст чанка без префикса — из него берётся фрагмент выдачи | — |
 
 Тип в payload — именем, а в команде очереди — числом: переименовали значение
-`SearchEntityType` — точки со старым именем фильтр больше не находит, нужен полный реиндекс,
-а старые точки остаются сиротами (`tech-debt/qdrant-orphan-points.md`). Убранный из
-перечисления тип реиндекс тоже не тронет: `AllIds` спрашивает только зарегистрированные
-источники.
+`SearchEntityType` — точки со старым именем фильтр больше не находит, нужен полный реиндекс.
+Он же уносит старые точки — и точки убранного из перечисления типа: всё, чего нет среди
+зарегистрированных источников, сирота (раздел 5).
 
 **Колонка для слов** — у каждой сущности своя, в её таблице: `NpgsqlTsVector SearchVector`
 (в базе `search_vector tsvector`), вычисляемая
 `GENERATED ALWAYS AS (to_tsvector('russian', …)) STORED` по полям из `HasFullTextSearch`,
 и GIN-индекс по ней. Пишет её база; в EF-модели ядра таких колонок нет — нет сущностей.
 
-**Команды** — строки общей очереди `LocalQueue` (`mail.md`, 4): `CommandType` — полное имя
-класса, `Data` — JSON тела. `SearchIndexCommand` — `{"EntityType": <число>, "EntityId": "<id>"}`,
-`SearchReindexCommand` — `{}`.
+**Команды** — строки общей очереди `LocalQueue` (`mail.md`, 4): `CommandType` — устойчивое
+имя команды (`ICommand.QueueName`, `infrastructure.md`, 2.2), `Data` — JSON тела.
+`SearchIndexCommand` (`search-index`) — `{"EntityType": <число>, "EntityId": "<id>"}`,
+`SearchReindexCommand` (`search-reindex`) — `{}`, `SearchPurgeWorkspaceCommand`
+(`search-purge-workspace`) — `{"WorkspaceId": "<id>"}`.
 
 ## 11. Где это в коде
 
@@ -280,7 +299,7 @@
 | Нарезка | `SearchChunker` (`src/PetTemplate.Services/Search`) |
 | Индекс | `QdrantService`, `QdrantConst`, `SearchHit`, `IQdrantMigration`, `Migrations/EmbeddingsCollectionMigration` (`src/PetTemplate.Services/Qdrant`); `QdrantInitializer` (`src/PetTemplate.Api/Workers`) |
 | Поиск | `HybridSearch`, `VectorQuery` (`src/PetTemplate.Services/Search`); `FullTextSearch` (`src/PetTemplate.Db/Extensions`) |
-| Команды | `SearchIndexCommand`, `SearchReindexCommand` (`src/PetTemplate.Services/Commands`), фабрика `SearchIndex`, обработчик `SearchIndexCommandHandler` (`src/PetTemplate.Services/LocalQueueHandlers`); регистрация — `AddCommandQueue` в `ServicesExtensions` |
+| Команды | `SearchIndexCommand`, `SearchReindexCommand`, `SearchPurgeWorkspaceCommand` (`src/PetTemplate.Services/Commands`), фабрика `SearchIndex`, обработчик `SearchIndexCommandHandler` (`src/PetTemplate.Services/LocalQueueHandlers`); регистрация — свой воркер в `AddCommandQueue` (`ServicesExtensions`); снос пространства ставит команду в `WorkspaceService.PurgeContents` |
 | Реиндекс | `AdminSearchController` (`src/PetTemplate.Api/Controllers`); кнопка — «Сводка» админки (`projects/admin/src/app/summary/summary.component.ts`, `AdminApiService.reindexSearch`) |
 | Строка поиска | `SearchBoxComponent` (`src/PetTemplate.Web/web/src/app/shared/search-box`), подписи `core.search.*` |
 | Контейнеры | `qdrant` и `embeddings` в корневом и `IaC/docker-compose.yml`; модель — `IaC/DEPLOYMENT.md`, раздел 4 |

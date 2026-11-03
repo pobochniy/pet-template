@@ -62,6 +62,7 @@
   },
   "error": {
     "dailyLimitReached": "The assistant’s daily limit in the space “{workspace}” is used up — it is shared by all members. New requests can be sent tomorrow",
+    "userDailyLimitReached": "Your daily assistant limit is used up — it is shared across all your spaces. New requests can be sent tomorrow",
     "monthlyLimitReached": "The assistant’s monthly limit in the space “{workspace}” is used up — it is shared by all members. New requests can be sent next month",
     "modelUnavailable": "The assistant is unavailable right now, please try again later",
     "transcriptionFailed": "Couldn’t recognize the recording",

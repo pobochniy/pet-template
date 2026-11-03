@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using PetTemplate.Services.Assistant;
 using PetTemplate.Services.Assistant.Plans;
+using PetTemplate.Services.Commands;
+using PetTemplate.Services.LocalQueueHandlers;
 using PetTemplate.Shared.Dto.Assistant;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Errors;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Tests.Arranges;
 using PetTemplate.Tests.Features.Assistant.TestPlan;
 
@@ -264,6 +269,126 @@ public class PlanExecutorTests
         // Assert
         Assert.Equal(ApplyOutcomeKind.Mismatch, outcome.Kind);
         Assert.Empty(world.Notes.Books);
+    }
+
+    /// <summary>
+    /// Два применяющих одного плана разом — повтор команды, пока первая ещё идёт: каждая
+    /// операция делается один раз, второй ждёт замка плана и видит её сделанной (5.1)
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentApplyWritesEachOperationOnce()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Пирожки и Ватрушки");
+        var plan = world.Plan(AssistantWorld.CreateNote("Хлеб"), AssistantWorld.CreateNote("Молоко", 2));
+        await world.Save();
+        await using var first = world.NewContext();
+        await using var second = world.NewContext();
+
+        // Act
+        var outcomes = await Task.WhenAll(
+            Executor(world, first, world.Operations).Apply(plan.Id, world.Author, world.WorkspaceId, CancellationToken.None),
+            Executor(world, second, world.Operations).Apply(plan.Id, world.Author, world.WorkspaceId, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(2, world.Notes.Writes);
+        Assert.Contains(outcomes, x => x.Kind == ApplyOutcomeKind.Applied);
+        Assert.Equal(AssistantPlanStatus.Applied, (await Stored(world, plan)).Status);
+    }
+
+    /// <summary>
+    /// Отказ операции откатывает то, что раздел успел записать до отказа: сделанной
+    /// она не значится — значит, и записи от неё нет (5.1)
+    /// </summary>
+    [Fact]
+    public async Task RefusedOperationRollsBackItsWrites()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Сырники и Оладьи");
+        var plan = world.Plan(DbNote(TestNoteKinds.Refused));
+        await world.Save();
+
+        // Act
+        var outcome = await Executor(world, world.Db, DbOperations(world.Db))
+            .Apply(plan.Id, world.Author, world.WorkspaceId, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(ApplyOutcomeKind.Applied, outcome.Kind);
+        Assert.False(Assert.Single(outcome.Result!.Operations).Done);
+        Assert.Empty(await Written(world));
+    }
+
+    /// <summary>
+    /// Процесс умер между записью раздела и отметкой о ней в результате плана: запись
+    /// уходит вместе с транзакцией, и повтор команды делает её ровно один раз (5.1)
+    /// </summary>
+    [Fact]
+    public async Task InterruptedOperationIsAppliedOnceOnRetry()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Блины и Пышки");
+        var plan = world.Plan(DbNote("Хлеб"));
+        await world.Save();
+        using var crash = new CancellationTokenSource();
+        var operations = DbOperations(world.Db, afterWrite: crash.Cancel);
+
+        // Act
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Executor(world, world.Db, operations)
+            .Apply(plan.Id, world.Author, world.WorkspaceId, crash.Token));
+        Assert.Empty(await Written(world));
+        await using var retry = world.NewContext();
+        var outcome = await Executor(world, retry, DbOperations(retry))
+            .Apply(plan.Id, world.Author, world.WorkspaceId, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(ApplyOutcomeKind.Applied, outcome.Kind);
+        Assert.Single(await Written(world));
+    }
+
+    private static PlanExecutor Executor(AssistantWorld world, PetTemplate.Db.Entity.ApplicationContext db,
+        PlanOperations operations) =>
+        new(db, operations, new AssistantPermissions(db), world.Context);
+
+    private static PlanOperations DbOperations(PetTemplate.Db.Entity.ApplicationContext db, Action? afterWrite = null) =>
+        new([new DbNoteOperation(db, afterWrite)]);
+
+    private static PlanOperation DbNote(string title) => new()
+    {
+        Index = 1,
+        Kind = DbNoteOperation.Kind_,
+        Args = PlanJson.ToArgs(new CreateTestNoteArgs { Title = title })
+    };
+
+    /// <summary>Что записала операция раздела — строки очереди с её названием</summary>
+    private static Task<List<string>> Written(AssistantWorld world) =>
+        world.NewContext().LocalQueue
+            .Where(x => x.CommandType == CommandQueue.TypeOf<SearchIndexCommand>())
+            .Select(x => x.Data)
+            .ToListAsync(CancellationToken.None);
+
+    /// <summary>
+    /// Операция раздела, которая пишет в общую базу тем же контекстом, что и исполнитель
+    /// плана, — как настоящий раздел. Пишет строку очереди: у неё нет внешних ключей
+    /// </summary>
+    private sealed class DbNoteOperation(PetTemplate.Db.Entity.ApplicationContext db, Action? afterWrite)
+        : PlanOperationHandler<CreateTestNoteArgs>
+    {
+        public const string Kind_ = "create_db_note";
+
+        public override string Kind => Kind_;
+
+        protected override async Task<string> Apply(CreateTestNoteArgs args, AssistantContext context,
+            CancellationToken ct)
+        {
+            db.Enqueue(new SearchIndexCommand { EntityType = SearchEntityType.None, EntityId = args.Title });
+            await db.SaveChangesAsync(ct);
+            afterWrite?.Invoke();
+
+            if (args.Title == TestNoteKinds.Refused)
+                throw new BadRequestException(new ErrorMessage("test.error.refused", "раздел отказал"));
+
+            return Guid.CreateVersion7().ToString();
+        }
     }
 
     private static Task<PetTemplate.Db.Entity.AssistantPlan> Stored(AssistantWorld world, PetTemplate.Db.Entity.AssistantPlan plan) =>

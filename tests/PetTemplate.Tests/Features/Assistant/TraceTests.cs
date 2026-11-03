@@ -121,7 +121,7 @@ public class TraceTests
     public void RememberFactReadsAsVerb()
     {
         // Act
-        var summary = TraceSummary.Build("tool", "remember_fact",
+        var summary = new TraceSummary([]).Build("tool", "remember_fact",
             """{"key":"кофе","text":"пьёт кофе без сахара","kind":"preference","personal":true}""");
 
         // Assert
@@ -201,4 +201,20 @@ public class TraceTests
         Input = "как пригласить",
         CreatedAtUtc = at
     };
+
+    /// <summary>
+    /// Глагол инструмента раздела приносит раздел (7.1, 13.2), глаголы ядра он не переписывает
+    /// </summary>
+    [Fact]
+    public void SectionVerbsExtendTrace()
+    {
+        // Arrange
+        var summary = new TraceSummary([new PetTemplate.Tests.Features.Assistant.TestPlan.TestNoteSection(new())]);
+
+        // Act
+        var line = summary.Build("tool", "find_test_notes", "{}");
+
+        // Assert
+        Assert.Equal(PetTemplate.Tests.Features.Assistant.TestPlan.TestNoteSection.FindVerb, line);
+    }
 }

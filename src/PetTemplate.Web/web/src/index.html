@@ -5,7 +5,11 @@
   <title>PetTemplate</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- Тёмная тема — по системе (src/bootstrap.scss): полосы прокрутки и поля браузера — тоже -->
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#7386D5">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/x-icon" href="favicon.ico" sizes="any">
   <script>
     // Параметры запуска mini-app Telegram и VK (спец. accounts, 5.6) снимаются до старта
     // Angular: роутер, нормализуя адрес, выкидывает и фрагмент с `tgWebAppData`,

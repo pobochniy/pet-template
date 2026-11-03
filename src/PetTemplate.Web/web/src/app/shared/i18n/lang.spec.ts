@@ -1,7 +1,7 @@
 import { DEFAULT_LANG, LANG_STORAGE_KEY, isLang, matchLang, resolveInitialLang } from './lang';
 
 describe('lang', () => {
-  // Закреплённый в `src/test-setup.spec.ts` язык здесь мешает: именно его выбор
+  // Закреплённый в `src/test-setup.ts` язык здесь мешает: именно его выбор
   // эти проверки и разбирают
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
@@ -33,11 +33,11 @@ describe('lang', () => {
 
   describe('isLang', () => {
     it('should accept supported codes only', () => {
-      expect(isLang('ru')).toBeTrue();
-      expect(isLang('en')).toBeTrue();
-      expect(isLang('de')).toBeFalse();
-      expect(isLang('en-GB')).toBeFalse();
-      expect(isLang(null)).toBeFalse();
+      expect(isLang('ru')).toBe(true);
+      expect(isLang('en')).toBe(true);
+      expect(isLang('de')).toBe(false);
+      expect(isLang('en-GB')).toBe(false);
+      expect(isLang(null)).toBe(false);
     });
   });
 
@@ -49,20 +49,20 @@ describe('lang', () => {
     });
 
     it('should take the browser language when there is no stored choice', () => {
-      spyOnProperty(navigator, 'languages', 'get').and.returnValue(['en-GB', 'ru']);
+      vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB', 'ru']);
 
       expect(resolveInitialLang()).toBe('en');
     });
 
     it('should ignore an unsupported stored code', () => {
       localStorage.setItem(LANG_STORAGE_KEY, 'de');
-      spyOnProperty(navigator, 'languages', 'get').and.returnValue(['en-US']);
+      vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US']);
 
       expect(resolveInitialLang()).toBe('en');
     });
 
     it('should fall back to the default when nothing matches', () => {
-      spyOnProperty(navigator, 'languages', 'get').and.returnValue(['de', 'fr']);
+      vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de', 'fr']);
 
       expect(resolveInitialLang()).toBe(DEFAULT_LANG);
     });

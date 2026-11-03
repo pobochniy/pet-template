@@ -16,10 +16,11 @@ var config = builder.Configuration;
 services.ConfigureServices(config);
 services.AddHttpContextAccessor();
 
-services.AddSignalR();
+// GET /health — база и Qdrant (спец. infrastructure, 6): по нему выкатка решает, откатываться ли
+services.AddApiHealthChecks();
 
 // Телеметрия (спец. infrastructure, 10): метрики и трассы по OTLP в коллектор, оттуда —
-// в Prometheus и Tempo. Адрес — OTEL_EXPORTER_OTLP_ENDPOINT из publish-api.yml; без него
+// в Prometheus и Tempo. Адрес — OTEL_EXPORTER_OTLP_ENDPOINT из IaC/run-api.sh; без него
 // API не шлёт ничего — так локально и в тестах
 var otlp = config["OTEL_EXPORTER_OTLP_ENDPOINT"];
 
@@ -35,8 +36,10 @@ services.AddOpenTelemetry()
             .AddMeter(AssistantMetrics.MeterName)
             .AddMeter(BillingMetrics.MeterName)
             // Очередь команд: длина, попытки, сколько команда ждала до выполнения
-            // и сколько выполнялась — метрики пакета AsuTrack.LocalQueue.OpenTelemetry
-            .AddLocalCommandQueueInstrumentation();
+            // и сколько выполнялась — метрики пакета AsuTrack.LocalQueue.OpenTelemetry;
+            // брошенные после исчерпания попыток — свой счётчик шаблона
+            .AddLocalCommandQueueInstrumentation()
+            .AddMeter(CommandQueueMetrics.MeterName);
 
         if (!string.IsNullOrWhiteSpace(otlp))
             b.AddOtlpExporter();
@@ -48,8 +51,8 @@ services.AddOpenTelemetry()
         // прогон корневым спаном, инструменты и обращения к модели — дочерними (спец.
         // assistant, 13.1); обращения к модели пишет обёртка UseOpenTelemetry клиента
         // модели — без текстов, пока выключен TelemetrySensitiveData (13.3).
-        // Появится хаб SignalR — его соединение живёт часами и одной трассой ничего
-        // не говорит: отфильтровать его (o.Filter)
+        // Появится хаб SignalR (сейчас его нет и AddSignalR не зовётся) — его соединение
+        // живёт часами и одной трассой ничего не говорит: отфильтровать его (o.Filter)
         b.AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddSource(AssistantMetrics.ActivitySourceName)
@@ -85,6 +88,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapApiHealthChecks();
 
 await app.RunAsync();
 

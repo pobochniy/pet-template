@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -11,16 +12,17 @@ import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
 import { ExternalLoginApiService } from '../../shared/api/external-login-api.service';
 import { ExternalLoginApiServiceMock } from '../../shared/api/external-login-api.service.mock';
+import { profileDto, sessionDto } from '../../shared/api/dto.mock';
 
 describe('LoginComponent', () => {
   let component: LoginComponent;
   let fixture: ComponentFixture<LoginComponent>;
-  let authService: jasmine.SpyObj<AuthApiService>;
+  let authService: Mocked<AuthApiService>;
   let alerts: AlertsService;
   let router: Router;
 
   beforeEach(async () => {
-    authService = jasmine.createSpyObj<AuthApiService>('AuthApiService', ['login']);
+    authService = { login: vi.fn() } as unknown as Mocked<AuthApiService>;
 
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
@@ -37,7 +39,7 @@ describe('LoginComponent', () => {
     await loadAllScopes(TestBed.inject(I18nService));
     alerts = TestBed.inject(AlertsService);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(LoginComponent);
     component = fixture.componentInstance;
@@ -52,7 +54,7 @@ describe('LoginComponent', () => {
   });
 
   it('should navigate home on successful login', async () => {
-    authService.login.and.resolveTo({} as never);
+    authService.login.mockResolvedValue({} as never);
     component.loginForm.setValue({ login: 'testUser', password: 'password123' });
 
     await component.onSubmit();
@@ -70,7 +72,7 @@ describe('LoginComponent', () => {
   });
 
   it('should show the attempts limit instead of wrong credentials', async () => {
-    authService.login.and.rejectWith(new HttpErrorResponse({
+    authService.login.mockRejectedValue(new HttpErrorResponse({
       status: 400,
       error: { code: 'auth.error.tooManyAttempts', error: 'Слишком много неудачных попыток' }
     }));
@@ -83,7 +85,7 @@ describe('LoginComponent', () => {
   });
 
   it('should show the wrong-credentials alert when login fails', async () => {
-    authService.login.and.rejectWith(new HttpErrorResponse({ status: 400 }));
+    authService.login.mockRejectedValue(new HttpErrorResponse({ status: 400 }));
     component.loginForm.setValue({ login: 'testUser', password: 'wrongpass' });
 
     await component.onSubmit();
@@ -93,7 +95,7 @@ describe('LoginComponent', () => {
   });
 
   it('should translate a validation code from the 422 answer', async () => {
-    authService.login.and.rejectWith(new HttpErrorResponse({
+    authService.login.mockRejectedValue(new HttpErrorResponse({
       status: 422,
       error: { payload: [{ code: 'auth.validation.loginEqualsPassword' }] }
     }));
@@ -105,7 +107,7 @@ describe('LoginComponent', () => {
   });
 
   it('should answer wrong credentials with its own phrase, not the server text', async () => {
-    authService.login.and.rejectWith(new HttpErrorResponse({
+    authService.login.mockRejectedValue(new HttpErrorResponse({
       status: 422,
       error: { payload: [{ code: 'auth.error.invalidCredentials', text: 'Неправильное имя пользователя или пароль' }] }
     }));
@@ -125,11 +127,11 @@ describe('LoginComponent', () => {
 
   /** Язык профиля — выбор, сделанный на другом устройстве (спец. accounts, 8.4) */
   it('should switch to the profile language after login', async () => {
-    authService.login.and.resolveTo({
+    authService.login.mockResolvedValue(sessionDto({
       token: 'token',
-      profile: { id: '1', userName: 'testUser', avatarId: null, comment: null, isAdult: false, hasAcceptedTerms: false, language: 'en' },
+      profile: profileDto({ id: '1', userName: 'testUser', avatarId: null, comment: null, isAdult: false, hasAcceptedTerms: false, language: 'en' }),
       permissionsByWorkspace: {}
-    });
+    }));
     component.loginForm.setValue({ login: 'testUser', password: 'password123' });
 
     await component.onSubmit();

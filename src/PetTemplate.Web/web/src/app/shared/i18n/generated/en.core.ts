@@ -29,6 +29,7 @@ export default {
   "core.language.current": "Interface language: {language}",
   "core.language.search": "Find a language",
   "core.language.title": "Interface language",
+  "core.nav.help": "Help",
   "core.nav.home": "Home",
   "core.nav.logOut": "Log out",
   "core.nav.members": "Members",

@@ -45,10 +45,8 @@ describe('словари', () => {
 
       const keys = await keysOf(code);
 
-      expect(keys.filter(key => !reference.includes(key)))
-        .withContext(`лишние ключи в ${code}`).toEqual([]);
-      expect(reference.filter(key => !keys.includes(key)))
-        .withContext(`нет ключей в ${code}`).toEqual([]);
+      expect(keys.filter(key => !reference.includes(key)), `лишние ключи в ${code}`).toEqual([]);
+      expect(reference.filter(key => !keys.includes(key)), `нет ключей в ${code}`).toEqual([]);
     }
   });
 
@@ -69,7 +67,7 @@ describe('словари', () => {
 
           const missing = categories.filter(category => (entry as PluralForms)[category] == null);
 
-          expect(missing).withContext(`${code}: ${scope} → ${key}`).toEqual([]);
+          expect(missing, `${code}: ${scope} → ${key}`).toEqual([]);
         }
       }
     }
@@ -88,7 +86,7 @@ describe('словари', () => {
         for (const [key, entry] of Object.entries(dict)) {
           if (typeof entry === 'string') continue;
 
-          expect((entry as PluralForms).other).withContext(`${code}: ${scope} → ${key}`).toBeTruthy();
+          expect((entry as PluralForms).other, `${code}: ${scope} → ${key}`).toBeTruthy();
         }
       }
     }
@@ -105,7 +103,7 @@ describe('словари', () => {
       for (const [scope, dict] of Object.entries(dicts)) {
         const foreign = Object.keys(dict).filter(key => !key.startsWith(`${scope}.`));
 
-        expect(foreign).withContext(`${code}: словарь ${scope}`).toEqual([]);
+        expect(foreign, `${code}: словарь ${scope}`).toEqual([]);
       }
     }
   });
@@ -127,7 +125,7 @@ describe('словари', () => {
           const translated = dicts[scope]?.[key];
           if (translated == null) continue;
 
-          expect(placeholders(translated)).withContext(`${code}: ${key}`).toEqual(placeholders(entry));
+          expect(placeholders(translated), `${code}: ${key}`).toEqual(placeholders(entry));
         }
       }
     }

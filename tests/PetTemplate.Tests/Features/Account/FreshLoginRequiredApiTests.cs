@@ -194,7 +194,7 @@ public class FreshLoginRequiredApiTests
         var oleg = Oleg();
         var (client, _) = await StaleSession(oleg);
 
-        for (var i = 0; i < AdminLoginLimiter.ProductAttemptsPerUser; i++)
+        for (var i = 0; i < LoginLimiter.ProductAttemptsPerUser; i++)
         {
             await client.PostAsJsonAsync("/api/Account/ConfirmPassword", new ConfirmPasswordDto { Password = $"guess-{i}" });
         }

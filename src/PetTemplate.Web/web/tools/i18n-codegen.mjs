@@ -12,7 +12,8 @@
  *   `{lang}.{scope}.ts` — плоский словарь, `export default { … } as const`;
  *   `index.ts`          — `CORE` (оба языка статическим импортом) и `LOADERS`
  *                         (по `() => import()` на каждый экранный словарь);
- *   `i18n-keys.d.ts`    — типы `I18nKey`, `I18nPluralKey`, `Scope`.
+ *   `i18n-keys.d.ts`    — типы `I18nKey`, `I18nPluralKey`, `Scope` и ключи по словарям
+ *                         (`ScopeKeys`, `ScopedKey<S>`) — их принимает `injectI18n(...scopes)`.
  *
  * Генерируем **в `src/`**, а не рядом с JSON: `tsconfig.app.json` собирает
  * `src/**\/*.ts`, и модуль за пределами этой папки в сборку не попал бы.
@@ -229,6 +230,20 @@ function renderKeys(reference, scopes) {
 
   const lazy = scopes.filter(scope => scope !== CORE_SCOPE);
 
+  // Ключи по словарям — имя на словарь, а не одно огромное объединение: `injectI18n`
+  // собирает из них ровно те словари, что грузит маршрут экрана
+  const perScope = scopes
+    .map(scope => {
+      const own = (/** @type {string[]} */ keys) => keys.filter(key => key.startsWith(`${scope}.`));
+      return `  ${JSON.stringify(scope)}: {
+    plain:
+${indent(union(own(plain)))};
+    plural:
+${indent(union(own(plural)))};
+  };`;
+    })
+    .join('\n');
+
   return `${HEADER}
 /** Ключ обычной строки — то, что принимает \`I18nService.t\` */
 export type I18nKey =
@@ -243,7 +258,29 @@ export type Scope = ${scopes.map(s => JSON.stringify(s)).join(' | ')};
 
 /** Словари, которые едут отдельным чанком: всё, кроме \`${CORE_SCOPE}\` */
 export type LazyScope = ${lazy.length === 0 ? 'never' : lazy.map(s => JSON.stringify(s)).join(' | ')};
+
+/** Ключи каждого словаря: обычные строки и строки с числом */
+export interface ScopeKeys {
+${perScope}
+}
+
+/**
+ * Ключи только перечисленных словарей — то, что принимает \`t\` из \`injectI18n(...scopes)\`:
+ * ключ словаря, который маршрут экрана не грузит, — ошибка компиляции, а не \`⟦…⟧\`
+ */
+export type ScopedKey<S extends Scope> = ScopeKeys[S]['plain'];
+
+/** То же для \`plural\` */
+export type ScopedPluralKey<S extends Scope> = ScopeKeys[S]['plural'];
 `;
+}
+
+/** @param {string} text */
+function indent(text) {
+  return text
+    .split('\n')
+    .map(line => `    ${line}`)
+    .join('\n');
 }
 
 /** @param {Map<string, string>} files */

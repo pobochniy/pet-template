@@ -1,23 +1,25 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { WorkspaceMemberPermissionsComponent } from './member-permissions.component';
-import { UsersApiService } from '../../../shared/api/users-api.service';
+import { UsersApiService } from '../../users-api.service';
 import { UserService } from '../../../shared/core/user.service';
 import { PermissionEnum } from '../../../shared/enums/permission.enum';
 import { I18nService } from '../../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../../shared/i18n/i18n.testing';
+import { profileDto, sessionDto } from '../../../shared/api/dto.mock';
 
 /** Правка прав участника — то, во что вырос экран `role-management` шаблона */
 describe('WorkspaceMemberPermissionsComponent', () => {
   let fixture: ComponentFixture<WorkspaceMemberPermissionsComponent>;
   let el: HTMLElement;
-  let api: jasmine.SpyObj<UsersApiService>;
+  let api: Mocked<UsersApiService>;
 
   async function render(own: PermissionEnum[], granted: PermissionEnum[]) {
-    api = jasmine.createSpyObj<UsersApiService>('UsersApiService', ['getUserRoles', 'setUserRoles']);
-    api.getUserRoles.and.resolveTo(granted);
-    api.setUserRoles.and.resolveTo();
+    api = { getUserRoles: vi.fn(), setUserRoles: vi.fn() } as unknown as Mocked<UsersApiService>;
+    api.getUserRoles.mockResolvedValue(granted);
+    api.setUserRoles.mockResolvedValue(undefined);
 
     await TestBed.configureTestingModule({
       imports: [WorkspaceMemberPermissionsComponent],
@@ -25,11 +27,11 @@ describe('WorkspaceMemberPermissionsComponent', () => {
     }).compileComponents();
 
     await loadAllScopes(TestBed.inject(I18nService));
-    TestBed.inject(UserService).applySession({
+    TestBed.inject(UserService).applySession(sessionDto({
       token: 'token',
-      profile: { id: 'me', userName: 'Oleg', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true },
+      profile: profileDto({ id: 'me', userName: 'Oleg', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true }),
       permissionsByWorkspace: { 'ws-1': own }
-    });
+    }));
 
     fixture = TestBed.createComponent(WorkspaceMemberPermissionsComponent);
     fixture.componentRef.setInput('userId', 'u-vasya');
@@ -44,8 +46,8 @@ describe('WorkspaceMemberPermissionsComponent', () => {
     await render([PermissionEnum.PermissionManagement, PermissionEnum.WorkspaceMemberRead], [PermissionEnum.WorkspaceMemberRead]);
 
     expect(api.getUserRoles).toHaveBeenCalledWith('u-vasya', 'ws-1');
-    expect(checkbox(PermissionEnum.WorkspaceMemberRead)!.checked).toBeTrue();
-    expect(checkbox(PermissionEnum.PermissionManagement)!.checked).toBeFalse();
+    expect(checkbox(PermissionEnum.WorkspaceMemberRead)!.checked).toBe(true);
+    expect(checkbox(PermissionEnum.PermissionManagement)!.checked).toBe(false);
   });
 
   // В галках только свои права — плюс те, что участнику уже выдал кто-то более правый
@@ -75,14 +77,14 @@ describe('WorkspaceMemberPermissionsComponent', () => {
     checkbox(PermissionEnum.WorkspaceMemberRead)!.click();
     await fixture.whenStable();
 
-    expect(save().disabled).toBeTrue();
+    expect(save().disabled).toBe(true);
     expect(el.querySelector('#no-roles-hint')).not.toBeNull();
   });
 
   // Отказ 422 у поля прав показывается под галками, переведённым по коду
   it('should show a field-level refusal under the permissions', async () => {
     await render([PermissionEnum.PermissionManagement, PermissionEnum.WorkspaceMemberRead], [PermissionEnum.WorkspaceMemberRead]);
-    api.setUserRoles.and.rejectWith(new HttpErrorResponse({
+    api.setUserRoles.mockRejectedValue(new HttpErrorResponse({
       status: 422,
       error: { permissions: [{ code: 'workspace.error.emptyPermissions' }] }
     }));

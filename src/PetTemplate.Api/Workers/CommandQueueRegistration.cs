@@ -2,6 +2,7 @@ using LocalQueue;
 using LocalQueue.PostgreSql;
 using LocalQueue.Processing;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using PetTemplate.Services.Commands;
 
 namespace PetTemplate.Api.Workers;
 
@@ -9,8 +10,10 @@ namespace PetTemplate.Api.Workers;
 /// Очередь команд на пакете <c>AsuTrack.LocalQueue.PostgreSql</c> (спец. infrastructure, 2.2;
 /// спец. mail, 4). Постановка — своя, <c>CommandQueue.Enqueue</c> тем же <c>SaveChanges</c>,
 /// что и доменное изменение (outbox): пакетный <c>ICommandsQueue</c> просит отдельные
-/// соединение и транзакцию, а строка, которую кладёт EF, у пакета та же — тип команды
-/// по <c>FullName</c>, тело — JSON по умолчанию.
+/// соединение и транзакцию. Тело строки — JSON по умолчанию, как у пакета, а тип — своё
+/// устойчивое имя (<see cref="ICommand.QueueName"/>), а не <c>FullName</c> пакета: его
+/// переводит хранилище воркера (<see cref="CommandQueueStorage"/>), оно же бросает команду
+/// после исчерпания попыток.
 ///
 /// Разбор — воркерами пакета. Воркер — свой набор типов команд со своими циклами,
 /// пачкой выборки и арендой: долгие команды (ход ассистента, сверка модели) идут своими
@@ -34,7 +37,9 @@ public static class CommandQueueRegistration
     {
         services.TryAddSingleton(new CommandQueueSettings(
             config.GetConnectionString("AppConnection")!,
-            config.GetSection("CommandQueueOptions").Get<CommandQueueOptions>() ?? new CommandQueueOptions()));
+            config.GetSection("CommandQueueOptions").Get<CommandQueueOptions>() ?? new CommandQueueOptions(),
+            new CommandQueueCatalog()));
+        services.TryAddSingleton<CommandQueueMetrics>();
 
         return services;
     }
@@ -72,44 +77,58 @@ public static class CommandQueueRegistration
         {
             // Разбора нет, а обработчики остаются: их зовут напрямую тесты и соседние сервисы
             services.TryAddScoped<ICommandLease, DetachedCommandLease>();
-            handlers(new CommandHandlers(services, null, settings.Options));
+            handlers(new CommandHandlers(services, null, settings.Options, settings.Catalog));
 
             return services;
         }
 
         return services.AddLocalCommandQueueWorker(c =>
         {
-            c.UsePostgreSqlStorage(new PostgreSqlLocalCommandsQueueWorkerStorageOptions
+            var postgres = CommandQueueStorage.Postgres(new PostgreSqlLocalCommandsQueueWorkerStorageOptions
             {
                 ConnectionString = settings.ConnectionString,
                 TableName = TableName
             });
+            c.UseStorage(sp => new CommandQueueStorage(
+                postgres,
+                settings.Catalog,
+                sp.GetRequiredService<CommandQueueMetrics>(),
+                sp.GetRequiredService<ILogger<CommandQueueStorage>>()));
             c.WorkersCount = Math.Max(workers, 1);
             c.PrefetchCount = Math.Max(prefetchCount ?? settings.Options.PrefetchCount, 1);
             c.InvisibilityTimeout = invisibilityTimeout ?? settings.Options.InvisibilityTimeout;
             c.IdleTimeout = settings.Options.PollInterval;
 
-            handlers(new CommandHandlers(services, c, settings.Options));
+            handlers(new CommandHandlers(services, c, settings.Options, settings.Catalog));
         });
     }
 
-    private sealed record CommandQueueSettings(string ConnectionString, CommandQueueOptions Options);
+    private sealed record CommandQueueSettings(
+        string ConnectionString,
+        CommandQueueOptions Options,
+        CommandQueueCatalog Catalog);
 
     /// <summary>Обработчики одного воркера</summary>
     public sealed class CommandHandlers(
         IServiceCollection services,
         LocalCommandQueueWorkerConfigurator? worker,
-        CommandQueueOptions options)
+        CommandQueueOptions options,
+        CommandQueueCatalog catalog)
     {
         /// <summary>
         /// Обработчик <typeparamref name="THandler"/> команды <typeparamref name="TCommand"/>.
         /// Одна попытка на выдачу; упала — строка прячется на <paramref name="retryAfterFailure"/>
         /// (по умолчанию минута), и с каждой следующей попыткой пауза удваивается до
-        /// <see cref="CommandQueueOptions.MaxRetryAfterFailure"/>. Предела попыток нет: повтор, а не потеря
+        /// <see cref="CommandQueueOptions.MaxRetryAfterFailure"/>. После <paramref name="maxAttempts"/>
+        /// выдач (по умолчанию <see cref="CommandQueueOptions.MaxAttempts"/>) команда бросается
+        /// с ошибкой в лог (<see cref="CommandQueueStorage"/>): повтор, но не вечный
         /// </summary>
-        public CommandHandlers Add<TCommand, THandler>(TimeSpan? retryAfterFailure = null)
+        public CommandHandlers Add<TCommand, THandler>(TimeSpan? retryAfterFailure = null, int? maxAttempts = null)
+            where TCommand : ICommand
             where THandler : class, ICommandHandler<TCommand>
         {
+            catalog.Add(typeof(TCommand).FullName!, TCommand.QueueName, maxAttempts ?? options.MaxAttempts);
+
             // Пакет берёт обработчик из области команды — регистрация за приложением
             services.TryAddTransient<THandler>();
             worker?.AddCommandHandler<TCommand, THandler>(new BackoffRetryPolicy(
@@ -124,7 +143,11 @@ public static class CommandQueueRegistration
     /// Одна попытка на выдачу, повтор — через <paramref name="first"/>, затем вдвое дольше
     /// с каждой попыткой (<c>TryCount</c> строки переживает рестарт), но не дольше
     /// <paramref name="max"/>. Команда, которая не пройдёт никогда, не занимает воркер
-    /// и провайдера раз в минуту, а растущий <c>TryCount</c> поднимает тревогу
+    /// и провайдера раз в минуту, а растущий <c>TryCount</c> поднимает тревогу.
+    /// <c>null</c> («не откладывать») политика не отдаёт: строка тогда вернулась бы, как
+    /// только кончится аренда выборки. Конец повторам — предел попыток в хранилище
+    /// (<see cref="CommandQueueStorage"/>): он ловит и процесс, умерший посреди команды,
+    /// до которого политика не доходит вовсе
     /// </summary>
     public sealed class BackoffRetryPolicy(TimeSpan first, TimeSpan max) : ICommandRetryPolicy
     {

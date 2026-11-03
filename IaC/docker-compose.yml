@@ -8,10 +8,21 @@
 # API в compose не входит: контейнер dapi поднимают workflow выкатки (спец. infrastructure, 6).
 # Qdrant и эмбеддер (спец. infrastructure, 8; specs/search.md) — отдельными сервисами ниже:
 # Qdrant должен быть поднят до первого Publish Api — без него API не стартует
+#
+# Телеметрия (grafana, otel-collector, prometheus, tempo, экспортёры) — профиль observability
+# (спец. infrastructure, 8 и 10). Включён по умолчанию строкой COMPOSE_PROFILES=observability
+# в .env (.env.example): `docker compose up -d` поднимает всё. Пустой COMPOSE_PROFILES — без
+# телеметрии: на машине в 2 ядра и 6 ГБ это ~1.7 ГБ потолков памяти.
+#
+# mem_limit — потолок у каждого сервиса: машина одна на всё, и разросшийся Prometheus
+# или cAdvisor не должен выдавить базу или API в OOM. Это не резерв: сумма потолков
+# с API (1.5 ГБ, IaC/run-api.sh) — около 6 ГБ, а живут они ниже. Упирается сервис в свой
+# потолок (`docker stats`, дашборд containers) — поднять здесь, сверив с машиной
 
 services:
   webserver:
     image: nginx:1.30
+    mem_limit: 128m
     ports:
       - "${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_HTTPS_PORT:-443}:443"
@@ -31,6 +42,7 @@ services:
 
   certbot:
     image: certbot/certbot:v5.9.0
+    mem_limit: 128m
     volumes:
       - ./certbot/www/:/var/www/certbot/:rw
       - ./certbot/conf/:/etc/letsencrypt/:rw
@@ -52,6 +64,8 @@ services:
     image: postgres:18
     container_name: dbcontainer
     restart: always
+    # shared_buffers по умолчанию 128 МБ; остальное — кеш страниц и соединения
+    mem_limit: 1g
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -90,6 +104,7 @@ services:
     image: qdrant/qdrant:v1.20.0
     container_name: qdrantcontainer
     restart: always
+    mem_limit: 768m
     ports:
       - "127.0.0.1:${QDRANT_REST_PORT:-6333}:6333"
       - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
@@ -113,6 +128,8 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server-b11096
     container_name: embeddingscontainer
     restart: always
+    # Модель ~0.5 ГБ в памяти (выше)
+    mem_limit: 768m
     command: >
       --hf-repo ${EMBEDDINGS_REPO:-TwinSunsLLC/multilingual-e5-small-gguf}
       --hf-file ${EMBEDDINGS_FILE:-multilingual-e5-small-q8_0.gguf}
@@ -142,6 +159,8 @@ services:
     image: grafana/grafana-oss:12.0.0
     container_name: grafanacontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 256m
     environment:
       GF_SERVER_ROOT_URL: https://grafana.example.com/
       GF_AUTH_PROXY_ENABLED: "true"
@@ -187,6 +206,8 @@ services:
     image: otel/opentelemetry-collector:0.162.0
     container_name: otelcollectorcontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 256m
     command: --config=/etc/otelcol/config.yaml
     networks:
       - nginx-proxy-man
@@ -198,6 +219,8 @@ services:
     image: prom/prometheus:v3.15.0
     container_name: prometheuscontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 512m
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -214,6 +237,8 @@ services:
     image: grafana/tempo:2.10.8
     container_name: tempocontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 384m
     command: -config.file=/etc/tempo/tempo.yaml
     networks:
       - nginx-proxy-man
@@ -233,6 +258,8 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: postgresexportercontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 64m
     command:
       - --collector.postmaster
     environment:
@@ -249,6 +276,8 @@ services:
     image: prom/node-exporter:v1.12.1
     container_name: nodeexportercontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 64m
     pid: host
     command:
       - --path.rootfs=/host
@@ -265,6 +294,8 @@ services:
     image: ghcr.io/google/cadvisor:v0.57.0
     container_name: cadvisorcontainer
     restart: always
+    profiles: [observability]
+    mem_limit: 192m
     privileged: true
     devices:
       - /dev/kmsg

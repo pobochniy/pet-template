@@ -82,7 +82,7 @@ describe('InviteComponent', () => {
       inviterName: 'Oleg',
       roles: [AdminRole.Accounts]
     }));
-    const navigate = spyOn(TestBed.inject(Router), 'navigateByUrl').and.resolveTo(true);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     await type(fixture, element.querySelector<HTMLInputElement>('input[name=login]')!, 'Vasya');
     await type(fixture, element.querySelector<HTMLInputElement>('input[name=password]')!, 'secret');
 
@@ -139,6 +139,6 @@ describe('InviteComponent', () => {
     expect(element.querySelector('.alert-danger')!.textContent)
       .toContain('неверный логин или пароль, слишком много попыток или ссылка уже не действует');
     expect(TestBed.inject(AdminSessionService).token).toBeNull();
-    expect(element.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBeFalse();
+    expect(element.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
   });
 });

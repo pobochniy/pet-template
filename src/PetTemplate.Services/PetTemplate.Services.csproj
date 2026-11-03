@@ -18,9 +18,6 @@
         <!-- Русский стеммер Snowball для ключевой половины поиска по справке (спец. help, 6.3) -->
         <PackageReference Include="libstemmer.net" />
         <PackageReference Include="MailKit" />
-        <!-- Мир сверки моделей из админки (спец. admin, 15.3): ход фразы — в базе в памяти,
-             в боевую базу из него не уходит ни строчки -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
         <!-- Поиск (спец. search): эмбеддер за IEmbeddingGenerator и векторный индекс -->
         <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
         <!-- Ассистент (спец. assistant, 16): свой цикл поверх IChatClient, транспорт —

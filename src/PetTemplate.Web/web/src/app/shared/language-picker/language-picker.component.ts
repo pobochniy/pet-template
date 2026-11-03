@@ -5,8 +5,8 @@ import {
 import { LucideAngularModule, Search, X } from 'lucide-angular';
 import { provideIcons } from '../icons/lucide-icons.provider';
 import { LangFlagComponent } from '../i18n/flags/lang-flag.component';
-import { I18nService } from '../i18n/i18n.service';
 import { Lang, LangMeta, SUPPORTED_LANGUAGES } from '../i18n/lang';
+import { injectI18n } from '../i18n/inject-i18n';
 
 /**
  * Выбор языка интерфейса: флаг и самоназвание, клик меняет язык и закрывает окно.
@@ -30,7 +30,7 @@ import { Lang, LangMeta, SUPPORTED_LANGUAGES } from '../i18n/lang';
   }
 })
 export class LanguagePickerComponent {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n();
 
   isOpen = input.required<boolean>();
 

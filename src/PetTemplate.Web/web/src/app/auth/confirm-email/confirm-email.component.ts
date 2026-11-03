@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RecoveryApiService } from '../../shared/api/recovery-api.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { serverErrorMessage } from '../../shared/core/server-error.util';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { AUTH_SCOPES } from '../auth.scopes';
 
 /**
  * `/auth/confirm-email/:token` — переход по ссылке из письма (спец. accounts, 8.4).
@@ -32,7 +33,7 @@ import { serverErrorMessage } from '../../shared/core/server-error.util';
   `
 })
 export class ConfirmEmailComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...AUTH_SCOPES);
 
   /** Токен из адреса — через `withComponentInputBinding()` */
   readonly token = input.required<string>();

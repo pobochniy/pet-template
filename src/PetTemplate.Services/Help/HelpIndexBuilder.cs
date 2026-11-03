@@ -48,10 +48,13 @@ public class HelpIndexBuilder(
     public async Task<HelpIndex> Build(string directory, string commit, bool withVectors, CancellationToken ct)
     {
         var chunks = new List<(Guid Id, string Text, HelpHit Hit)>();
+        var pages = new List<HelpPage>();
         foreach (var file in Directory.GetFiles(directory, "*.md").Where(x => !Path.GetFileName(x).StartsWith('_'))
                      .Order(StringComparer.Ordinal))
         {
             var article = HelpArticleParser.Parse(Path.GetFileNameWithoutExtension(file), await File.ReadAllTextAsync(file, ct));
+            pages.Add(new HelpPage(article.Name, article.Title,
+                string.Join("\n\n", article.Sections.Select(x => $"## {x.Title}\n\n{x.Body}"))));
             foreach (var section in article.Sections)
             {
                 var id = HelpIndex.SectionId(article.Name, section.Title);
@@ -72,7 +75,8 @@ public class HelpIndexBuilder(
         return new HelpIndex(
             commit,
             [.. chunks.Select((x, i) => new HelpChunk(x.Id, x.Text, x.Hit, HelpTerms.Of(x.Text), vectors[i]))],
-            recomputed);
+            recomputed,
+            pages);
     }
 
     /// <summary>

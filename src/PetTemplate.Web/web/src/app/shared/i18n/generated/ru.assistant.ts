@@ -24,6 +24,7 @@ export default {
   "assistant.error.transcriptionFailed": "Не удалось распознать запись",
   "assistant.error.transcriptionUnavailable": "Распознавание речи не настроено",
   "assistant.error.unknown": "Не получилось связаться с ассистентом, попробуйте ещё раз",
+  "assistant.error.userDailyLimitReached": "Исчерпан ваш дневной лимит ассистента — он общий для всех ваших пространств. Новые просьбы можно будет отправить завтра",
   "assistant.input.chat": "Сообщение…",
   "assistant.input.home": "Спросите ассистента",
   "assistant.input.send": "Отправить",

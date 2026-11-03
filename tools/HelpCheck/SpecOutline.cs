@@ -67,11 +67,30 @@ public static partial class SpecOutline
     }
 
     /// <summary>
-    /// Хэш нормализованного текста: пробелы и переводы строк схлопнуты. Строки заголовка
-    /// в тексте нет — перенумерация раздела хэш не меняет
+    /// Хэш нормализованного текста: пробелы и переводы строк схлопнуты, имена шаблона —
+    /// заглушками (<see cref="TemplateSymbols"/>). Строки заголовка в тексте нет —
+    /// перенумерация раздела хэш не меняет
     /// </summary>
     public static string Hash(string text) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Normalize(text))))[..16];
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(WithoutTemplateSymbols(Normalize(text)))))[..16];
+
+    /// <summary>
+    /// Что <c>dotnet new</c> заменяет в проекте из шаблона: <c>sourceName</c> в двух написаниях
+    /// и символ <c>domain</c> (<c>.template.config/template.json</c>). Карту считали в шаблоне,
+    /// а в проекте те же разделы уже с его именем и доменом — без заглушек <c>map</c> краснел бы
+    /// в любом новом проекте. Литералы ниже шаблонизатор заменит вместе с текстом
+    /// спецификаций, так что в проекте сверка останется согласованной. Домен — первым:
+    /// имя проекта бывает началом домена (<c>myapp</c> и <c>myapp.ru</c>)
+    /// </summary>
+    private static readonly (string Literal, string Placeholder)[] TemplateSymbols =
+    [
+        ("example.com", "{domain}"),
+        ("PetTemplate", "{Name}"),
+        ("pettemplate", "{name}"),
+    ];
+
+    private static string WithoutTemplateSymbols(string text) =>
+        TemplateSymbols.Aggregate(text, (x, symbol) => x.Replace(symbol.Literal, symbol.Placeholder, StringComparison.Ordinal));
 
     private static string Normalize(string text) => WhitespaceRegex().Replace(text, " ").Trim();
 

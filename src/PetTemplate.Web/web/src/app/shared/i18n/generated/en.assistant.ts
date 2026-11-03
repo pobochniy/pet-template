@@ -24,6 +24,7 @@ export default {
   "assistant.error.transcriptionFailed": "Couldn’t recognize the recording",
   "assistant.error.transcriptionUnavailable": "Speech recognition is not set up",
   "assistant.error.unknown": "Couldn’t reach the assistant, please try again",
+  "assistant.error.userDailyLimitReached": "Your daily assistant limit is used up — it is shared across all your spaces. New requests can be sent tomorrow",
   "assistant.input.chat": "Message…",
   "assistant.input.home": "Ask the assistant",
   "assistant.input.send": "Send",

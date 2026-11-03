@@ -31,7 +31,6 @@ describe('ProfilePasswordComponent', () => {
     api.account = { ...api.account, hasPassword, canSetPasswordWithoutCurrent: fresh };
     user = TestBed.inject(UserService);
     tokens = TestBed.inject(TokenService);
-    tokens.Token = '';
     await loadAllScopes(TestBed.inject(I18nService));
     fixture = TestBed.createComponent(ProfilePasswordComponent);
     fixture.componentRef.setInput('hasPassword', hasPassword);
@@ -124,7 +123,7 @@ describe('ProfilePasswordComponent', () => {
 
     await submit();
 
-    expect(api.account.hasPassword).toBeFalse();
+    expect(api.account.hasPassword).toBe(false);
     expect(el.textContent).toContain('Минимум 8 символов');
   });
 

@@ -1,439 +1,196 @@
-import { AdminInvitationStatus } from './admin-invitation-status';
-import type { AdminJobKind, AdminJobStatus } from './admin-job';
-import type { AssistantRunStatus, AssistantStopReason, DialogStopReason } from './assistant-run-status';
-import { AdminRole } from './admin-role';
-import { ProviderLedgerKind } from './provider-ledger-kind';
-import { ServiceSpendKind } from './service-spend-kind';
+import type { ApiSchema } from '../../../../../src/app/shared/api/generated/schema';
+import type { AdminRole } from './admin-role';
+import type { AssistantRunStatus } from './assistant-run-status';
+
+/*
+ * DTO админки — алиасы схем OpenAPI документа API (`npm run api:types`,
+ * `src/app/shared/api/generated/schema.d.ts` продукта: документ у API один). Перечисления в
+ * них — объединения номеров (`0 | 1 | 2`), с `enum` из `core/` совместимы в обе стороны, имена
+ * сверяет `enum:parity`. Руками здесь — только признаки запросов (`*Filter`): их нет в схемах
+ */
+
+/**
+ * Роли — `AdminRole` клиента, а не номера схемы: флаговый `AdminRole` сервера несёт `None = 0`
+ * («ролей нет»), а в списке ролей приходят только настоящие, по одной (`enum:parity`, `omit`)
+ */
+type WithAdminRoles<T> = {
+  [K in keyof T]: K extends 'roles' ? AdminRole[] : K extends 'role' ? AdminRole : T[K];
+};
 
 /** `AdminDto`: кто вошёл и с какими ролями — ролями из токена */
-export interface Admin {
-  userId: string;
-  userName: string;
-  roles: AdminRole[];
-}
+export type Admin = WithAdminRoles<ApiSchema<'AdminDto'>>;
 
 /** `AdminLoginResultDto`: токен своей схемы и его срок — час, без продления (спец. admin, 3.3) */
-export interface AdminLoginResult {
-  token: string;
-  expiresUtc: string;
-  admin: Admin;
-}
+export type AdminLoginResult = Omit<ApiSchema<'AdminLoginResultDto'>, 'admin'> & { admin: Admin };
 
 /** `AdminSummaryDto`: какая сборка API отвечает и который час на сервере (спец. admin, 6) */
-export interface AdminSummary {
-  version: string;
-  serverTimeUtc: string;
-}
+export type AdminSummary = ApiSchema<'AdminSummaryDto'>;
 
 /** Строка поиска аккаунтов — `AdminAccountDto` (спец. admin, 12) */
-export interface AdminAccount {
-  userId: string;
-  userName: string;
-  email: string | null;
-  phoneNumber: string | null;
-  hasTelegram: boolean;
-  hasVk: boolean;
-  registeredAtUtc: string;
-}
+export type AdminAccount = ApiSchema<'AdminAccountDto'>;
 
 /**
  * Пространство в карточке аккаунта — `AccountWorkspaceDto`: `isOwner` — с правом управлять
  * участниками, `isSolo` — кроме него никого. Числа своих сущностей проект дописывает сюда
  * и в `AccountCards` (точка расширения карточки)
  */
-export interface AdminAccountWorkspace {
-  id: string;
-  name: string;
-  isOwner: boolean;
-  otherMembers: string[];
-  isSolo: boolean;
-}
+export type AdminAccountWorkspace = ApiSchema<'AccountWorkspaceDto'>;
 
 /** Действие админа с аккаунтом — `AccountAdminActionKind`, подписи — `action-titles.ts` */
-export interface AdminAccountAction {
-  kind: number;
-  adminName: string | null;
-  reason: string;
-  createdUtc: string;
-}
+export type AdminAccountAction = ApiSchema<'AdminAccountActionDto'>;
 
-/** Карточка — `AdminAccountCardDto`: по ней проверяют владельца, содержимого в ней нет */
-export interface AdminAccountCard {
-  card: {
-    userId: string;
-    userName: string;
-    registeredAtUtc: string;
-    hasPassword: boolean;
-    hasTelegram: boolean;
-    hasVk: boolean;
-    canBeRemoved: boolean;
-    /** `AccountActivityDto` — пустая в ядре; проект дописывает счётчики своих сущностей */
-    activity: Record<string, number>;
-    workspaces: AdminAccountWorkspace[];
-  };
-  email: string | null;
-  emailConfirmed: boolean;
-  phoneNumber: string | null;
-  lastLoginAtUtc: string | null;
-  isAdmin: boolean;
-  actions: AdminAccountAction[];
-}
+/**
+ * Карточка — `AdminAccountCardDto`: по ней проверяют владельца, содержимого в ней нет.
+ *
+ * - `activity` — `AccountActivityDto` — пустая в ядре; проект дописывает счётчики своих сущностей
+ */
+export type AdminAccountCard = ApiSchema<'AdminAccountCardDto'>;
 
 /** Ссылка сброса: админ отправляет её человеку сам; `replaced` — выдана взамен живой, с её сроком */
-export interface AdminIssuedReset {
-  url: string;
-  expiresAtUtc: string;
-  replaced: boolean;
-}
+export type AdminIssuedReset = ApiSchema<'AdminIssuedResetDto'>;
 
 /** Освобождение почты: адрес, вписанный в чужой аккаунт без подтверждения */
-export interface AdminReleaseEmail {
-  email: string;
-  reason: string;
-}
+export type AdminReleaseEmail = ApiSchema<'AdminReleaseEmailDto'>;
 
 /** Освобождение телефона: номер, вписанный в чужой аккаунт (подтверждения у телефона нет) */
-export interface AdminReleasePhone {
-  phone: string;
-  reason: string;
-}
+export type AdminReleasePhone = ApiSchema<'AdminReleasePhoneDto'>;
 
-/** Почта или телефон сняты */
-export interface AdminReleasedContact {
-  /** Логин аккаунта, с которого сняли адрес или номер */
-  releasedFromUserName: string;
-}
+/**
+ * Почта или телефон сняты.
+ *
+ * - `releasedFromUserName` — логин аккаунта, с которого сняли адрес или номер
+ */
+export type AdminReleasedContact = ApiSchema<'AdminReleasedContactDto'>;
 
 /** Признаки `GET Admin/Accounts/Journal`: логин (часть) или id аккаунта целиком */
 export interface AdminAccountJournalFilter {
   query: string | null;
 }
 
-export interface AdminAccountJournalPage {
-  entries: AdminAccountJournalEntry[];
-  nextBefore: string | null;
-}
+export type AdminAccountJournalPage = ApiSchema<'AdminAccountJournalPageDto'>;
 
 /**
  * `AdminAccountJournalEntryDto`: действие админа (`kind` задан) или слияние (`kind` пуст —
  * `targetUserId` удалён, `keptUserId` остался). Логин цели — копия из журнала
  */
-export interface AdminAccountJournalEntry {
-  id: string;
-  createdUtc: string;
-  kind: number | null;
-  targetUserId: string;
-  targetUserName: string;
-  targetExists: boolean;
-  adminUserId: string | null;
-  adminName: string | null;
-  reason: string | null;
-  keptUserId: string | null;
-  keptUserName: string | null;
-  platform: string | null;
-}
+export type AdminAccountJournalEntry = ApiSchema<'AdminAccountJournalEntryDto'>;
 
 /** `AdminMemberDto`: строка вкладки «Админы» — человек и его роли из базы */
-export interface AdminMember {
-  userId: string;
-  userName: string;
-  roles: AdminMemberRole[];
-}
+export type AdminMember = Omit<ApiSchema<'AdminMemberDto'>, 'roles'> & { roles: AdminMemberRole[] };
 
 /** `AdminMemberRoleDto`: у первого админа и ушедшего выдавшего `grantedByName` пусто */
-export interface AdminMemberRole {
-  role: AdminRole;
-  grantedUtc: string;
-  grantedByName: string | null;
-}
+export type AdminMemberRole = WithAdminRoles<ApiSchema<'AdminMemberRoleDto'>>;
 
 /** `AdminInvitationDto`: выданное приглашение без токена — в базе лежит только его хеш */
-export interface AdminInvitation {
-  id: string;
-  roles: AdminRole[];
-  status: AdminInvitationStatus;
-  createdUtc: string;
-  expiresUtc: string;
-  createdByName: string | null;
-  acceptedByName: string | null;
-  revokedByName: string | null;
-}
+export type AdminInvitation = WithAdminRoles<ApiSchema<'AdminInvitationDto'>>;
 
 /** `AdminInvitationIssuedDto`: ответ на выдачу — ссылка видна только здесь, один раз */
-export interface IssuedAdminInvitation extends AdminInvitation {
-  token: string;
-}
+export type IssuedAdminInvitation = WithAdminRoles<ApiSchema<'AdminInvitationIssuedDto'>>;
 
 /** `AdminInvitationPreviewDto`: у отработавшего — только статус */
-export interface AdminInvitationPreview {
-  status: AdminInvitationStatus;
-  inviterName: string | null;
-  roles: AdminRole[];
-}
+export type AdminInvitationPreview = WithAdminRoles<ApiSchema<'AdminInvitationPreviewDto'>>;
 
 /** Потолки расхода пространства (`AdminAssistantLimitDto`, спец. assistant, 13.6): `null` — без потолка */
-export interface AdminAssistantLimit {
-  tokensPerDay: number | null;
-  tokensPerMonth: number | null;
-  costPerDay: number | null;
-  costPerMonth: number | null;
-}
+export type AdminAssistantLimit = ApiSchema<'AdminAssistantLimitDto'>;
 
 /** `AdminServiceSpendDto`: служебный расход одного вида — все виды, и нулевые тоже */
-export interface AdminServiceSpend {
-  kind: ServiceSpendKind;
-  calls: number;
-  tokens: number;
-  cost: number;
-}
+export type AdminServiceSpend = ApiSchema<'AdminServiceSpendDto'>;
 
 /** `AdminBillingModelDto`: строка разреза по моделям */
-export interface AdminBillingModel {
-  modelId: string;
-  displayName: string;
-  provider: string;
-  runs: number;
-  tokens: number;
-  cost: number;
-  serviceTokens: number;
-  serviceCost: number;
-}
+export type AdminBillingModel = ApiSchema<'AdminBillingModelDto'>;
 
 /** `AdminBillingWorkspaceDto`: у удалённого пространства имени нет */
-export interface AdminBillingWorkspace {
-  workspaceId: string;
-  workspaceName: string | null;
-  runs: number;
-  tokens: number;
-  cost: number;
-  ownLimit: boolean;
-}
+export type AdminBillingWorkspace = ApiSchema<'AdminBillingWorkspaceDto'>;
 
 /** `AdminLedgerFactDto`: действующий факт — последний введённый за свой период */
-export interface AdminLedgerFact {
-  id: string;
-  periodFrom: string;
-  periodTo: string;
-  amount: number;
-  comment: string | null;
-  createdUtc: string;
-  actorName: string | null;
-}
+export type AdminLedgerFact = ApiSchema<'AdminLedgerFactDto'>;
 
 /** `AdminProviderAccountDto`: наш счёт у поставщика за всё время */
-export interface AdminProviderAccount {
-  hasPayments: boolean;
-  paid: number;
-  fact: number;
-  unbilled: number;
-  remaining: number;
-}
+export type AdminProviderAccount = ApiSchema<'AdminProviderAccountDto'>;
 
 /** `AdminBillingProviderDto`: сверка и счёт у одного поставщика */
-export interface AdminBillingProvider {
-  provider: string;
-  facts: AdminLedgerFact[];
-  fact: number | null;
-  estimate: number;
-  discrepancy: number | null;
-  account: AdminProviderAccount;
-}
+export type AdminBillingProvider = ApiSchema<'AdminBillingProviderDto'>;
 
 /** `AdminBillingSummaryDto`: ответ `GET Admin/Billing/Summary` (спец. admin, 14) */
-export interface AdminBillingSummary {
-  from: string;
-  to: string;
-  modelId: string | null;
-  currency: string;
-  runs: number;
-  tokens: number;
-  cost: number;
-  serviceCost: number;
-  service: AdminServiceSpend[];
-  totalCost: number;
-  defaultLimit: AdminAssistantLimit;
-  models: AdminBillingModel[];
-  workspaces: AdminBillingWorkspace[];
-  providers: AdminBillingProvider[];
-}
+export type AdminBillingSummary = ApiSchema<'AdminBillingSummaryDto'>;
 
 /** `AdminSpendUsageDto`: расход за отрезок */
-export interface AdminSpendUsage {
-  tokens: number;
-  cost: number;
-}
+export type AdminSpendUsage = ApiSchema<'AdminSpendUsageDto'>;
 
 /** `AdminBillingUserDto`: кто сколько потратил внутри пространства; удалённый — без имени */
-export interface AdminBillingUser {
-  userId: string;
-  name: string | null;
-  runs: number;
-  tokens: number;
-  cost: number;
-}
+export type AdminBillingUser = ApiSchema<'AdminBillingUserDto'>;
 
 /** `AdminBillingWorkspaceCardDto`: лимит пространства и кто сколько потратил */
-export interface AdminBillingWorkspaceCard {
-  workspaceId: string;
-  workspaceName: string;
-  currency: string;
-  ownLimit: AdminAssistantLimit | null;
-  defaultLimit: AdminAssistantLimit;
-  limit: AdminAssistantLimit;
-  today: AdminSpendUsage;
-  month: AdminSpendUsage;
-  from: string;
-  to: string;
-  users: AdminBillingUser[];
-  limitUpdatedUtc: string | null;
-  limitUpdatedBy: string | null;
-}
+export type AdminBillingWorkspaceCard = ApiSchema<'AdminBillingWorkspaceCardDto'>;
 
 /** `AdminLedgerEntryDto`: платёж поставщику или факт расхода */
-export interface AdminLedgerEntry {
-  provider: string;
-  kind: ProviderLedgerKind;
-  amount: number;
-  periodFrom: string | null;
-  periodTo: string | null;
-  comment: string | null;
-}
+export type AdminLedgerEntry = ApiSchema<'AdminLedgerEntryDto'>;
 
 /**
  * `AdminModelsDto` (спец. admin, 15.1): справочник по порядку, валюта прайса и модель
- * расшифровки голоса — она не строка справочника, но тоже стоит денег
+ * расшифровки голоса — она не строка справочника, но тоже стоит денег.
+ *
+ * - `currency` — валюта прайса — подпись, курсов нет;
+ * - `transcription` — из конфигурации, цена за минуту; `null` — голос выключен
  */
-export interface AdminModels {
-  /** Валюта прайса — подпись, курсов нет */
-  currency: string;
-  models: AdminModel[];
-  /** Из конфигурации, цена за минуту; `null` — голос выключен */
-  transcription: AdminTranscriptionModel | null;
-}
+export type AdminModels = ApiSchema<'AdminModelsDto'>;
 
 /** `AdminTranscriptionModelDto`: правится переменной окружения, а не здесь */
-export interface AdminTranscriptionModel {
-  provider: string;
-  model: string;
-  costPerMinute: number;
-}
+export type AdminTranscriptionModel = ApiSchema<'AdminTranscriptionModelDto'>;
 
-/** `AdminModelDto`: цены по прайсу поставщика за 1000 токенов, в валюте прайса */
-export interface AdminModel {
-  id: string;
-  provider: string;
-  key: string;
-  displayName: string;
-  priority: number;
-  costIn: number;
-  costCached: number;
-  costOut: number;
-  isEnabled: boolean;
-  /** Своя видеокарта: такому судье можно любой диалог (спец. admin, 16.3) */
-  isLocal: boolean;
-  /** До какого момента разомкнута размыкателем; срок в прошлом — ждёт пробного хода (спец. assistant, 16.2) */
-  openUntilUtc: string | null;
-  /** Отказы подряд: на пороге модель размыкается */
-  failureCount: number;
-  /** По модели уже ходили — поставщика и ключ не поменять (15.1) */
-  isUsed: boolean;
-  updatedUtc: string;
-  updatedBy: string | null;
-  /** Токен конкуренции (`xmin`) — едет обратно в правке (15.1) */
-  version: number;
-}
+/**
+ * `AdminModelDto`: цены по прайсу поставщика за 1000 токенов, в валюте прайса.
+ *
+ * - `isLocal` — своя видеокарта: такому судье можно любой диалог (спец. admin, 16.3);
+ * - `openUntilUtc` — до какого момента разомкнута размыкателем; срок в прошлом — ждёт пробного хода (спец. assistant, 16.2);
+ * - `failureCount` — отказы подряд: на пороге модель размыкается;
+ * - `isUsed` — по модели уже ходили — поставщика и ключ не поменять (15.1);
+ * - `version` — токен конкуренции (`xmin`) — едет обратно в правке (15.1)
+ */
+export type AdminModel = ApiSchema<'AdminModelDto'>;
 
 /**
  * `AdminModelEditDto`: порядка здесь нет — он меняется целиком отдельным методом (15.2).
- * `version` — той строки, которую правят; у новой не читается
+ * `version` — той строки, которую правят; у новой не читается.
+ *
+ * - `isLocal` — своя видеокарта — годится в судьи для любого диалога (16.3)
  */
-export interface AdminModelEdit {
-  provider: string;
-  key: string;
-  displayName: string;
-  costIn: number;
-  costCached: number;
-  costOut: number;
-  isEnabled: boolean;
-  /** Своя видеокарта — годится в судьи для любого диалога (16.3) */
-  isLocal: boolean;
-  version: number;
-}
+export type AdminModelEdit = ApiSchema<'AdminModelEditDto'>;
 
 /**
  * `AdminJobDto`: сверка модели или автооценка пачки диалогов (спец. admin, 15.3 и 16.3).
- * Идёт фоном — экран перечитывает его, пока статус `Running`
+ * Идёт фоном — экран перечитывает его, пока статус `Running`.
+ *
+ * - `skipped` — у оценки — диалоги, которые выбранному судье нельзя;
+ * - `failed` — у оценки — сорвавшиеся на поставщике;
+ * - `cost` — в валюте прайса — служебный расход запуска;
+ * - `report` — отчёт сверки — только у одного запуска, не в списке
  */
-export interface AdminJob {
-  id: string;
-  kind: AdminJobKind;
-  modelId: string;
-  modelName: string;
-  startedBy: string | null;
-  createdUtc: string;
-  finishedUtc: string | null;
-  status: AdminJobStatus;
-  planned: number;
-  done: number;
-  /** У оценки — диалоги, которые выбранному судье нельзя */
-  skipped: number;
-  /** У оценки — сорвавшиеся на поставщике */
-  failed: number;
-  tokensIn: number;
-  tokensCached: number;
-  tokensOut: number;
-  /** В валюте прайса — служебный расход запуска */
-  cost: number;
-  error: string | null;
-  /** Отчёт сверки — только у одного запуска, не в списке */
-  report: ModelCheckReport | null;
-}
+export type AdminJob = ApiSchema<'AdminJobDto'>;
 
 /** `AdminEvaluationStartDto`: судья и размер пачки (спец. admin, 16.3) */
-export interface AdminEvaluationStart {
-  modelId: string;
-  batchSize: number;
-}
+export type AdminEvaluationStart = ApiSchema<'AdminEvaluationStartDto'>;
 
 /** `AdminEvaluationsDto`: потолок пачки из конфигурации и последние запуски */
-export interface AdminEvaluations {
-  maxBatchSize: number;
-  jobs: AdminJob[];
-}
+export type AdminEvaluations = ApiSchema<'AdminEvaluationsDto'>;
 
 /** `ModelCheckReportDto`: доли попаданий и строка на фразу (спец. admin, 15.3) */
-export interface ModelCheckReport {
-  phrases: number;
-  shares: ModelCheckShare[];
-  averageSteps: number;
-  results: ModelCheckPhrase[];
-}
+export type ModelCheckReport = ApiSchema<'ModelCheckReportDto'>;
 
-/** `ModelCheckShareDto`: `considered` — по скольким фразам признак вообще считается */
-export interface ModelCheckShare {
-  /** `tool`, `russian`, `clean`, `noCalls`, `failed` */
-  key: string;
-  hits: number;
-  considered: number;
-}
+/**
+ * `ModelCheckShareDto`: `considered` — по скольким фразам признак вообще считается.
+ *
+ * - `key` — `tool`, `russian`, `clean`, `noCalls`, `failed`
+ */
+export type ModelCheckShare = ApiSchema<'ModelCheckShareDto'>;
 
-/** `ModelCheckPhraseDto`: признак, которого у фразы нет, — `null`, а не «попал» */
-export interface ModelCheckPhrase {
-  phrase: string;
-  expectedTool: string | null;
-  tools: string[];
-  /** Обрезан: для глаз, а не для разбора */
-  answer: string;
-  error: string | null;
-  steps: number;
-  tokensIn: number;
-  tokensOut: number;
-  cost: number;
-  toolHit: boolean;
-  /** Без слов об устройстве приложения; `null` — у фразы их не задано */
-  cleanAnswer: boolean | null;
-  russianAnswer: boolean;
-}
+/**
+ * `ModelCheckPhraseDto`: признак, которого у фразы нет, — `null`, а не «попал».
+ *
+ * - `answer` — обрезан: для глаз, а не для разбора;
+ * - `cleanAnswer` — без слов об устройстве приложения; `null` — у фразы их не задано
+ */
+export type ModelCheckPhrase = ApiSchema<'ModelCheckPhraseDto'>;
 
 /**
  * Признаки `GET Admin/Dialogs` (спец. admin, 16.2): поиска по тексту нет. Дни —
@@ -452,69 +209,31 @@ export interface AdminDialogFilter {
 }
 
 /** `AdminDialogPageDto`: `nextBefore` — курсор следующей страницы */
-export interface AdminDialogPage {
-  dialogs: AdminDialog[];
-  nextBefore: string | null;
-}
+export type AdminDialogPage = ApiSchema<'AdminDialogPageDto'>;
 
-/** `AdminDialogDto`: прогон без содержимого; живёт дольше трассы */
-export interface AdminDialog {
-  runId: string;
-  startedUtc: string;
-  finishedUtc: string | null;
-  workspaceId: string;
-  workspaceName: string;
-  modelId: string | null;
-  modelName: string | null;
-  status: AssistantRunStatus;
-  stopReason: AssistantStopReason | null;
-  steps: number;
-  tokensIn: number;
-  tokensOut: number;
-  /** Стоимость хода по прайсу (`run_spend`); ноль — ход без токенов */
-  cost: number;
-  clarifications: number | null;
-  satisfaction: number | null;
-  traceExpired: boolean;
-}
+/**
+ * `AdminDialogDto`: прогон без содержимого; живёт дольше трассы.
+ *
+ * - `cost` — стоимость хода по прайсу (`run_spend`); ноль — ход без токенов
+ */
+export type AdminDialog = ApiSchema<'AdminDialogDto'>;
 
-/** `AdminDialogTraceDto`: `expired` — содержимого уже нет, прогон при этом есть */
-export interface AdminDialogTrace {
-  dialog: AdminDialog;
-  expired: boolean;
-  steps: AdminDialogStep[];
-  /** Автооценка прогона, если она есть (16.3) */
-  evaluation: AdminDialogEvaluation | null;
-}
+/**
+ * `AdminDialogTraceDto`: `expired` — содержимого уже нет, прогон при этом есть.
+ *
+ * - `evaluation` — автооценка прогона, если она есть (16.3)
+ */
+export type AdminDialogTrace = ApiSchema<'AdminDialogTraceDto'>;
 
-/** `AdminDialogStepDto`: шаг трассы как есть — вход и выход усечены при записи до 4 КБ */
-export interface AdminDialogStep {
-  step: number;
-  /** `model` или `tool` */
-  kind: string;
-  toolName: string | null;
-  summary: string;
-  input: string;
-  output: string | null;
-  durationMs: number;
-  tokensIn: number;
-  tokensOut: number;
-  error: string | null;
-  createdUtc: string;
-}
+/**
+ * `AdminDialogStepDto`: шаг трассы как есть — вход и выход усечены при записи до 4 КБ.
+ *
+ * - `kind` — `model` или `tool`
+ */
+export type AdminDialogStep = ApiSchema<'AdminDialogStepDto'>;
 
 /** `AdminDialogEvaluationDto`: что судья сказал о прогоне — только цифры и пара фраз */
-export interface AdminDialogEvaluation {
-  modelName: string;
-  succeeded: boolean | null;
-  satisfaction: number | null;
-  clarifications: number | null;
-  replans: number | null;
-  agentMistake: boolean | null;
-  stopReason: DialogStopReason | null;
-  notes: string | null;
-  createdUtc: string;
-}
+export type AdminDialogEvaluation = ApiSchema<'AdminDialogEvaluationDto'>;
 
 /** Признаки `GET Admin/AccessLog`: админ и период */
 export interface AdminAccessLogFilter {
@@ -523,21 +242,10 @@ export interface AdminAccessLogFilter {
   to: string | null;
 }
 
-export interface AdminAccessLogPage {
-  entries: AdminAccessLogEntry[];
-  nextBefore: string | null;
-}
+export type AdminAccessLogPage = ApiSchema<'AdminAccessLogPageDto'>;
 
 /**
  * `AdminAccessLogEntryDto`: кто, когда, чей прогон; имена — пока есть у кого спросить.
  * Удалённый админ — без id и имени
  */
-export interface AdminAccessLogEntry {
-  id: string;
-  createdUtc: string;
-  adminUserId: string | null;
-  adminName: string | null;
-  runId: string;
-  workspaceId: string;
-  workspaceName: string | null;
-}
+export type AdminAccessLogEntry = ApiSchema<'AdminAccessLogEntryDto'>;

@@ -7,9 +7,7 @@ import { RouterLink } from '@angular/router';
 import { AccountApiService } from '../../shared/api/account-api.service';
 import { AccountLoginsModel } from '../../shared/models/account.model';
 import { UserService } from '../../shared/core/user.service';
-import { WorkspaceContextService } from '../../shared/core/workspace-context.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { FormValidationComponent } from '../../shared/form-validation/form-validation.component';
 import { createAccountForm, userNameValidators } from '../../shared/form-models/account-form.model';
 import { EMAIL_MAX_LENGTH, USER_NAME_MAX_LENGTH } from '../../shared/form-models/account-rules';
@@ -24,6 +22,8 @@ import { ExternalLoginService } from '../../shared/core/external-login.service';
 import { ExternalProvider } from '../../shared/models/external-login.model';
 import { ProfileFreshLoginComponent } from '../fresh-login/fresh-login.component';
 import { FreshLoginService } from '../fresh-login/fresh-login.service';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
  * Блок «Основное» своего профиля (спец. accounts, раздел 6): логин и все способы войти —
@@ -58,9 +58,8 @@ import { FreshLoginService } from '../fresh-login/fresh-login.service';
   templateUrl: './logins.component.html'
 })
 export class ProfileLoginsComponent implements OnInit {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...PROFILE_SCOPES);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly workspaceContext = inject(WorkspaceContextService);
 
   protected readonly logins = signal<AccountLoginsModel | null>(null);
 
@@ -176,7 +175,7 @@ export class ProfileLoginsComponent implements OnInit {
   private async saveUserName(): Promise<boolean> {
     try {
       const session = await this.api.changeUserName(this.form.controls.userName.value.trim());
-      this.userService.applySession(session, this.workspaceContext.getCurrentWorkspaceId());
+      this.userService.renewSession(session);
       this.logins.update(current => current && {
         ...current,
         userName: session.profile.userName ?? current.userName,
@@ -195,7 +194,7 @@ export class ProfileLoginsComponent implements OnInit {
   }
 
   /**
-   * Профиль сессии лежит в `localStorage` и рисует шапку: после сохранения контакты
+   * Профиль сессии лежит в записи сессии и рисует шапку: после сохранения контакты
    * в нём — те, что легли в базу, а не те, что были при входе
    */
   private syncSessionProfile(logins: AccountLoginsModel): void {

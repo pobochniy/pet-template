@@ -1,3 +1,5 @@
+import type { ApiSchema } from '../api/generated/schema';
+
 /**
  * Модели ассистента — зеркало серверных DTO (спец. assistant, 12.2.1 и раздел 14).
  *
@@ -49,111 +51,55 @@ export enum AssistantFactKind {
   Default = 2
 }
 
-/** Факт памяти — для экрана «Память ассистента» и для строки «Запомнил» в ленте (12.5) */
-export interface AssistantFact {
-  id: string;
-  kind: AssistantFactKind;
-  text: string;
-  /** Личный факт собеседника, а не общий для пространства */
-  personal: boolean;
-  createdAtUtc: string;
-  /** Ход, в котором факт записан, — из списка можно дойти до разговора */
-  sourceRunId?: string | null;
-}
+/*
+ * Ниже — алиасы схем OpenAPI документа API (`npm run api:types`, `api/generated/schema.d.ts`).
+ * Перечисления в них — объединения номеров (`0 | 1 | 2`), с `enum` выше совместимы в обе стороны
+ */
+
+/**
+ * Факт памяти — для экрана «Память ассистента» и для строки «Запомнил» в ленте (12.5).
+ * `personal` — личный факт собеседника, а не общий для пространства; `sourceRunId` — ход,
+ * в котором факт записан: из списка можно дойти до разговора
+ */
+export type AssistantFact = ApiSchema<'AssistantFactDto'>;
 
 /** Экран памяти: общее для пространства и личное — так он и сгруппирован (12.5) */
-export interface AssistantMemory {
-  shared: AssistantFact[];
-  personal: AssistantFact[];
-}
+export type AssistantMemory = ApiSchema<'AssistantMemoryDto'>;
 
 /** Операция плана: номер с единицы, вид раздела и его аргументы как есть */
-export interface PlanOperation {
-  index: number;
-  kind: string;
-  args: Record<string, unknown>;
-}
+export type PlanOperation = ApiSchema<'PlanOperation'>;
 
-export interface PlanDocument {
-  operations: PlanOperation[];
-}
+export type PlanDocument = ApiSchema<'PlanDocument'>;
 
-export interface PlanOperationResult {
-  index: number;
-  done: boolean;
-  createdId?: string | null;
-  error?: string | null;
-}
+export type PlanOperationResult = ApiSchema<'PlanOperationResult'>;
 
-export interface PlanResult {
-  operations: PlanOperationResult[];
-}
+export type PlanResult = ApiSchema<'PlanResult'>;
 
-export interface AssistantPlan {
-  id: string;
-  status: AssistantPlanStatus;
-  operations: PlanDocument;
-  /** Пусто у предложения: галочки и «Готово» — только в сообщении-отчёте (5.1) */
-  result?: PlanResult | null;
-  appliedAtUtc?: string | null;
-}
+/** `result` пуст у предложения: галочки и «Готово» — только в сообщении-отчёте (5.1) */
+export type AssistantPlan = ApiSchema<'AssistantPlanDto'>;
 
-export interface AssistantMessage {
-  id: string;
-  role: AssistantMessageRole;
-  content: string;
-  runId?: string | null;
-  plan?: AssistantPlan | null;
-  /** Варианты ответа на уточняющий вопрос — подсказки под сообщением (5.2) */
-  options?: string[] | null;
-  /**
-   * Факты, записанные этим ходом: строка «Запомнил: …» с кнопкой «Убрать» (12.5).
-   * Убранный факт из списка пропадает, а сообщение остаётся
-   */
-  facts?: AssistantFact[] | null;
-  createdAtUtc: string;
-}
+/**
+ * Сообщение ленты. `options` — варианты ответа на уточняющий вопрос, подсказки под
+ * сообщением (5.2); `facts` — факты, записанные этим ходом: строка «Запомнил: …» с кнопкой
+ * «Убрать» (12.5). Убранный факт из списка пропадает, а сообщение остаётся
+ */
+export type AssistantMessage = ApiSchema<'AssistantMessageDto'>;
 
-export interface AssistantRun {
-  id: string;
-  status: AssistantRunStatus;
-  step: number;
-  stepsHard: number;
-  escalated: boolean;
-  /** Имя инструмента, а не текст: подпись собирает клиент словарём (раздел 3) */
-  currentActivity?: string | null;
-  stopReason?: AssistantStopReason | null;
-  finishedAtUtc?: string | null;
-  messageId?: string | null;
-}
+/** `currentActivity` — имя инструмента, а не текст: подпись собирает клиент словарём (раздел 3) */
+export type AssistantRun = ApiSchema<'AssistantRunDto'>;
 
-export interface AssistantHistory {
-  messages: AssistantMessage[];
-  activeRun?: AssistantRun | null;
-  nextCursor?: string | null;
-}
+export type AssistantHistory = ApiSchema<'AssistantHistoryDto'>;
 
-export interface AssistantSendResult {
-  runId: string;
-  messageId: string;
-}
+export type AssistantSendResult = ApiSchema<'AssistantSendResultDto'>;
 
-export interface AssistantTraceStep {
-  step: number;
-  /** `model` или `tool` */
-  kind: string;
-  toolName?: string | null;
-  /** Строка, собранная сервером: «искал в справке: как пригласить» (13.2) */
-  summary: string;
-  durationMs: number;
-  error?: string | null;
-}
+/**
+ * Шаг трассы: `kind` — `model` или `tool`; `summary` — строка, собранная сервером:
+ * «искал в справке: как пригласить» (13.2)
+ */
+export type AssistantTraceStep = ApiSchema<'AssistantTraceStepDto'>;
 
-export interface AssistantTrace {
-  /** Трассу вычистили по сроку — «подробности уже не хранятся» (13.1) */
-  expired: boolean;
-  steps: AssistantTraceStep[];
-}
+/** `expired` — трассу вычистили по сроку: «подробности уже не хранятся» (13.1) */
+export type AssistantTrace = ApiSchema<'AssistantTraceDto'>;
 
 /** Ход закончился любым исходом — или его нет вовсе */
 export function isRunFinished(run: AssistantRun | null | undefined): boolean {

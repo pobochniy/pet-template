@@ -1,8 +1,9 @@
+import type { Mocked } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
 import { EditComponent } from './edit.component';
-import { ProfileApiService } from '../../shared/api/profile-api.service';
+import { ProfileApiService } from '../profile-api.service';
 import { UserService } from '../../shared/core/user.service';
 import { AlertsService } from '../../shared/alerts/alerts.service';
 import { ProfileModel } from '../../shared/models/profile.model';
@@ -12,26 +13,27 @@ import { AccountApiService } from '../../shared/api/account-api.service';
 import { AccountApiServiceMock } from '../../shared/api/account-api.service.mock';
 import { ExternalLoginApiService } from '../../shared/api/external-login-api.service';
 import { ExternalLoginApiServiceMock } from '../../shared/api/external-login-api.service.mock';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('EditComponent', () => {
   let component: EditComponent;
   let fixture: ComponentFixture<EditComponent>;
-  let profileApi: jasmine.SpyObj<ProfileApiService>;
+  let profileApi: Mocked<ProfileApiService>;
   let userService: UserService;
   let router: Router;
 
-  const profile: ProfileModel = {
+  const profile: ProfileModel = profileDto({
     id: '123',
     userName: 'TestUser',
     avatarId: 5,
     comment: 'Test comment',
     isAdult: true,
     hasAcceptedTerms: true
-  };
+  });
 
   beforeEach(async () => {
-    profileApi = jasmine.createSpyObj<ProfileApiService>('ProfileApiService', ['details', 'save']);
-    profileApi.details.and.resolveTo(profile);
+    profileApi = { details: vi.fn(), save: vi.fn() } as unknown as Mocked<ProfileApiService>;
+    profileApi.details.mockResolvedValue(profile);
 
     await TestBed.configureTestingModule({
       imports: [EditComponent],
@@ -47,7 +49,7 @@ describe('EditComponent', () => {
     await loadAllScopes(TestBed.inject(I18nService));
     userService = TestBed.inject(UserService);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(EditComponent);
     component = fixture.componentInstance;
@@ -95,7 +97,7 @@ describe('EditComponent', () => {
   });
 
   it('should save a valid form and go home', async () => {
-    profileApi.save.and.resolveTo({ ...profile, isAdult: true });
+    profileApi.save.mockResolvedValue({ ...profile, isAdult: true });
 
     await component.onSubmit();
 
@@ -115,7 +117,7 @@ describe('EditComponent', () => {
   });
 
   it('should tell about a failed save', async () => {
-    profileApi.save.and.rejectWith(new Error('Save failed'));
+    profileApi.save.mockRejectedValue(new Error('Save failed'));
 
     await component.onSubmit();
 

@@ -87,6 +87,13 @@ public class AssistantRun
     public int Attempts { get; set; }
 
     /// <summary>
+    /// Тред стёрли «Очистить», пока ход ещё шёл (спец. assistant, 12.1.1): ход заканчивается
+    /// как обычно — статус, расход, — но ни сообщения, ни плана в пустую ленту не пишет,
+    /// а трассу, дописанную после очистки, уносит
+    /// </summary>
+    public bool Cleared { get; set; }
+
+    /// <summary>
     /// Какой моделью справочника шёл ход. Пишется на старте попытки, до первого
     /// обращения к модели: разбору диалогов модель нужна и у хода с нулевыми
     /// токенами. Пусто у ещё не начатых
@@ -118,11 +125,13 @@ public class AssistantRunConfiguration : IEntityTypeConfiguration<AssistantRun>
 
         // Ходов у треда одновременно не больше одного (раздел 3) — и держит это база,
         // а не проверка «есть ли живой» перед вставкой: два «Отправить» с двух вкладок
-        // проходят проверку оба. Проигравший получает 23505 и встаёт в очередь треда
+        // проходят проверку оба. Проигравший получает 23505 и встаёт в очередь треда.
+        // Живой — не законченный, а не Running: остановленный ход ещё дописывает конец,
+        // и второй ход рядом с ним писал бы в тот же тред
         builder
             .HasIndex(x => new { x.UserId, x.WorkspaceId })
             .IsUnique()
-            .HasFilter("status = 0")
+            .HasFilter("finished_at_utc IS NULL")
             .HasDatabaseName(RunningIndex);
 
         builder
@@ -140,7 +149,7 @@ public class AssistantRunConfiguration : IEntityTypeConfiguration<AssistantRun>
     }
 
     /// <summary>
-    /// Имя частичного уникального индекса «один живой ход на тред» — по нему
+    /// Имя частичного уникального индекса «один незаконченный ход на тред» — по нему
     /// <c>DbErrors.IsDuplicate</c> узнаёт проигранную гонку двух отправок
     /// </summary>
     public const string RunningIndex = "ix_assistant_runs_running";

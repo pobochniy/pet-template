@@ -6,6 +6,7 @@ using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Dto;
 using PetTemplate.Shared.Dto.Admin;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 
 namespace PetTemplate.Services.Admin;
@@ -74,11 +75,11 @@ public class AdminInvitationService(
     {
         var roles = dto.Roles.Distinct().ToArray();
 
-        if (roles.Length == 0) throw new ArgumentException("Отметьте хотя бы одну роль: без ролей человек не админ");
-        if (!roles.All(AdminRoleSet.IsSingle)) throw new ArgumentException("Неизвестная роль");
+        if (roles.Length == 0) throw new AdminRejectionException("Отметьте хотя бы одну роль: без ролей человек не админ");
+        if (!roles.All(AdminRoleSet.IsSingle)) throw new AdminRejectionException("Неизвестная роль");
 
         var own = await members.EnsureManager(actorId, ct);
-        if (roles.Except(own).Any()) throw new ArgumentException("Нельзя выдать роль, которой нет у вас самих");
+        if (roles.Except(own).Any()) throw new AdminRejectionException("Нельзя выдать роль, которой нет у вас самих");
 
         var now = DateTime.UtcNow;
 
@@ -123,7 +124,7 @@ public class AdminInvitationService(
         if (invitation == null) return false;
 
         if (invitation.Status == AdminInvitationStatus.Accepted)
-            throw new ArgumentException("Приглашение уже принято — снимите роли у админа");
+            throw new AdminRejectionException("Приглашение уже принято — снимите роли у админа");
 
         // Повторный отзыв ничего не меняет
         if (invitation.Status == AdminInvitationStatus.Revoked) return true;

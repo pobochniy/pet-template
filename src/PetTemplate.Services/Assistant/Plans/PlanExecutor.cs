@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using PetTemplate.Db.Entity;
+using PetTemplate.Services.Services;
 using PetTemplate.Shared.Dto.Assistant;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Shared.Exceptions;
@@ -76,23 +77,108 @@ public class PlanExecutor(
         {
             ct.ThrowIfCancellationRequested();
 
-            // Повтор команды после падения: операции, у которых результат уже есть,
-            // пропускаются — иначе три записи из пяти создались бы второй раз (5.1)
-            if (result.Operations.Exists(x => x.Index == operation.Index)) continue;
+            var step = await ApplyStep(plan, operation, userId, workspaceId, ct);
 
-            result.Operations.Add(await ApplyOne(operation, result, userId, workspaceId, ct));
+            // План закрыл другой применяющий, пока этот шёл по операциям: второй раз
+            // ничего не делается, ответ — тот же, что у второго «да» (5.1)
+            if (step == null) return Closed(plan);
 
-            // Результат пишется сразу после операции, а не пакетом в конце: между
-            // третьей записью и общей пометкой процесс и падает
-            plan.Result = PlanJson.Serialize(result);
-            await context.SaveChangesAsync(ct);
+            result = step;
         }
 
-        plan.Status = AssistantPlanStatus.Applied;
-        plan.AppliedAtUtc = DateTime.UtcNow;
-        await context.SaveChangesAsync(ct);
+        // Закрывает план тот, кто застал его открытым под замком: у второго применяющего
+        // план уже Applied, и «Готово» второй раз он не пишет
+        await using (var transaction = await NestedTransaction.Begin(context.Database, ct))
+        {
+            if (await Lock(plan, ct) == null) return Closed(plan);
+
+            plan.Status = AssistantPlanStatus.Applied;
+            plan.AppliedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        }
 
         return new ApplyOutcome { Kind = ApplyOutcomeKind.Applied, Result = result };
+    }
+
+    private static ApplyOutcome Closed(AssistantPlan plan) => plan.Status == AssistantPlanStatus.Applied
+        ? new ApplyOutcome { Kind = ApplyOutcomeKind.AlreadyApplied, Result = ReadResult(plan) }
+        : new ApplyOutcome { Kind = ApplyOutcomeKind.Cancelled };
+
+    /// <summary>
+    /// Одна операция плана и её строка в <c>Result</c> — одной транзакцией (5.1): обработчик
+    /// раздела пишет тем же контекстом, и запись операции без отметки о ней не переживёт
+    /// падения. Иначе повтор команды после сбоя между ними создал бы запись второй раз.
+    ///
+    /// План в транзакции под замком строки и перечитан: два применяющих одного плана
+    /// (повтор команды, пока первая ещё идёт) делают каждую операцию по одному разу —
+    /// второй ждёт замка и видит её в результате. Закрытый за это время план — <c>null</c>.
+    ///
+    /// Отказ операции откатывает то, что обработчик успел записать, — сделанной она
+    /// не значится, — а сам отказ записывается следующей транзакцией
+    /// </summary>
+    private async Task<PlanResult?> ApplyStep(
+        AssistantPlan plan,
+        PlanOperation operation,
+        Guid userId,
+        Guid workspaceId,
+        CancellationToken ct)
+    {
+        PlanOperationResult? refused = null;
+        for (var pass = 0; pass < 2; pass++)
+        {
+            await using var transaction = await NestedTransaction.Begin(context.Database, ct);
+
+            var result = await Lock(plan, ct);
+            if (result == null) return null;
+
+            // Сделал другой применяющий, пока этот ждал замка
+            if (result.Operations.Exists(x => x.Index == operation.Index))
+            {
+                await transaction.CommitAsync(ct);
+                return result;
+            }
+
+            var tracked = context.ChangeTracker.Entries().Select(x => x.Entity).ToHashSet();
+            var done = refused ?? await ApplyOne(operation, result, userId, workspaceId, ct);
+
+            if (!done.Done && refused == null)
+            {
+                // Отказ: записанное обработчиком до отказа уходит вместе с транзакцией,
+                // а из трекера — то, что он успел в него положить
+                await transaction.RollbackAsync(ct);
+                foreach (var entry in context.ChangeTracker.Entries().Where(x => !tracked.Contains(x.Entity)).ToArray())
+                    entry.State = EntityState.Detached;
+
+                refused = done;
+                continue;
+            }
+
+            result.Operations.Add(done);
+            plan.Result = PlanJson.Serialize(result);
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return result;
+        }
+
+        throw new InvalidOperationException("Plan operation is neither applied nor refused");
+    }
+
+    /// <summary>
+    /// Замок строки плана до конца транзакции и её свежая копия. Открытого плана уже нет —
+    /// <c>null</c>
+    /// </summary>
+    private async Task<PlanResult?> Lock(AssistantPlan plan, CancellationToken ct)
+    {
+        await context.Database.ExecuteSqlAsync(
+            $"SELECT 1 FROM assistant_plans WHERE id = {plan.Id} FOR UPDATE", ct);
+
+        await context.Entry(plan).ReloadAsync(ct);
+
+        if (plan.Status is not (AssistantPlanStatus.Pending or AssistantPlanStatus.Draft)) return null;
+
+        return ReadResult(plan) ?? new PlanResult();
     }
 
     /// <summary>

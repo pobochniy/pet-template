@@ -23,7 +23,8 @@ namespace PetTemplate.Services.Assistant;
 /// параллельно первой, и два цикла писали бы в один тред. Поэтому при живом прогоне
 /// команда <b>не ставится</b> вовсе — сообщение просто ждёт своей очереди, а поставит
 /// её обработчик, закончив предыдущий ход. Держит это частичный уникальный индекс
-/// «один живой ход на тред», а не только проверка перед вставкой.
+/// «один незаконченный ход на тред», а не только проверка перед вставкой: живым ход
+/// остаётся и после «Остановить», пока обработчик не допишет его конец.
 /// </summary>
 public class AssistantThreadService(
     ApplicationContext context,
@@ -32,6 +33,7 @@ public class AssistantThreadService(
     AiModelCatalog models,
     MemoryService memory,
     BillingMetrics billing,
+    TraceSummary trace,
     IOptions<AssistantOptions> options)
 {
     /// <summary>
@@ -39,11 +41,11 @@ public class AssistantThreadService(
     /// или тот, что идёт сейчас, если ассистент ещё не ответил.
     ///
     /// Лимит расхода пространства исчерпан — отказ кодом (13.6). Это единственная
-    /// проверка лимита во всём ходе: стоимость до первого обращения к модели неизвестна,
-    /// поэтому проверяется «уже достигнут», а не «хватит ли». Что сюда прошло, исполняется
-    /// до конца: ни воркер при подхвате, ни очередь треда второй раз не спрашивают.
-    /// Отсюда и мягкость лимита при параллельных ходах участников — раздел 13.6.
-    /// Проверка стоит и перед репликой в очередь треда: отказ «лимит исчерпан» должен
+    /// проверка лимита во всём ходе: расход считается вместе с резервом идущих и ждущих
+    /// ходов (<see cref="WorkspaceLimits.Reserved"/>), а прогон или ждущая реплика,
+    /// записанные здесь, сами становятся резервом. Что сюда прошло, исполняется до конца:
+    /// ни воркер при подхвате, ни очередь треда второй раз не спрашивают — резерв
+    /// под реплику занят уже здесь. Проверка стоит и перед репликой в очередь треда: отказ «лимит исчерпан» должен
     /// прийти на то сообщение, которое его упёрло, а не молча отложиться.
     ///
     /// Раньше лимита проверяется, есть ли куда идти: все модели разомкнуты или выключены —
@@ -64,7 +66,10 @@ public class AssistantThreadService(
 
         if (!await models.AnyAvailable(ct)) throw new BadRequestException(AssistantErrors.ModelUnavailable);
 
-        await CheckLimit(workspaceId, now, ct);
+        // Проверка и резерв — под замком лимита до конца метода (13.6): прогон или ждущая
+        // реплика, записанные ниже, и есть резерв, и соседний Send должен его увидеть
+        await using var hold = await limits.Hold(workspaceId, userId, ct);
+        await CheckLimit(userId, workspaceId, now, ct);
 
         // Язык ответа — язык интерфейса автора (раздел 17). Спрашиваем профиль здесь,
         // а не в контроллере: прогон обязан запомнить и его, и зону на момент просьбы
@@ -122,15 +127,20 @@ public class AssistantThreadService(
     }
 
     /// <summary>
-    /// Лимит пространства на входе (13.6). Голос проверяет его тем же методом до
+    /// Лимиты на входе (13.6): установки, пространства и человека. Голос проверяет их тем же методом до
     /// расшифровки (6.1): распознавание — тоже обращение к поставщику за счёт пространства,
     /// и его расход идёт в тот же лимит
     /// </summary>
-    public async Task CheckLimit(Guid workspaceId, DateTime now, CancellationToken ct)
+    public async Task CheckLimit(Guid userId, Guid workspaceId, DateTime now, CancellationToken ct)
     {
-        var refused = await limits.Check(workspaceId, now, ct);
+        var refused = await limits.Check(workspaceId, userId, now, ct);
         billing.Send(refused != null);
         if (refused == null) return;
+
+        // Имя пространства — только в отказе лимитом пространства: потолок человека
+        // и установки к пространству не относятся
+        if (refused != AssistantErrors.DailyLimitReached && refused != AssistantErrors.MonthlyLimitReached)
+            throw new BadRequestException(refused);
 
         var workspace = await context.Workspaces
             .Where(x => x.Id == workspaceId)
@@ -147,6 +157,11 @@ public class AssistantThreadService(
     public async Task<Guid?> StartNextWaiting(Guid userId, Guid workspaceId, CancellationToken ct)
     {
         if (await Running(userId, workspaceId, ct) != null) return null;
+
+        // Человека убрали из пространства — его ждущие реплики ходов не получают (раздел 9):
+        // иначе очередь треда крутила бы по ходу на реплику, и каждый кончался бы отказом
+        if (!await context.UserInPermissions.AnyAsync(x => x.UserId == userId && x.WorkspaceId == workspaceId, ct))
+            return null;
 
         var waiting = await context.AssistantMessages
             .Where(x => x.UserId == userId
@@ -273,7 +288,8 @@ public class AssistantThreadService(
                     facts,
                     x.PlanId.HasValue && proposals.TryGetValue(x.PlanId.Value, out var shown) && shown == x.Id))
             ],
-            ActiveRun = running == null ? null : Run(running, null),
+            // Остановленный, но ещё не дописанный ход клиенту уже не «идёт»: плашки у него нет
+            ActiveRun = running is { Status: AssistantRunStatus.Running } ? Run(running, null) : null,
             // Страница набралась целиком — значит, выше, скорее всего, есть ещё
             NextCursor = messages.Length == size ? messages[0].Id : null
         };
@@ -330,7 +346,7 @@ public class AssistantThreadService(
                     Step = x.Step,
                     Kind = x.Kind,
                     ToolName = x.ToolName,
-                    Summary = TraceSummary.Build(x.Kind, x.ToolName, x.Input),
+                    Summary = trace.Build(x.Kind, x.ToolName, x.Input),
                     DurationMs = x.DurationMs,
                     Error = x.Error
                 })
@@ -346,8 +362,17 @@ public class AssistantThreadService(
     /// </summary>
     public async Task Clear(Guid userId, Guid workspaceId, CancellationToken ct)
     {
+        // Ход, который ещё идёт или дописывает конец после «Остановить», допишет его уже
+        // после очистки: пометка — до стирания, и по ней он не положит в пустую ленту
+        // ни сообщения, ни плана, а свою трассу унесёт сам (AssistantRunService.Finish)
         var running = await Running(userId, workspaceId, ct);
-        if (running != null) await Stop(running.Id, userId, workspaceId, ct);
+        if (running != null)
+        {
+            await context.AssistantRuns
+                .Where(x => x.Id == running.Id)
+                .ExecuteUpdateAsync(x => x.SetProperty(r => r.Cleared, true), ct);
+            await Stop(running.Id, userId, workspaceId, ct);
+        }
 
         // Трасса — та же переписка в служебном виде: что ушло в модель, дословно (13.1)
         var runs = context.AssistantRuns
@@ -478,11 +503,16 @@ public class AssistantThreadService(
         return string.Join(", ", names);
     }
 
+    /// <summary>
+    /// Живой ход треда — не законченный (<c>FinishedAtUtc</c> пуст), а не только <c>Running</c>:
+    /// остановленный ход ещё дописывает свой конец, и новая реплика ждёт его, а не заводит
+    /// второй ход рядом (раздел 3). Ровно это держит и индекс <c>ix_assistant_runs_running</c>
+    /// </summary>
     private async Task<AssistantRun?> Running(Guid userId, Guid workspaceId, CancellationToken ct) =>
         await context.AssistantRuns
             .Where(x => x.UserId == userId
                         && x.WorkspaceId == workspaceId
-                        && x.Status == AssistantRunStatus.Running)
+                        && x.FinishedAtUtc == null)
             .OrderByDescending(x => x.StartedAtUtc)
             .FirstOrDefaultAsync(ct);
 

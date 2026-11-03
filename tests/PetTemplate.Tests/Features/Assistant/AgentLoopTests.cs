@@ -396,8 +396,8 @@ public class AgentLoopTests
         // Assert
         var sent = chat.Asked.Single();
         Assert.Equal(ChatRole.System, sent[0].Role);
-        Assert.Contains("Котики и Собачки", sent[0].Text);
-        Assert.Equal("как пригласить коллегу?", sent[1].Text);
+        Assert.Contains("Котики и Собачки", sent[1].Text);
+        Assert.Equal("как пригласить коллегу?", sent[2].Text);
     }
 
     /// <summary>
@@ -427,4 +427,32 @@ public class AgentLoopTests
             .OfType<FunctionResultContent>()
             .Select(x => x.Result?.ToString() ?? string.Empty)
             .ToList();
+
+    /// <summary>
+    /// Автора убрали из пространства, пока ход ждал очереди: модель не зовётся, ход
+    /// кончается строкой в ленте (раздел 9)
+    /// </summary>
+    [Fact]
+    public async Task RemovedMemberRunDoesNotAskModel()
+    {
+        // Arrange
+        var world = await AssistantWorld.Build("Рога и Копыта");
+        world.Message(AssistantMessageRole.User, "найди заметки");
+        var run = world.StartRun();
+        await world.Save();
+        await world.Db.UserInPermissions.Where(x => x.UserId == world.Author)
+            .ExecuteDeleteAsync(CancellationToken.None);
+        var chat = new FakeChatClient().Says("Нашёл.");
+
+        // Act
+        await world.Runner(chat).Execute(run.Id, null, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, chat.Calls);
+        var finished = await world.NewContext().AssistantRuns.SingleAsync(x => x.Id == run.Id, CancellationToken.None);
+        Assert.Equal(AssistantRunStatus.Done, finished.Status);
+        var answer = await world.NewContext().AssistantMessages
+            .SingleAsync(x => x.RunId == run.Id && x.Role == AssistantMessageRole.Assistant, CancellationToken.None);
+        Assert.Equal(AssistantTexts.NotAMember, answer.Content);
+    }
 }

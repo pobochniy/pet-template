@@ -57,7 +57,7 @@ describe('ExternalButtonsComponent', () => {
 
   it('should start the platform with the purpose and the return address', async () => {
     await render(() => {}, 'recover');
-    const start = spyOn(TestBed.inject(ExternalLoginService), 'start').and.resolveTo();
+    const start = vi.spyOn(TestBed.inject(ExternalLoginService), 'start').mockResolvedValue(undefined);
 
     el.querySelector<HTMLButtonElement>('#login-vk')!.click();
     await fixture.whenStable();
@@ -68,13 +68,13 @@ describe('ExternalButtonsComponent', () => {
   /** Окно Telegram заблокировано — кнопки снова живые, под ними отказ */
   it('should report a blocked sign-in window', async () => {
     await render();
-    spyOn(TestBed.inject(ExternalLoginService), 'openPopup').and.returnValue(null);
+    vi.spyOn(TestBed.inject(ExternalLoginService), 'openPopup').mockReturnValue(null);
 
     el.querySelector<HTMLButtonElement>('#login-telegram')!.click();
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(el.querySelector('#external-start-failed')).not.toBeNull();
-    expect(el.querySelector<HTMLButtonElement>('#login-telegram')!.disabled).toBeFalse();
+    expect(el.querySelector<HTMLButtonElement>('#login-telegram')!.disabled).toBe(false);
   });
 });

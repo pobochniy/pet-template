@@ -70,7 +70,7 @@
       <!-- Пароль — свой вызов, вне общей формы (8.1) -->
       <div class="list-group-item py-3">
         <profile-password [hasPassword]="current.hasPassword"
-                          [canSetWithoutCurrent]="current.canSetPasswordWithoutCurrent ?? false"
+                          [canSetWithoutCurrent]="current.canSetPasswordWithoutCurrent"
                           (changed)="reload()"></profile-password>
       </div>
 

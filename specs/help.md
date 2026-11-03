@@ -262,8 +262,7 @@ Skill не коммитит сам.
 - **Эмбеддер лежит или не настроен** — ищет одна ключевая половина, отказ пишется
   в лог предупреждением; вектор запроса ждём 5 секунд. Ровно как у поиска разделов.
   Лёг он во время сборки индекса — разделы без вектора ищутся только по словам, пока
-  индекс не соберут заново: при следующем выпуске справки или рестарте API
-  (`tech-debt/help-vectors-retry.md`).
+  опрос не соберёт тот же выпуск заново (6.4).
 
 Запрос нормализуется как у поиска разделов (`HybridSearch.Normalize`: по краям и до
 200 символов, пустой — пустая выдача). Выдача — **до трёх разделов**, суммарно не больше
@@ -294,12 +293,18 @@ API к GitHub не ходит. Справку ему приносит выкат
   справка. Сверка карты (5.2) здесь не идёт — она про полноту, а не про безопасность.
 - **Ручной запуск** (`workflow_dispatch`) — для правки формулировки без выкатки API
   и для отката.
-- **`dapi` монтирует `~/pettemplate-help` только на чтение** в `/app/help`
-  (`HelpOptions.Path` — `/app/help/current`). Фоновый `HelpIndexWorker` первым проходом
-  на старте и дальше раз в `HelpOptions.PollInterval` (минута) читает
+- **`dapi` монтирует `~/pettemplate-help` только на чтение** в `/app/help` (`-v` в
+  `IaC/run-api.sh`, `HelpOptions.Path` — `/app/help/current`). Фоновый `HelpIndexWorker`
+  первым проходом на старте и дальше раз в `HelpOptions.PollInterval` (минута) читает
   `current/manifest.json`; коммит сменился → строит новый индекс рядом со старым
   и подменяет одной ссылкой. Пока строится — отвечает прежний; сборка упала — прежний
-  и остаётся, ошибка в лог, следующий проход пробует снова. Опрос, а не
+  и остаётся, ошибка в лог, следующий проход пробует снова.
+- **Векторов не хватает — тот же выпуск пересобирается.** Эмбеддер лежал при сборке (после
+  перезагрузки машины контейнеры поднялись разом, и модель ещё грузится) — разделы встают
+  без векторов. Пока эмбеддер настроен, а векторов не хватает, опрос собирает тот же коммит
+  заново — через `HelpOptions.VectorRetryDelay` (2 минуты), и каждая неудача удваивает паузу
+  до `VectorRetryMaxDelay` (час): долго лежащий эмбеддер не держит каждый опрос на таймаутах.
+  Готовые векторы лежат в кэше (6.1) — повтор считает только недостающие. Опрос, а не
   `FileSystemWatcher`: события файловой системы через том докера и замену символической
   ссылки приходят ненадёжно.
 - **Каталога или манифеста нет** (новая VM, первый запуск, разработка на своей машине) —
@@ -308,15 +313,31 @@ API к GitHub не ходит. Справку ему приносит выкат
   только тегом образа. Откатили через фичу — переключить `current` на прежний
   `releases/<sha>` руками (`IaC/DEPLOYMENT.md`, «Справка»).
 
-### 6.5 Кто ищет
+### 6.5 Кто ищет и кто читает
 
 Поиск — `HelpSearch.Search`: до трёх разделов (статья, раздел, текст без «Как спрашивают»,
-страница) и коммит справки. Своего API у справки нет: ищет по ней инструмент ассистента
+страница) и коммит справки. API поиска у справки нет: ищет по ней инструмент ассистента
 `search_help` (`specs/assistant.md`, 7) — ассистент отвечает только по найденному, а коммит
 справки едет в ответе инструмента, чтобы в разборе диалога было видно, по какой версии он
 отвечал. Индекса нет — инструмент отвечает «справка недоступна». Тот же индекс, что сейчас
-в памяти, берёт сверка модели в админке (`HelpSearch.Use`, `admin.md`, 15.3). Показа справки
-человеку на сайте нет (`tech-debt/help-client.md`).
+в памяти, берёт сверка модели в админке (`HelpSearch.Use`, `admin.md`, 15.3).
+
+Человеку статьи отдаёт `HelpController` — из того же выпуска в памяти, **анонимно**: в справке
+только то, что можно выложить на публичную страницу помощи (4.1), и читать её нужно и до входа.
+
+| Метод | Ответ |
+|---|---|
+| `GET api/Help` | `[{ slug, title }]` — статьи выпуска по имени файла; выпуска нет — `[]` |
+| `GET api/Help/{slug}` | `{ slug, title, markdown }` — разделы `## Заголовок` с телом, без фронтматтера и строк «Как спрашивают»; нет такой статьи — `404` |
+
+`slug` — имя файла статьи без `.md`.
+
+Человеку на сайте справку показывает ленивый раздел клиента `/help` (пункт «Справка» в боковом
+меню, всем, и гостю): список статей — `GET api/Help` (`[{ slug, title }]`), статья —
+`GET api/Help/{slug}` (`{ slug, title, markdown }`, неизвестная — `404`). Тело рисует тот же
+отрисовщик markdown, что ответы ассистента (`shared/markdown`): разделы `##`, списки, жирный,
+ссылки только на свои страницы. Фронтматтер и строки «Как спрашивают:» клиент вырезает сам,
+если сервер их оставил (`help/help-text.ts`): они для поиска, не для человека.
 
 ### 6.6 Справка на своей машине
 
@@ -375,13 +396,15 @@ current              относительная ссылка на releases/<sha>
 | Разбор статьи | `HelpArticle`, `HelpSection`, `HelpArticleParser` (`src/PetTemplate.Help`) |
 | Линтер и карта | `tools/HelpCheck`: `Program`, `HelpLinter`, `HelpMap`, `SpecOutline`, `ClientRoutes`, `Repository` |
 | Индекс и поиск | `HelpIndex`, `HelpIndexBuilder`, `HelpTerms`, `HelpManifest`, `HelpSearch` (`src/PetTemplate.Services/Help`); регистрация — `AddSearch` в `ServicesExtensions` |
+| Чтение статей на сайте | `HelpController` (`src/PetTemplate.Api/Controllers`), `HelpArticleSummaryDto`, `HelpArticleDto` (`src/PetTemplate.Shared/Dto/Help`), `HelpPage` в `HelpIndex` |
 | Опрос выпуска | `HelpIndexWorker` (`src/PetTemplate.Api/Workers`), настройки — `HelpOptions` (`src/PetTemplate.Shared/Options`), секция в `appsettings.json` |
 | Инструмент ассистента | `AssistantTools.SearchHelp` (`src/PetTemplate.Services/Assistant/Tools`) |
 | Метрики | `AssistantMetrics.HelpSearch`, `HelpVersion` (`src/PetTemplate.Services/Assistant`); дашборд `IaC/grafana/dashboards/assistant.json`, строка «Справка» |
 | Проверка в ПР | `.github/workflows/help-check.yml` |
-| Публикация | `.github/workflows/publish-help.yml`; зовёт его `publish-api.yml` (job `publish-help`), монтирует каталог — `publish-api.yml` и `rollback-api.yml`; руками — `IaC/DEPLOYMENT.md`, раздел 12 |
+| Публикация | `.github/workflows/publish-help.yml`; зовёт его `publish-api.yml` (job `publish-help`), монтирует каталог — `IaC/run-api.sh` (его зовут `publish-api.yml` и `rollback-api.yml`); руками — `IaC/DEPLOYMENT.md`, раздел 12 |
 | Как писать | `.claude/skills/help-sync/SKILL.md` |
-| Тесты | `HelpLintTests`, `HelpMapTests`, `HelpIndexTests` (`tests/PetTemplate.Tests/Features/Help`); метрики — `AssistantMetricsTests.HelpSearchIsMeasured` |
+| Справка на сайте | клиент: `src/PetTemplate.Web/web/src/app/help` (маршрут `/help`, словарь `help`), отрисовщик — `shared/markdown`; спеки — `help/help.component.spec.ts`, `shared/markdown/markdown.spec.ts` |
+| Тесты | `HelpLintTests`, `HelpMapTests`, `HelpIndexTests`, `HelpApiTests` (`tests/PetTemplate.Tests/Features/Help`); метрики — `AssistantMetricsTests.HelpSearchIsMeasured` |
 
 Команды — из корня репозитория:
 

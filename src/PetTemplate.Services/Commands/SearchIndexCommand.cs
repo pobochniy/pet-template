@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PetTemplate.Shared.Enums;
 
 namespace PetTemplate.Services.Commands;
@@ -15,11 +14,11 @@ namespace PetTemplate.Services.Commands;
 /// завести и числовой, а команде важно только донести его до загрузчика
 /// (<c>ISearchSource.Load</c>)
 /// </summary>
-public class SearchIndexCommand
+public class SearchIndexCommand : ICommand
 {
+    public static string QueueName => "search-index";
+
     public SearchEntityType EntityType { get; set; }
 
     public string EntityId { get; set; } = string.Empty;
-
-    public override string ToString() => JsonSerializer.Serialize(this);
 }

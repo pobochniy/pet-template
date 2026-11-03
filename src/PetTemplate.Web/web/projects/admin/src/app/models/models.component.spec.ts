@@ -267,7 +267,7 @@ describe('ModelsComponent', () => {
     element.querySelector('form')!.dispatchEvent(new Event('submit'));
     const req = httpMock.expectOne('/api/Admin/Models/flash');
     expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual(jasmine.objectContaining({ key: 'flash', costIn: 0.3, costOut: 0.6, version: 7 }));
+    expect(req.request.body).toEqual(expect.objectContaining({ key: 'flash', costIn: 0.3, costOut: 0.6, version: 7 }));
     req.flush(null);
     await settle(fixture);
     httpMock.expectOne('/api/Admin/Models').flush(catalog([model('flash', 1, { costOut: 0.6, version: 8 })]));
@@ -284,9 +284,9 @@ describe('ModelsComponent', () => {
     await settle(fixture);
     await settle(fixture);
 
-    expect(element.querySelector<HTMLInputElement>('#provider')!.disabled).toBeTrue();
-    expect(element.querySelector<HTMLInputElement>('#key')!.disabled).toBeTrue();
-    expect(element.querySelector<HTMLInputElement>('#displayName')!.disabled).toBeFalse();
+    expect(element.querySelector<HTMLInputElement>('#provider')!.disabled).toBe(true);
+    expect(element.querySelector<HTMLInputElement>('#key')!.disabled).toBe(true);
+    expect(element.querySelector<HTMLInputElement>('#displayName')!.disabled).toBe(false);
     expect(element.querySelector('.used')!.textContent).toContain('заведите новую модель');
   });
 
@@ -307,7 +307,7 @@ describe('ModelsComponent', () => {
     expect(element.querySelector('.alert-danger')!.textContent).toContain('откройте справочник заново');
     expect(element.querySelector('.model-row')!.textContent).toContain('Чужая правка');
     expect(element.querySelector('form')).not.toBeNull();
-    expect(button(element, 'Сохранить')!.disabled).toBeFalse();
+    expect(button(element, 'Сохранить')!.disabled).toBe(false);
   });
 
   it('should refuse a negative price before asking the server', async () => {
@@ -340,7 +340,7 @@ describe('ModelsComponent', () => {
     await settle(fixture);
 
     expect(element.querySelector('.check-row .check-state')!.textContent).toContain('идёт · 0 из 30');
-    expect(button(element, 'Сверить')!.disabled).toBeTrue();
+    expect(button(element, 'Сверить')!.disabled).toBe(true);
   });
 
   it('should not offer a check without the models role', async () => {

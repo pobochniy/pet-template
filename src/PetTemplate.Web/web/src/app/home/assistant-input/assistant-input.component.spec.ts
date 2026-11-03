@@ -36,7 +36,7 @@ describe('HomeAssistantInputComponent', () => {
     workspace = TestBed.inject(WorkspaceContextService);
     workspace.setCurrentWorkspaceId('ws-ivanovy');
     router = TestBed.inject(Router);
-    spyOn(router, 'navigate').and.resolveTo(true);
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(HomeAssistantInputComponent);
     component = fixture.componentInstance;
@@ -75,7 +75,7 @@ describe('HomeAssistantInputComponent', () => {
   });
 
   it('should keep «Send» disabled on an empty line', () => {
-    expect(sendButton().disabled).toBeTrue();
+    expect(sendButton().disabled).toBe(true);
 
     component.open();
 

@@ -8,11 +8,13 @@ import { AccountApiService } from '../../shared/api/account-api.service';
 import { AccountApiServiceMock } from '../../shared/api/account-api.service.mock';
 import { TokenService } from '../../shared/api/token.service';
 import { EXTERNAL_LOGIN_STORAGE_KEY, PendingExternalLogin } from '../../shared/core/external-login.service';
-import { SESSION_USER_KEY, UserService } from '../../shared/core/user.service';
+import { UserService } from '../../shared/core/user.service';
+import { SESSION_KEY } from '../../shared/core/session-store';
 import { MergeStateService } from '../../shared/core/merge-state.service';
 import { I18nService } from '../../shared/i18n/i18n.service';
 import { loadAllScopes } from '../../shared/i18n/i18n.testing';
 import { ExternalProviderEnum } from '../../shared/enums/external-provider.enum';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('ExternalCallbackComponent', () => {
   let api: ExternalLoginApiServiceMock;
@@ -38,16 +40,15 @@ describe('ExternalCallbackComponent', () => {
     });
     await loadAllScopes(TestBed.inject(I18nService));
     const user = TestBed.inject(UserService);
-    TestBed.inject(TokenService).Token = '';
     if (signedIn) {
-      user.setProfile({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true });
+      user.setProfile(profileDto({ id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true }));
     } else {
       user.clearProfile();
     }
     api = TestBed.inject(ExternalLoginApiServiceMock);
     account = TestBed.inject(AccountApiServiceMock);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     arrange();
 
     const fixture = TestBed.createComponent(ExternalCallbackComponent);
@@ -67,15 +68,14 @@ describe('ExternalCallbackComponent', () => {
   afterEach(() => {
     sessionStorage.removeItem(EXTERNAL_LOGIN_STORAGE_KEY);
     // Сессию вход кладёт в `localStorage` — следующей спеке она не достаётся
-    localStorage.removeItem(SESSION_USER_KEY);
-    localStorage.removeItem('token');
+    localStorage.removeItem(SESSION_KEY);
   });
 
   it('should exchange the VK code with the remembered verifier', async () => {
     remember({ provider: 'vk' });
     await render({ code: 'good-code', state: 'st-1', device_id: 'dev-1' }, 'vk', false, () => api.known = true);
 
-    expect(api.lastRequest).toEqual(jasmine.objectContaining({ code: 'good-code', verifier: 'ver-1', deviceId: 'dev-1' }));
+    expect(api.lastRequest).toEqual(expect.objectContaining({ code: 'good-code', verifier: 'ver-1', deviceId: 'dev-1' }));
     expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
   });
 
@@ -83,7 +83,7 @@ describe('ExternalCallbackComponent', () => {
     remember({ idToken: 'good-code' });
     await render({ state: 'st-1' }, 'telegram', false, () => api.known = true);
 
-    expect(api.lastRequest).toEqual(jasmine.objectContaining({ code: 'good-code', state: 'st-1', verifier: null }));
+    expect(api.lastRequest).toEqual(expect.objectContaining({ code: 'good-code', state: 'st-1', verifier: null }));
     expect(TestBed.inject(TokenService).Token).toBe('external-token');
   });
 
@@ -108,7 +108,7 @@ describe('ExternalCallbackComponent', () => {
 
     const el = await render({ state: 'st-1' });
 
-    expect(api.lastRequest?.existingOnly).toBeTrue();
+    expect(api.lastRequest?.existingOnly).toBe(true);
     expect(el.querySelector('#external-error')?.textContent).toContain('не привязан ни к одному аккаунту');
     expect(el.querySelector('#external-back')?.getAttribute('href')).toBe('/auth/login');
   });
@@ -146,8 +146,8 @@ describe('ExternalCallbackComponent', () => {
 
     await render({ code: 'good-code', state: 'st-1', device_id: 'dev-1' }, 'vk', true);
 
-    expect(account.account.vkLinked).toBeTrue();
-    expect(account.linkedProof).toEqual(jasmine.objectContaining({ provider: ExternalProviderEnum.Vk, code: 'good-code' }));
+    expect(account.account.vkLinked).toBe(true);
+    expect(account.linkedProof).toEqual(expect.objectContaining({ provider: ExternalProviderEnum.Vk, code: 'good-code' }));
     expect(api.lastRequest).toBeNull();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/profile/edit', { replaceUrl: true });
   });
@@ -159,7 +159,7 @@ describe('ExternalCallbackComponent', () => {
     await render({ code: 'good-code', state: 'st-1', device_id: 'dev-1' }, 'vk', true,
       () => account.takenExternal.add(ExternalProviderEnum.Vk));
 
-    expect(account.account.vkLinked).toBeFalse();
+    expect(account.account.vkLinked).toBe(false);
     expect(TestBed.inject(MergeStateService).preview()?.ticket).toBe('ticket-1');
     expect(router.navigateByUrl).toHaveBeenCalledWith('/profile/merge', { replaceUrl: true });
   });

@@ -1,29 +1,38 @@
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
-import { rolesGuard } from './roles.guard';
+import { ActivatedRouteSnapshot, RouterStateSnapshot, UrlTree, provideRouter } from '@angular/router';
+import { requireRoles, rolesGuard } from './roles.guard';
 import { PermissionsService } from './shared/services/permissions.service';
 import { PermissionEnum } from './shared/enums/permission.enum';
 
 describe('rolesGuard', () => {
-  function canActivate(allowedRoles: PermissionEnum[] | undefined, permissions: PermissionEnum[]): boolean {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  function canActivate(allowedRoles: PermissionEnum[] | undefined, permissions: PermissionEnum[]): boolean | string {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
     TestBed.inject(PermissionsService).initPermissions(permissions);
 
-    const route = { data: allowedRoles ? { allowedRoles } : {} } as unknown as ActivatedRouteSnapshot;
+    const data = allowedRoles ? requireRoles(allowedRoles).data : {};
+    const route = { data } as unknown as ActivatedRouteSnapshot;
 
-    return TestBed.runInInjectionContext(() => rolesGuard(route, {} as RouterStateSnapshot)) as boolean;
+    const result = TestBed.runInInjectionContext(() => rolesGuard(route, {} as RouterStateSnapshot));
+
+    return result instanceof UrlTree ? result.toString() : (result as boolean);
   }
 
   it('should let in with one of the permissions', () => {
-    expect(canActivate([PermissionEnum.PermissionManagement], [PermissionEnum.PermissionManagement])).toBeTrue();
+    expect(canActivate([PermissionEnum.PermissionManagement], [PermissionEnum.PermissionManagement])).toBe(true);
   });
 
-  it('should not let in without the permission', () => {
-    expect(canActivate([PermissionEnum.PermissionManagement], [])).toBeFalse();
+  // Отказ — на главную, а не `false`: перепроверка после смены пространства идёт
+  // на уже открытом экране, и `false` оставил бы человека там (`recheckRouteAccess`)
+  it('should send home without the permission', () => {
+    expect(canActivate([PermissionEnum.PermissionManagement], [])).toBe('/');
   });
 
   it('should close a route without a permission list', () => {
-    expect(canActivate(undefined, [PermissionEnum.PermissionManagement])).toBeFalse();
+    expect(canActivate(undefined, [PermissionEnum.PermissionManagement])).toBe('/');
+  });
+
+  it('should ask to re-run the guard on every check of the same address', () => {
+    expect(requireRoles([PermissionEnum.WorkspaceMemberRead]).runGuardsAndResolvers).toBe('always');
   });
 });

@@ -136,6 +136,6 @@ describe('AccountJournalComponent', () => {
     await settle(fixture);
 
     expect(element.querySelectorAll('.entry-row').length).toBe(2);
-    expect(Array.from(element.querySelectorAll('button')).some(x => x.textContent!.includes('Показать ещё'))).toBeFalse();
+    expect(Array.from(element.querySelectorAll('button')).some(x => x.textContent!.includes('Показать ещё'))).toBe(false);
   });
 });

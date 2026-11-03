@@ -8,7 +8,7 @@ namespace PetTemplate.Shared.Exceptions;
 /// промаха <c>Dictionary[key]</c>, и ловить его глобально значит выдавать 404
 /// вместо 500 на настоящий баг
 /// </summary>
-public class NotFoundException(ErrorMessage message) : Exception(message.Text), ICodedError
+public class NotFoundException(ErrorMessage message) : DomainException(message.Text), ICodedError
 {
     public string Code { get; } = message.Code;
 

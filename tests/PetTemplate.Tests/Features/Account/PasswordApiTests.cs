@@ -129,7 +129,7 @@ public class PasswordApiTests
     {
         var (token, oleg) = new UserBuilder("Oleg").Please();
         var (client, _) = await Given.ApiClient(x => x.Profiles.Add(oleg), token);
-        for (var i = 0; i < AdminLoginLimiter.ProductAttemptsPerUser; i++)
+        for (var i = 0; i < LoginLimiter.ProductAttemptsPerUser; i++)
         {
             await client.PostAsJsonAsync("/api/Account/ChangePassword", Change($"Ne-tot-parol-{i}"));
         }

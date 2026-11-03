@@ -12,7 +12,7 @@ describe('onViewTransitionCreated', () => {
   }
 
   function transition() {
-    return { skipTransition: jasmine.createSpy('skipTransition') };
+    return { skipTransition: vi.fn() };
   }
 
   function run(from: ActivatedRouteSnapshot, to: ActivatedRouteSnapshot) {
@@ -55,18 +55,18 @@ describe('isAbortedViewTransition', () => {
       'Transition was aborted because of invalid state. Viewport size changed',
       'InvalidStateError');
 
-    expect(isAbortedViewTransition(error)).toBeTrue();
+    expect(isAbortedViewTransition(error)).toBe(true);
   });
 
   /** Тем же именем отвечают и настоящие поломки — их глушить нельзя */
   it('should not match other InvalidStateError', () => {
     expect(isAbortedViewTransition(new DOMException('Document is not active', 'InvalidStateError')))
-      .toBeFalse();
+      .toBe(false);
   });
 
   it('should not match ordinary startup errors', () => {
-    expect(isAbortedViewTransition(new Error('NG0200: Circular dependency'))).toBeFalse();
-    expect(isAbortedViewTransition('string')).toBeFalse();
-    expect(isAbortedViewTransition(null)).toBeFalse();
+    expect(isAbortedViewTransition(new Error('NG0200: Circular dependency'))).toBe(false);
+    expect(isAbortedViewTransition('string')).toBe(false);
+    expect(isAbortedViewTransition(null)).toBe(false);
   });
 });

@@ -5,6 +5,10 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <!-- xUnit1051 «передайте TestContext.Current.CancellationToken» — ~900 вызовов HTTP-клиента
+             и EF без токена. Отменять отдельный тест посреди запроса незачем, а токен в каждом
+             вызове — шум, за которым не видно настоящих предупреждений -->
+        <NoWarn>$(NoWarn);xUnit1051</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

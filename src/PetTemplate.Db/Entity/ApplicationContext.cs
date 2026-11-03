@@ -1,8 +1,9 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace PetTemplate.Db.Entity;
 
-public class ApplicationContext : DbContext
+public class ApplicationContext : DbContext, IDataProtectionKeyContext
 {
     public DbSet<User> Users { get; set; }
     public DbSet<Profile> Profiles { get; set; }
@@ -30,6 +31,12 @@ public class ApplicationContext : DbContext
     public DbSet<AdminAccessLog> AdminAccessLog { get; set; }
     public DbSet<DialogEvaluation> DialogEvaluations { get; set; }
 
+    /// <summary>
+    /// Кольцо ключей Data Protection (спец. infrastructure, 3.1): едет с базой и попадает
+    /// в <c>pg_dump</c>, а не живёт в контейнере, который выкатка пересоздаёт
+    /// </summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+
     // Опции — свои, типизированные: с общими DbContextOptions второй контекст в том же
     // DI (тестовый контекст поиска, Features/Search) подсунул бы ему свои
     public ApplicationContext(DbContextOptions<ApplicationContext> options)
@@ -43,29 +50,10 @@ public class ApplicationContext : DbContext
         // это даёт тип citext. Расширение ставит миграция
         builder.HasPostgresExtension("citext");
 
-        builder.ApplyConfiguration(new UserConfiguration());
-        builder.ApplyConfiguration(new ProfileConfiguration());
-        builder.ApplyConfiguration(new UserInPermissionConfiguration());
-        builder.ApplyConfiguration(new UserInAdminRoleConfiguration());
-        builder.ApplyConfiguration(new WorkspaceInvitationConfiguration());
-        builder.ApplyConfiguration(new WorkspaceInvitationPermissionConfiguration());
-        builder.ApplyConfiguration(new AccountTokenConfiguration());
-        builder.ApplyConfiguration(new AccountMergeConfiguration());
-        builder.ApplyConfiguration(new AccountAdminActionConfiguration());
-        builder.ApplyConfiguration(new AdminInvitationConfiguration());
-        builder.ApplyConfiguration(new LocalQueueConfiguration());
-        builder.ApplyConfiguration(new AssistantMessageConfiguration());
-        builder.ApplyConfiguration(new AssistantPlanConfiguration());
-        builder.ApplyConfiguration(new AssistantRunConfiguration());
-        builder.ApplyConfiguration(new AiModelConfiguration());
-        builder.ApplyConfiguration(new AssistantTraceStepConfiguration());
-        builder.ApplyConfiguration(new AssistantFactConfiguration());
-        builder.ApplyConfiguration(new RunSpendConfiguration());
-        builder.ApplyConfiguration(new ServiceSpendConfiguration());
-        builder.ApplyConfiguration(new ProviderLedgerEntryConfiguration());
-        builder.ApplyConfiguration(new WorkspaceAssistantLimitConfiguration());
-        builder.ApplyConfiguration(new AdminJobConfiguration());
-        builder.ApplyConfiguration(new AdminAccessLogConfiguration());
-        builder.ApplyConfiguration(new DialogEvaluationConfiguration());
+        // Все IEntityTypeConfiguration этой сборки: новая сущность подхватывается сама, своей
+        // строки здесь не нужно. Порядок применения на модель не влияет: связь с двух сторон
+        // нигде не настроена по-разному. Так и держим — иначе победит конфигурация,
+        // которая окажется последней в сборке
+        builder.ApplyConfigurationsFromAssembly(typeof(ApplicationContext).Assembly);
     }
 }

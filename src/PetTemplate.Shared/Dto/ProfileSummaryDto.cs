@@ -3,8 +3,7 @@ namespace PetTemplate.Shared.Dto;
 /// <summary>
 /// Человек в списках — участники пространства, выбор участника в разделах проекта.
 /// Сущность <c>Profile</c> наружу не едет: в ней почта, телефон и основное пространство,
-/// а контакты — только в своём профиле (спец. authorization, 5;
-/// <c>tech-debt/profile-contacts.md</c>)
+/// а контакты — только в своём профиле (спец. authorization, 5)
 /// </summary>
 public class ProfileSummaryDto
 {

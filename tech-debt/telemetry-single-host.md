@@ -3,7 +3,7 @@
 Всё живёт на одной виртуалке и в одной докер-сети `nginx-proxy-man`: API, коллектор
 OTLP, Prometheus, Tempo и Grafana (`IaC/DEPLOYMENT.md`, «Телеметрия: что показывает Grafana»).
 API шлёт в коллектор по имени контейнера
-(`otelcollectorcontainer:4317` в `publish-api.yml` и `rollback-api.yml`), коллектор — в Prometheus
+(`otelcollectorcontainer:4317` в `IaC/run-api.sh`), коллектор — в Prometheus
 и Tempo тоже по именам. Так же, по именам, Prometheus сам забирает метрики у экспортёров
 (`postgres-exporter`, `node-exporter`, `cadvisor`; с поиском — и у Qdrant). Портов наружу нет, и своей
 аутентификации ни у кого из них нет: защищает только то, что снаружи до них не дотянуться.

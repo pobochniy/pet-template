@@ -10,7 +10,7 @@ namespace PetTemplate.Services.Services;
 /// <summary>
 /// Состав пространства и права участников (спец. authorization, 5)
 /// </summary>
-public class UsersService(ApplicationContext context)
+public class UsersService(ApplicationContext context, SessionGuard sessions)
 {
     /// <summary>
     /// Участники пространства: те, у кого есть права в нём. Списки участников в разделах
@@ -132,6 +132,10 @@ public class UsersService(ApplicationContext context)
 
         // Откат писать не нужно: незакоммиченную транзакцию отменит `await using`
         await transaction.CommitAsync(ct);
+
+        // Права проверяются по отметке SessionGuard — после коммита сбрасываем её,
+        // и новый набор действует со следующего запроса (спец. authorization, 2.3)
+        sessions.Forget(userId);
     }
 
     /// <summary>

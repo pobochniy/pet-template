@@ -9,6 +9,12 @@ namespace PetTemplate.Services.Help;
 public record HelpHit(string Article, string Section, string Text, string? Page);
 
 /// <summary>
+/// Статья для чтения человеком (спец. help, 6.5): имя файла, название и разделы markdown-текстом —
+/// без фронтматтера и без строк «Как спрашивают», они только для поиска
+/// </summary>
+public record HelpPage(string Slug, string Title, string Markdown);
+
+/// <summary>
 /// Чанк индекса: раздел целиком (6.2) или, если раздел всё-таки длиннее границы,
 /// его кусок из <see cref="SearchChunker"/>. Куски одного раздела делят
 /// <see cref="SectionId"/>, и выдача схлопывается по разделу
@@ -45,11 +51,13 @@ public class HelpIndex
     private readonly Dictionary<string, int> _documentFrequency = new(StringComparer.Ordinal);
     private readonly double _averageLength;
 
-    public HelpIndex(string commit, IReadOnlyList<HelpChunk> chunks, int recomputedVectors)
+    public HelpIndex(string commit, IReadOnlyList<HelpChunk> chunks, int recomputedVectors,
+        IReadOnlyList<HelpPage>? pages = null)
     {
         Commit = commit;
         _chunks = chunks;
         RecomputedVectors = recomputedVectors;
+        Pages = pages ?? [];
 
         foreach (var term in chunks.SelectMany(x => x.Terms.Distinct()))
             _documentFrequency[term] = _documentFrequency.GetValueOrDefault(term) + 1;
@@ -66,6 +74,12 @@ public class HelpIndex
     public int RecomputedVectors { get; }
 
     public IReadOnlyList<HelpChunk> Chunks => _chunks;
+
+    /// <summary>Статьи выпуска целиком — для страницы справки на сайте (6.5), по имени файла</summary>
+    public IReadOnlyList<HelpPage> Pages { get; }
+
+    /// <summary>Сколько чанков встало без вектора — эмбеддер лежал при сборке (6.4)</summary>
+    public int MissingVectors => _chunks.Count(x => x.Vector == null);
 
     /// <summary>
     /// Гибрид (6.3): BM25 и косинус, слияние по RRF тем же <see cref="HybridSearch.Ranked{TKey}"/>,

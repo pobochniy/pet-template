@@ -23,6 +23,29 @@ namespace PetTemplate.Db.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text")
+                        .HasColumnName("friendly_name");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text")
+                        .HasColumnName("xml");
+
+                    b.HasKey("Id")
+                        .HasName("pk_data_protection_keys");
+
+                    b.ToTable("data_protection_keys", (string)null);
+                });
+
             modelBuilder.Entity("PetTemplate.Db.Entity.AccountAdminAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -661,6 +684,10 @@ namespace PetTemplate.Db.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempts");
 
+                    b.Property<bool>("Cleared")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cleared");
+
                     b.Property<string>("CurrentActivity")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -734,7 +761,7 @@ namespace PetTemplate.Db.Migrations
                     b.HasIndex("UserId", "WorkspaceId")
                         .IsUnique()
                         .HasDatabaseName("ix_assistant_runs_running")
-                        .HasFilter("status = 0");
+                        .HasFilter("finished_at_utc IS NULL");
 
                     b.HasIndex("UserId", "WorkspaceId", "Status")
                         .HasDatabaseName("ix_assistant_runs_user_id_workspace_id_status");
@@ -1107,6 +1134,9 @@ namespace PetTemplate.Db.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_run_spend_run_id");
 
+                    b.HasIndex("UserId", "CreatedUtc")
+                        .HasDatabaseName("ix_run_spend_user_id_created_utc");
+
                     b.HasIndex("WorkspaceId", "CreatedUtc")
                         .HasDatabaseName("ix_run_spend_workspace_id_created_utc");
 
@@ -1181,6 +1211,9 @@ namespace PetTemplate.Db.Migrations
 
                     b.HasIndex("ModelId")
                         .HasDatabaseName("ix_service_spend_model_id");
+
+                    b.HasIndex("UserId", "CreatedUtc")
+                        .HasDatabaseName("ix_service_spend_user_id_created_utc");
 
                     b.HasIndex("WorkspaceId", "CreatedUtc")
                         .HasDatabaseName("ix_service_spend_workspace_id_created_utc");

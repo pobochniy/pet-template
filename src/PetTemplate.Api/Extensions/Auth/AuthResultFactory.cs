@@ -4,14 +4,14 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using PetTemplate.Api.Middlewares;
-using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Dto;
 
 namespace PetTemplate.Api.Extensions.Auth;
 
 /// <summary>
-/// Собирает ответ аутентификации: JWT с правами по пространствам плюс профиль
-/// (спец. authorization, 2.1). Живёт в слое API, потому что подписывающий ключ —
+/// Собирает ответ аутентификации: JWT плюс профиль и права по пространствам
+/// (спец. authorization, 2.1). Прав в токене нет: сервер берёт их из базы на каждом
+/// запросе (<c>SessionGuard</c>, 2.3), а клиенту они едут полем ответа. Живёт в слое API, потому что подписывающий ключ —
 /// настройка хоста (<see cref="JwtOptions"/>), а не бизнес-логика.
 ///
 /// Единственное место сборки сессии: пускать пользователя внутрь умеет не только вход —
@@ -54,16 +54,6 @@ public class AuthResultFactory(IOptions<JwtOptions> jwtOptions)
         if (via != null)
         {
             claims.AddRange(FreshLogin.Claims(via));
-        }
-
-        // По клейму на право: `{workspaceId}|{(int)permission}`. Глобальных ролей нет —
-        // права без пространства не бывает
-        foreach (var workspace in user.PermissionsByWorkspace)
-        {
-            foreach (var permission in workspace.Value)
-            {
-                claims.Add(new Claim(CustomClaimTypes.WorkspacePermission, $"{workspace.Key}|{(int)permission}"));
-            }
         }
 
         var keyBytes = Encoding.UTF8.GetBytes(_jwtOptions.SigningKey);

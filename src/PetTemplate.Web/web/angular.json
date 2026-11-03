@@ -59,6 +59,14 @@
                   "maximumError": "8kB"
                 }
               ],
+              // Без инлайна критических стилей: он вешает на <link> обработчик
+              // onload="this.media='all'", а CSP с `script-src 'self' 'sha256-…'` инлайн-обработчики
+              // не пускает (IaC/nginx/conf/nginx.conf, `npm run csp:hash`). Стили — обычным <link>
+              "optimization": {
+                "scripts": true,
+                "styles": { "minify": true, "inlineCritical": false },
+                "fonts": true
+              },
               "outputHashing": "all"
             },
             "development": {
@@ -94,29 +102,20 @@
           "builder": "@angular/build:extract-i18n"
         },
         "test": {
-          "builder": "@angular/build:karma",
+          // Vitest в jsdom, без браузера: стили, ассеты и прочее — из `build`
+          // (конфигурация `development`). Корень проекта — вся папка клиента,
+          // поэтому `include` назван: без него сюда попали бы и спеки админки
+          "builder": "@angular/build:unit-test",
           "options": {
+            "runner": "vitest",
             "tsConfig": "tsconfig.spec.json",
-            "assets": [
-              {
-                "glob": "**/*",
-                "input": "public"
-              }
+            "include": [
+              "src/**/*.spec.ts"
             ],
-            "styles": [
-              "src/bootstrap.scss",
-              "src/styles.css"
-            ],
-            "stylePreprocessorOptions": {
-              "includePaths": [
-                "node_modules"
-              ],
-              "sass": {
-                "silenceDeprecations": [
-                  "import"
-                ]
-              }
-            }
+            // Среда тестов (`src/test-env.ts`), русский язык и чистая сессия перед каждым тестом
+            "setupFiles": [
+              "src/test-setup.ts"
+            ]
           }
         }
       }
@@ -159,6 +158,13 @@
                   "maximumError": "600kB"
                 }
               ],
+              // Как у продукта: без onload-обработчика критических стилей — CSP админки
+              // `script-src 'self'` его не пустит (IaC/nginx/conf/nginx.conf)
+              "optimization": {
+                "scripts": true,
+                "styles": { "minify": true, "inlineCritical": false },
+                "fonts": true
+              },
               "outputHashing": "all"
             },
             "development": {
@@ -187,11 +193,14 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:karma",
+          // Как у продукта: Vitest в jsdom, остальное — из `build`
+          "builder": "@angular/build:unit-test",
           "options": {
+            "runner": "vitest",
             "tsConfig": "projects/admin/tsconfig.spec.json",
-            "styles": [
-              "node_modules/bootstrap/dist/css/bootstrap.min.css"
+            // Общая с продуктом среда тестов: шпионы, хранилище и прокрутка jsdom
+            "setupFiles": [
+              "src/test-env.ts"
             ]
           }
         }

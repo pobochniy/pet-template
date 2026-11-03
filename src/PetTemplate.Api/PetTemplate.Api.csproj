@@ -13,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Потолок и счёт записей лимитера (AdminLoginLimiter) — только для его тестов -->
+        <!-- Потолок и счёт записей лимитера (LoginLimiter) — только для его тестов -->
         <InternalsVisibleTo Include="PetTemplate.Tests" />
     </ItemGroup>
 

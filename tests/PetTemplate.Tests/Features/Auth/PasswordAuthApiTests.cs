@@ -330,7 +330,7 @@ public class PasswordAuthApiTests
     {
         var (_, oleg) = new UserBuilder("Oleg").Please();
         var (client, _) = await Given.ApiClient(x => x.Profiles.Add(oleg));
-        for (var i = 0; i < AdminLoginLimiter.ProductAttemptsPerUser; i++)
+        for (var i = 0; i < LoginLimiter.ProductAttemptsPerUser; i++)
         {
             await client.PostAsJsonAsync("/api/Auth/LogIn", new LoginDto { Login = "oleg", Password = "wrong-" + i });
         }
@@ -348,7 +348,7 @@ public class PasswordAuthApiTests
         var (_, oleg) = new UserBuilder("Oleg").Please();
         var (client, _) = await Given.ApiClient(x => x.Profiles.Add(oleg));
         var login = new LoginDto { Login = "Oleg", Password = UserBuilder.SuperAdminPassword };
-        for (var i = 0; i < AdminLoginLimiter.ProductAttemptsPerUser; i++)
+        for (var i = 0; i < LoginLimiter.ProductAttemptsPerUser; i++)
         {
             await (await client.PostAsJsonAsync("/api/Auth/LogIn", login)).ShouldBeSuccessful();
         }

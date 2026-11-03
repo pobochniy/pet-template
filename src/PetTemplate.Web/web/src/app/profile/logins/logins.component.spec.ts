@@ -12,6 +12,7 @@ import { loadAllScopes } from '../../shared/i18n/i18n.testing';
 import { ExternalLoginApiService } from '../../shared/api/external-login-api.service';
 import { ExternalLoginApiServiceMock } from '../../shared/api/external-login-api.service.mock';
 import { ExternalLoginService } from '../../shared/core/external-login.service';
+import { profileDto } from '../../shared/api/dto.mock';
 
 describe('ProfileLoginsComponent', () => {
   let fixture: ComponentFixture<ProfileLoginsComponent>;
@@ -33,10 +34,9 @@ describe('ProfileLoginsComponent', () => {
 
     api = TestBed.inject(AccountApiServiceMock);
     user = TestBed.inject(UserService);
-    TestBed.inject(TokenService).Token = '';
-    user.setProfile({
+    user.setProfile(profileDto({
       id: 'user-1', userName: 'tester', avatarId: 0, comment: null, isAdult: true, hasAcceptedTerms: true
-    });
+    }));
   }
 
   async function setup(arrange: (mock: AccountApiServiceMock) => void = () => {}) {
@@ -313,13 +313,13 @@ describe('ProfileLoginsComponent', () => {
       await render();
       await render();
 
-      expect(api.account.vkLinked).toBeFalse();
+      expect(api.account.vkLinked).toBe(false);
     });
 
     /** Привязка спрашивает до ухода на площадку: её код одноразовый */
     it('should ask before leaving for the platform to link', async () => {
       await setup(stale);
-      const start = spyOn(TestBed.inject(ExternalLoginService), 'start').and.resolveTo();
+      const start = vi.spyOn(TestBed.inject(ExternalLoginService), 'start').mockResolvedValue(undefined);
 
       el.querySelector<HTMLButtonElement>('#telegram-link')!.click();
       await render();
@@ -339,7 +339,7 @@ describe('ProfileLoginsComponent', () => {
       await render();
 
       expect(el.querySelector('#fresh-login')).not.toBeNull();
-      expect(api.account.vkLinked).toBeTrue();
+      expect(api.account.vkLinked).toBe(true);
     });
 
     /** Без пароля подтвердить можно только новым входом через привязанную площадку */

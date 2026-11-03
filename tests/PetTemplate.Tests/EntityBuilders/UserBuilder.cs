@@ -4,7 +4,6 @@ using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using PetTemplate.Api.Extensions.Auth;
 using PetTemplate.Db.Entity;
-using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Enums;
 
 namespace PetTemplate.Tests.EntityBuilders;
@@ -20,7 +19,6 @@ public class UserBuilder
     public static readonly string SuperAdminName = "admin";
     
     private readonly Profile _profile;
-    private readonly Dictionary<Guid, List<PermissionEnum>> _workspacePermissions = new();
 
     public UserBuilder(string name = "Oleg", Guid? id = null, long? telegramId = null)
     {
@@ -115,17 +113,11 @@ public class UserBuilder
     }
 
     /// <summary>
-    /// Права в пространстве — и строками в базе, и клеймами в токене
-    /// (<c>ws_permission = {workspaceId}|{(int)permission}</c>), как их выдаёт вход
+    /// Права в пространстве — строками в базе. В токене прав нет: сервер читает их
+    /// из базы на каждом запросе (спец. authorization, 2.3)
     /// </summary>
     public UserBuilder WithPermissions(Guid workspaceId, ICollection<PermissionEnum> permissions)
     {
-        if (!_workspacePermissions.TryGetValue(workspaceId, out var granted))
-        {
-            granted = [];
-            _workspacePermissions[workspaceId] = granted;
-        }
-
         foreach (var permission in permissions)
         {
             _profile.User!.UserPermissions.Add(new UserInPermission
@@ -134,7 +126,6 @@ public class UserBuilder
                 UserId = _profile.Id,
                 PermissionId = permission
             });
-            granted.Add(permission);
         }
 
         return this;
@@ -180,14 +171,6 @@ public class UserBuilder
         // отвязка и смена почты проходят без подтверждения. Давняя сессия без отметки —
         // `TestSession.IssuedAt`
         claims.AddRange(FreshLogin.Claims(SessionLogin.Password()));
-
-        foreach (var workspace in _workspacePermissions)
-        {
-            foreach (var permission in workspace.Value)
-            {
-                claims.Add(new Claim(CustomClaimTypes.WorkspacePermission, $"{workspace.Key}|{(int)permission}"));
-            }
-        }
 
         var keyBytes = Encoding.UTF8.GetBytes("TestSigningKeyThatIsLongEnough123456");
         var symmetricKey = new SymmetricSecurityKey(keyBytes);

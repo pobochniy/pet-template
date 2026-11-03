@@ -51,7 +51,7 @@ describe('AccountsComponent', () => {
       ]
     });
     httpMock = TestBed.inject(HttpTestingController);
-    spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
   });
 
   afterEach(() => httpMock.verify());
@@ -76,7 +76,10 @@ describe('AccountsComponent', () => {
   });
 
   it('should show the project counters when the card has them', async () => {
-    const fixture = await render(card({ activity: { issues: 3, notes: 0 } }));
+    const fixture = await render(card({
+      // Счётчиков в ядре нет (`AccountActivityDto` пуст) — спека изображает раздел проекта
+      activity: { issues: 3, notes: 0 } as unknown as AdminAccountCard['card']['activity']
+    }));
 
     expect(fixture.nativeElement.querySelector('#activity')?.textContent).toContain('issues: 3');
     expect(fixture.nativeElement.querySelector('#activity')?.textContent).not.toContain('notes');
@@ -140,7 +143,7 @@ describe('AccountsComponent', () => {
   it('should not issue a link without a reason', async () => {
     const fixture = await render(card());
 
-    expect((fixture.nativeElement.querySelector('#issue') as HTMLButtonElement).disabled).toBeTrue();
+    expect((fixture.nativeElement.querySelector('#issue') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('should issue a reset link with a reason and show it to copy', async () => {

@@ -5,14 +5,16 @@ import { LucideAngularModule } from 'lucide-angular';
 import { Brain, SendHorizontal } from 'lucide-angular/src/icons';
 import { AssistantService } from './assistant.service';
 import { ASSISTANT_TEXT_STATE } from './assistant-text';
-import { I18nKey } from '../shared/i18n/generated/i18n-keys';
-import { I18nService } from '../shared/i18n/i18n.service';
+import { ScopedKey } from '../shared/i18n/generated/i18n-keys';
 import { PlanBlockComponent } from './plan-block/plan-block.component';
 import { AssistantTraceComponent } from './trace/trace.component';
 import { LimitReachedComponent } from './limit-reached/limit-reached.component';
 import { VoiceInputComponent } from './voice/voice-input.component';
+import { MarkdownComponent } from '../shared/markdown/markdown.component';
 import { provideIcons } from '../shared/icons/lucide-icons.provider';
 import { AssistantMessage, AssistantMessageRole } from '../shared/models/assistant.model';
+import { injectI18n } from '../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from './assistant.scopes';
 
 /**
  * Чат с ассистентом (спец. assistant, 2) — привычный мессенджер: лента,
@@ -25,17 +27,19 @@ import { AssistantMessage, AssistantMessageRole } from '../shared/models/assista
 @Component({
   selector: 'app-assistant',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PlanBlockComponent, AssistantTraceComponent, LimitReachedComponent, VoiceInputComponent, LucideAngularModule],
+  imports: [
+    PlanBlockComponent, AssistantTraceComponent, LimitReachedComponent, VoiceInputComponent, MarkdownComponent, LucideAngularModule
+  ],
   providers: [provideIcons({ Brain, SendHorizontal })],
   templateUrl: './assistant.component.html',
   styleUrl: './assistant.component.css'
 })
 export class AssistantComponent implements AfterViewInit, OnDestroy {
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
   public readonly assistant = inject(AssistantService);
 
   /** Подсказки пустого состояния — вопросы, на которые справка ядра отвечает */
-  public readonly hints: readonly I18nKey[] = [
+  public readonly hints: readonly ScopedKey<'assistant'>[] = [
     'assistant.empty.hint1',
     'assistant.empty.hint2',
     'assistant.empty.hint3'

@@ -19,8 +19,8 @@ describe('AdminSessionService', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    jasmine.clock().install();
-    jasmine.clock().mockDate(new Date('2026-09-29T12:00:00Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-29T12:00:00Z'));
 
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideRouter([])]
@@ -28,11 +28,11 @@ describe('AdminSessionService', () => {
 
     session = TestBed.inject(AdminSessionService);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
   });
 
   afterEach(() => {
-    jasmine.clock().uninstall();
+    vi.useRealTimers();
     localStorage.clear();
   });
 
@@ -44,7 +44,7 @@ describe('AdminSessionService', () => {
 
   it('should not hand out an expired token', () => {
     session.start(result(1000));
-    jasmine.clock().mockDate(new Date('2026-09-29T12:00:02Z'));
+    vi.setSystemTime(new Date('2026-09-29T12:00:02Z'));
 
     expect(session.token).toBeNull();
   });
@@ -52,7 +52,7 @@ describe('AdminSessionService', () => {
   it('should send to the login page when the hour is over', () => {
     session.start(result(60 * 60 * 1000));
 
-    jasmine.clock().tick(60 * 60 * 1000);
+    vi.advanceTimersByTime(60 * 60 * 1000);
 
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
     expect(localStorage.getItem('adminToken')).toBeNull();
@@ -62,7 +62,7 @@ describe('AdminSessionService', () => {
   it('should keep the session until the hour is over', () => {
     session.start(result(60 * 60 * 1000));
 
-    jasmine.clock().tick(59 * 60 * 1000);
+    vi.advanceTimersByTime(59 * 60 * 1000);
 
     expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
@@ -70,15 +70,15 @@ describe('AdminSessionService', () => {
   it('should treat any role as enough for an open section', () => {
     session.start(result(60 * 60 * 1000, [AdminRole.AdminManagement]));
 
-    expect(session.hasRole(null)).toBeTrue();
-    expect(session.hasRole(AdminRole.AdminManagement)).toBeTrue();
+    expect(session.hasRole(null)).toBe(true);
+    expect(session.hasRole(AdminRole.AdminManagement)).toBe(true);
   });
 
   it('should open nothing to a session without roles', () => {
     session.start(result(60 * 60 * 1000, []));
 
-    expect(session.hasRole(null)).toBeFalse();
-    expect(session.hasRole(AdminRole.AdminManagement)).toBeFalse();
+    expect(session.hasRole(null)).toBe(false);
+    expect(session.hasRole(AdminRole.AdminManagement)).toBe(false);
   });
 
   it('should end a resumed session at the stored expiry', () => {
@@ -86,10 +86,10 @@ describe('AdminSessionService', () => {
     localStorage.setItem('adminTokenExpires', new Date(Date.now() + 10 * 60 * 1000).toISOString());
 
     session.resume({ userId: 'u-1', userName: 'Oleg', roles: [AdminRole.AdminManagement] });
-    jasmine.clock().tick(9 * 60 * 1000);
+    vi.advanceTimersByTime(9 * 60 * 1000);
     expect(router.navigateByUrl).not.toHaveBeenCalled();
 
-    jasmine.clock().tick(60 * 1000);
+    vi.advanceTimersByTime(60 * 1000);
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
     expect(localStorage.getItem('adminToken')).toBeNull();
   });

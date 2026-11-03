@@ -1,7 +1,7 @@
 namespace PetTemplate.HelpCheck;
 
 /// <summary>
-/// Проверка справки (спец. help, 4.2 и 5.2). Без сети, без модели, без базы:
+/// Проверка справки (спец. help, 4.2 и 5.2) и ссылок на спецификации (спец. infrastructure, 5). Без сети, без модели, без базы:
 /// детерминированная проверка, которая одинаково отвечает в ПР и при публикации.
 ///
 /// <code>
@@ -9,6 +9,7 @@ namespace PetTemplate.HelpCheck;
 ///   map  [--root &lt;репозиторий&gt;]        сверка карты со specs/*.md — 5.2
 ///   map --rehash &lt;файл&gt; [&lt;раздел&gt;]     пересчитать хэши разделов со статьёй
 ///   map --init &lt;файл&gt;                  дописать в карту новые разделы заготовкой
+///   refs [--root &lt;репозиторий&gt;]       ссылки «спец. X, N.M» в коде и документах ведут в живой раздел
 /// </code>
 ///
 /// Код выхода: 0 — зелёно, 1 — есть ошибки, 2 — не так вызвали.
@@ -37,9 +38,12 @@ public static class Program
             case "map":
                 return Report(HelpMap.Check(root), "map");
 
+            case "refs":
+                return Report(SpecRefs.Check(root), "refs");
+
             default:
                 Console.Error.WriteLine(
-                    "Использование: HelpCheck lint | map [--rehash <файл> [<раздел>] | --init <файл>] [--root <путь>]");
+                    "Использование: HelpCheck lint | map [--rehash <файл> [<раздел>] | --init <файл>] | refs [--root <путь>]");
 
                 return 2;
         }

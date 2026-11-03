@@ -3,6 +3,7 @@ import { IRecoveryApiService } from './recovery-api.service';
 import { AuthenticationResultModel } from '../models/authentication-result.model';
 import { serverRefusal, validationRefusal } from './server-refusal.mock';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../form-models/account-rules';
+import { profileDto, sessionDto } from './dto.mock';
 
 /**
  * Подмена `RecoveryApiService` для спек. Повторяет правила сервера (`PasswordReset`,
@@ -41,14 +42,14 @@ export class RecoveryApiServiceMock implements IRecoveryApiService {
       throw serverRefusal(400, 'Ссылка устарела или уже использована — запросите новую', 'auth.error.linkInvalid');
     }
 
-    return {
+    return sessionDto({
       token: 'reset-token',
-      profile: {
+      profile: profileDto({
         id: 'user-1', userName: 'oleg', avatarId: 0, comment: null, isAdult: false, hasAcceptedTerms: false,
         hasPassword: true, language: this.language
-      },
+      }),
       permissionsByWorkspace: {}
-    };
+    });
   }
 
   async confirmEmail(token: string): Promise<unknown> {

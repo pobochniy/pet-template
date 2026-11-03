@@ -1,31 +1,19 @@
-import { InvitationStatusEnum } from '../enums/invitation-status.enum';
-import { PermissionEnum } from '../enums/permission.enum';
+import type { ApiSchema } from '../api/generated/schema';
 
-/** Выданное приглашение — и ответ на создание, и строка в списке выданных */
-export interface WorkspaceInvitationModel {
-  id: string;
-  /** Хвост ссылки; полный адрес собирает `InvitationApiService.link()` */
-  token: string;
-  inviteeName: string | null;
-  status: InvitationStatusEnum;
-  createdAtUtc: string;
-  expiresAtUtc: string;
-  /** Ник того, кто пришёл по ссылке; пусто, пока не пришли */
-  acceptedByUserName: string | null;
-  permissions: PermissionEnum[];
-}
+/*
+ * Алиасы схем OpenAPI документа API (`npm run api:types`). Статус и права приходят
+ * номерами — те же, что у `InvitationStatusEnum` и `PermissionEnum` (`enum:parity`)
+ */
+
+/**
+ * Выданное приглашение — и ответ на создание, и строка в списке выданных. `token` — хвост
+ * ссылки, полный адрес собирает `InvitationApiService.link()`; `acceptedByUserName` — ник
+ * того, кто пришёл по ссылке, пусто, пока не пришли
+ */
+export type WorkspaceInvitationModel = ApiSchema<'WorkspaceInvitationDto'>;
 
 /** Тело запроса на выдачу ссылки */
-export interface InvitationCreateModel {
-  workspaceId: string;
-  inviteeName: string | null;
-  permissions: PermissionEnum[];
-}
+export type InvitationCreateModel = ApiSchema<'InvitationCreateDto'>;
 
 /** Что видит на лендинге перешедший по ссылке; у мёртвой — только статус */
-export interface InvitationPreviewModel {
-  status: InvitationStatusEnum;
-  workspaceName: string | null;
-  inviterName: string | null;
-  inviteeName: string | null;
-}
+export type InvitationPreviewModel = ApiSchema<'InvitationPreviewDto'>;

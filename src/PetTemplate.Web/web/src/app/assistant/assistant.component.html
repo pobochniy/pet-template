@@ -38,7 +38,13 @@
         <div class="assistant__bubble p-2 rounded-3"
              [class.assistant__bubble--mine]="isMine(message)"
              [class.assistant__bubble--theirs]="!isMine(message)">
-          <div class="assistant__text">{{ message.content }}</div>
+          <!-- Своё — текстом как есть; ответ модели — markdown узлами шаблона, ссылки только
+               на свои страницы (спец. assistant, 2.2 и 9) -->
+          @if (isMine(message)) {
+            <div class="assistant__text">{{ message.content }}</div>
+          } @else {
+            <app-markdown class="assistant__answer" [text]="message.content" />
+          }
 
           @if (message.plan; as plan) {
             <app-plan-block class="d-block mt-2" [plan]="plan" />
@@ -47,7 +53,7 @@
           <!-- Факт памяти пишется мимо плана и вопроса «делаем?», поэтому показывается
                строкой в момент записи — и убирается отсюда же, сколько угодно времени
                спустя (спец. assistant, 12.5) -->
-          @for (fact of message.facts ?? []; track fact.id) {
+          @for (fact of message.facts; track fact.id) {
             <div class="assistant__fact mt-2 d-flex flex-wrap align-items-center gap-2 small">
               <i-lucide name="brain" [size]="14" class="text-body-secondary" aria-hidden="true"></i-lucide>
               <span>{{ i18n.t('assistant.memory.remembered', { text: fact.text }) }}</span>

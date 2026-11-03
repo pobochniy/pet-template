@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { ExternalLoginApiService } from '../api/external-login-api.service';
 import { ExternalLoginsConfigModel, ExternalProvider, ExternalPurpose } from '../models/external-login.model';
+import { safeStorage } from './safe-storage';
 
 /** Ключ `sessionStorage`: живёт ровно до возврата с площадки и только в этой вкладке */
 export const EXTERNAL_LOGIN_STORAGE_KEY = 'pettemplate.externalLogin';
@@ -56,11 +57,15 @@ export class ExternalLoginService {
   /**
    * Уйти на площадку. `returnUrl` — куда вернуть после входа (в том числе `/invite/:token`).
    * Telegram: промис завершается, когда окно входа закрылось, — с переходом на страницу
-   * возврата или без него, если человек закрыл окно сам (5.2)
+   * возврата или без него, если человек закрыл окно сам (5.2).
+   *
+   * `opened` — окно Telegram, открытое заранее в клике, после которого шли запросы
+   * (подтверждение паролем перед привязкой, `FreshLoginPrepare`): открыть его здесь,
+   * после ответа сервера, браузер уже не дал бы
    */
-  async start(provider: ExternalProvider, purpose: ExternalPurpose, returnUrl: string): Promise<void> {
+  async start(provider: ExternalProvider, purpose: ExternalPurpose, returnUrl: string, opened?: Window): Promise<void> {
     // Окно — до первого `await`: иначе браузер не увидит в нём ответ на клик и заблокирует
-    const popup = provider === 'telegram' ? this.openPopup() : null;
+    const popup = provider === 'telegram' ? (opened && !opened.closed ? opened : this.openPopup()) : null;
     if (provider === 'telegram' && !popup) throw new Error('Telegram sign-in window was blocked');
 
     try {
@@ -70,7 +75,7 @@ export class ExternalLoginService {
 
       const pending: PendingExternalLogin = { provider, purpose, state, verifier, returnUrl: safeReturnUrl(returnUrl) };
       if (provider === 'vk') {
-        sessionStorage.setItem(EXTERNAL_LOGIN_STORAGE_KEY, JSON.stringify(pending));
+        safeStorage.setJson(EXTERNAL_LOGIN_STORAGE_KEY, pending, 'session');
         this.redirect(vkAuthorizeUrl(config, state, await challenge(verifier)));
         return;
       }
@@ -79,7 +84,7 @@ export class ExternalLoginService {
       const result = await telegramPopup(popup!, config, state);
       if (result === 'closed') return;
 
-      sessionStorage.setItem(EXTERNAL_LOGIN_STORAGE_KEY, JSON.stringify({ ...pending, idToken: result.idToken }));
+      safeStorage.setJson(EXTERNAL_LOGIN_STORAGE_KEY, { ...pending, idToken: result.idToken }, 'session');
       await this.router.navigateByUrl(`/auth/telegram?state=${encodeURIComponent(state)}`);
     } catch (e) {
       popup?.close();
@@ -92,14 +97,8 @@ export class ExternalLoginService {
    * `null`: такой возврат не наш, и код из него на сервер не уходит
    */
   take(provider: ExternalProvider, state: string | null): PendingExternalLogin | null {
-    let pending: PendingExternalLogin | null;
-    try {
-      const raw = sessionStorage.getItem(EXTERNAL_LOGIN_STORAGE_KEY);
-      sessionStorage.removeItem(EXTERNAL_LOGIN_STORAGE_KEY);
-      pending = raw ? JSON.parse(raw) as PendingExternalLogin : null;
-    } catch {
-      return null;
-    }
+    const pending = safeStorage.getJson<PendingExternalLogin>(EXTERNAL_LOGIN_STORAGE_KEY, 'session');
+    safeStorage.remove(EXTERNAL_LOGIN_STORAGE_KEY, 'session');
 
     if (!pending || pending.provider !== provider) return null;
     return state && pending.state === state ? pending : null;

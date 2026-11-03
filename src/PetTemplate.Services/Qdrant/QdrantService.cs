@@ -26,6 +26,12 @@ namespace PetTemplate.Services.Qdrant;
 /// </summary>
 public sealed class QdrantService(IOptions<QdrantOptions> options) : IDisposable
 {
+    /// <summary>
+    /// Потолок различных пространств в одной выборке по индексу <c>workspaceId</c> при
+    /// реиндексе (спец. search, 5): с запасом на шаблон; дальше — постраничный обход
+    /// </summary>
+    private const ulong WorkspaceFacetLimit = 100_000;
+
     private readonly QdrantClient _client = new(host: options.Value.Host, port: options.Value.Port);
 
     /// <summary>
@@ -77,6 +83,65 @@ public sealed class QdrantService(IOptions<QdrantOptions> options) : IDisposable
         };
 
         await _client.DeleteAsync(collection, filter, cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// Все точки пространства — при его сносе (спец. search, 4): в payload точки лежит текст
+    /// чанка, и содержимое снесённого пространства не должно оставаться в индексе.
+    /// Коллекции ещё нет — удалять нечего
+    /// </summary>
+    public async Task DeleteByWorkspace(string collection, Guid workspaceId, CancellationToken ct)
+    {
+        if (!await _client.CollectionExistsAsync(collection, ct)) return;
+
+        var filter = new Filter { Must = { Is(QdrantConst.WorkspaceKey, workspaceId.ToString()) } };
+
+        await _client.DeleteAsync(collection, filter, cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// Точки типов, которых нет среди источников (спец. search, 5 и 10): тип переименовали
+    /// или убрали, и ни поиск, ни реиндекс их больше не находят. <see cref="SearchEntityType.None"/>
+    /// в индекс не попадает и в фильтр входит всегда — так он не бывает пустым, а пустой
+    /// фильтр совпадает со всеми точками и без источников
+    /// </summary>
+    public async Task DeleteUnknownTypes(string collection, IEnumerable<SearchEntityType> known, CancellationToken ct)
+    {
+        if (!await _client.CollectionExistsAsync(collection, ct)) return;
+
+        var names = new RepeatedStrings();
+        names.Strings.AddRange(known.Append(SearchEntityType.None).Distinct().Select(x => x.ToString()));
+        var filter = new Filter
+        {
+            MustNot =
+            {
+                new Condition
+                {
+                    Field = new FieldCondition { Key = QdrantConst.TypeKey, Match = new Match { Keywords = names } }
+                }
+            }
+        };
+
+        await _client.DeleteAsync(collection, filter, cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// Пространства, у которых в коллекции есть точки, — по payload-индексу <c>workspaceId</c>
+    /// (спец. search, 5): реиндекс сверяет их с базой и уносит точки снесённых
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> IndexedWorkspaces(string collection, CancellationToken ct)
+    {
+        if (!await _client.CollectionExistsAsync(collection, ct)) return [];
+
+        var facets = await _client.FacetAsync(collection, QdrantConst.WorkspaceKey,
+            limit: WorkspaceFacetLimit, exact: true, cancellationToken: ct);
+
+        return
+        [
+            .. facets.Hits
+                .Select(x => Guid.TryParse(x.Value.StringValue, out var id) ? id : Guid.Empty)
+                .Where(x => x != Guid.Empty)
+        ];
     }
 
     /// <param name="workspaceId">

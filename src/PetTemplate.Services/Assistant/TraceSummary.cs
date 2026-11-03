@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PetTemplate.Services.Assistant.Sections;
 
 namespace PetTemplate.Services.Assistant;
 
@@ -10,13 +11,14 @@ namespace PetTemplate.Services.Assistant;
 /// Глаголы берутся из словаря по имени инструмента: сочинять их модели нельзя,
 /// иначе объяснение хода зависело бы от того, в каком она настроении.
 ///
-/// Точка расширения: раздел проекта, добавляющий инструменты (7.1), дописывает
-/// их глаголы в <see cref="Verbs"/>, а ключевые аргументы — в <see cref="Interesting"/>.
-/// Инструмент без глагола показывается своим именем
+/// Точка расширения: глаголы инструментов раздела приносит сам раздел
+/// (<see cref="IAssistantSection.Verbs"/>, 7.1); глаголы ядра раздел не переписывает.
+/// Инструмент без глагола показывается своим именем. Синглтон: словарь собирается
+/// один раз из зарегистрированных разделов
 /// </summary>
-public static class TraceSummary
+public class TraceSummary
 {
-    private static readonly Dictionary<string, string> Verbs = new()
+    private static readonly Dictionary<string, string> CoreVerbs = new()
     {
         ["search_help"] = "искал в справке",
         ["ask_user"] = "задал уточняющий вопрос",
@@ -30,11 +32,19 @@ public static class TraceSummary
     /// </summary>
     private static readonly string[] Interesting = ["query", "question", "date", "text", "title", "name"];
 
-    public static string Build(string kind, string? toolName, string arguments)
+    private readonly Dictionary<string, string> _verbs;
+
+    public TraceSummary(IEnumerable<IAssistantSection> sections)
+    {
+        _verbs = new Dictionary<string, string>(CoreVerbs);
+        foreach (var (tool, verb) in sections.SelectMany(x => x.Verbs)) _verbs.TryAdd(tool, verb);
+    }
+
+    public string Build(string kind, string? toolName, string arguments)
     {
         if (kind != "tool" || toolName == null) return "обращение к модели";
 
-        var verb = Verbs.GetValueOrDefault(toolName, toolName);
+        var verb = _verbs.GetValueOrDefault(toolName, toolName);
         var details = Details(arguments);
 
         return details.Length == 0 ? verb : $"{verb}: {details}";

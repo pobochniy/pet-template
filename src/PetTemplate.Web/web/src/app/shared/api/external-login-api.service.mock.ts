@@ -4,6 +4,7 @@ import { AuthenticationResultModel } from '../models/authentication-result.model
 import { ExternalCodeModel, ExternalLoginsConfigModel, ExternalProofModel } from '../models/external-login.model';
 import { MergePreviewModel } from '../models/account.model';
 import { serverRefusal, validationRefusal } from './server-refusal.mock';
+import { profileDto, sessionDto } from './dto.mock';
 
 /**
  * Подмена `ExternalLoginApiService` для спек. Повторяет правила сервера (`AuthController`):
@@ -95,7 +96,7 @@ export class ExternalLoginApiServiceMock implements IExternalLoginApiService {
 
   private signIn(code: ExternalCodeModel, automaticUserName: string): AuthenticationResultModel {
     this.lastRequest = code;
-    if (!this.validCodes.has(code.code)) {
+    if (!this.validCodes.has(code.code ?? '')) {
       throw serverRefusal(400, 'Не удалось войти через Telegram или VK. Попробуйте ещё раз', 'auth.error.externalFailed');
     }
     if (code.existingOnly && !this.known) {
@@ -106,9 +107,9 @@ export class ExternalLoginApiServiceMock implements IExternalLoginApiService {
   }
 
   private session(userName: string, isNewAccount: boolean): AuthenticationResultModel {
-    return {
+    return sessionDto({
       token: 'external-token',
-      profile: {
+      profile: profileDto({
         id: 'user-1',
         userName,
         userNameIsGenerated: isNewAccount,
@@ -119,9 +120,9 @@ export class ExternalLoginApiServiceMock implements IExternalLoginApiService {
         isAdult: false,
         hasAcceptedTerms: false,
         primaryWorkspaceId: null
-      },
+      }),
       permissionsByWorkspace: {},
       isNewAccount
-    };
+    });
   }
 }

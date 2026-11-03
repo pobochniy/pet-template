@@ -43,13 +43,13 @@ describe('ExternalLoginService', () => {
 
   it('should send VK the PKCE challenge and remember the verifier and state', async () => {
     let url = '';
-    spyOn(service, 'redirect').and.callFake(x => url = x);
+    vi.spyOn(service, 'redirect').mockImplementation(x => url = x);
 
     await service.start('vk', 'login', '/invite/abc');
 
     const pending = remembered();
     const params = new URL(url).searchParams;
-    expect(url.startsWith('https://id.vk.ru/authorize?')).toBeTrue();
+    expect(url.startsWith('https://id.vk.ru/authorize?')).toBe(true);
     expect(params.get('client_id')).toBe('5555555');
     expect(params.get('state')).toBe(pending.state);
     expect(params.get('code_challenge_method')).toBe('S256');
@@ -59,7 +59,7 @@ describe('ExternalLoginService', () => {
 
   /** Открытый редирект через `returnUrl` уводил бы с сайта */
   it('should keep the return address on this site', async () => {
-    spyOn(service, 'redirect');
+    vi.spyOn(service, 'redirect').mockImplementation(() => {});
 
     await service.start('vk', 'login', '//evil.example/');
 
@@ -68,9 +68,9 @@ describe('ExternalLoginService', () => {
 
   it('should hand over the Telegram token from the sign-in window with its state as nonce', async () => {
     const popup = fakePopup();
-    spyOn(service, 'openPopup').and.returnValue(popup as unknown as Window);
+    vi.spyOn(service, 'openPopup').mockReturnValue(popup as unknown as Window);
     const router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     const started = service.start('telegram', 'link', '/profile/edit');
     await new Promise(resolve => setTimeout(resolve));

@@ -61,9 +61,12 @@
   (outbox): в базу ложатся либо оба, либо ничего. Провайдер упал — письмо уйдёт повтором
   через минуту (`h.Add<SendMailCommand, SendMailCommandHandler>(1 минута)`), дальше пауза
   удваивается с каждой попыткой до часа (`CommandQueueOptions.MaxRetryAfterFailure`): письмо,
-  которое не уйдёт никогда, не долбит провайдера раз в минуту. Число попыток не ограничено,
-  неотправленное видно в метриках (раздел 7), застрявшая команда — тревогой «Команда очереди
-  не проходит» (`infrastructure.md`, 10).
+  которое не уйдёт никогда, не долбит провайдера раз в минуту. После 25 попыток
+  (`CommandQueueOptions.MaxAttempts`, около суток) команда бросается и остаётся в `local_queue`
+  отложенной (`infrastructure.md`, 2.2): лежавший ночь SMTP письмо переживает, а адрес,
+  которого нет, не ходит к провайдеру вечно. Неотправленное видно в метриках (раздел 7),
+  застрявшая команда — тревогой «Команда очереди не проходит» (`infrastructure.md`, 10).
+  Идемпотентность прежняя — по `AccountToken.MailSentAtUtc`: повтор после сбоя второго письма не шлёт.
 - **Очередь — пакет `AsuTrack.LocalQueue`** с хранилищем PostgreSQL (`infrastructure.md`, 2.2).
   Строку ставит EF, разбирает воркер пакета: удачная строка удаляется, упавшая прячется
   до повтора. Строки живут в базе, поэтому перезапуск API письма **не теряет**: недоделанное
@@ -92,8 +95,9 @@
 ## 5. Настройки
 
 Секция `MailOptions` — только в `appsettings.Release.json`; локально действуют умолчания с
-пустым `Host`. Пароль — переменной `MailOptions__Password` из секрета `SMTP_PASSWORD`
-в `publish-api.yml` и `rollback-api.yml` (`IaC/DEPLOYMENT.md`, раздел 6).
+пустым `Host`. Пароль — переменной `MailOptions__Password` из секрета `SMTP_PASSWORD`: в контейнер её
+передаёт `IaC/run-api.sh`, значение — из `env:` шага `publish-api.yml` и `rollback-api.yml`
+(`IaC/DEPLOYMENT.md`, раздел 6).
 
 | Поле | Значение |
 |---|---|
@@ -135,7 +139,7 @@
 Своей таблицы у почты нет — письмо живёт в двух чужих:
 
 - `local_queue` — строка команды `SendMailCommand` до отправки: `id`, `data` (JSON команды:
-  `Kind`, `TokenId` или `To` и `Language`), `command_type`, `created_at_utc`, `locked_till_utc`,
+  `Kind`, `TokenId` или `To` и `Language`), `command_type` (`send-mail`), `created_at_utc`, `locked_till_utc`,
   `try_count`. Колонки — те, что ждёт хранилище пакета `AsuTrack.LocalQueue.PostgreSql`.
   Отправлено — строка удаляется.
 - `AccountToken` (`accounts.md`, 11) — у писем со ссылкой: `Email` — адрес письма, `Hash` —

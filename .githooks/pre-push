@@ -3,15 +3,15 @@
 # Тесты до пуша. На коммит они не вешаются — секунды сборки и прогона на каждый
 # коммит, — а пушей за день единицы. Спец. infrastructure, 4.
 #
-#   npx ng test pet-template --watch=false --browsers=ChromeHeadless — тесты клиента.
-#              Не `npm test`: тот уходит в watch и открывает обычный Chrome.
+#   npx ng test pet-template --watch=false — тесты клиента (Vitest в jsdom, без браузера).
+#              Не `npm test`: тот уходит в watch и ждёт правок.
 #              Проект назван явно: второй в `angular.json` — админка, а её спеки
 #              на пуш не вешаются (спец. admin, 4) — `npm run test:admin` руками.
 #              Те же тесты гоняет `web-tests.yml` перед выкаткой фронта;
 #              хук говорит то же самое раньше — до пуша, а не на выкатке.
 #
 # `dotnet test` здесь не стоит: тесты на настоящей базе через Testcontainers — это
-# докер под ними на каждый пуш, а те же тесты уже стоят воротами в `publish-api.yml`.
+# докер под ними на каждый пуш, а те же тесты идут в ПР (`api-tests.yml`) и воротами `publish-api.yml`.
 # Держать их локально стоит руками: `dotnet test --solution PetTemplate.slnx`.
 #
 # Гоняется только то, чего коснулись: правка одного бэкенда пуш не задерживает.
@@ -63,5 +63,5 @@ if [ "$run_web" = 1 ]; then
     exit 1
   fi
 
-  npx ng test pet-template --watch=false --browsers=ChromeHeadless
+  npx ng test pet-template --watch=false
 fi

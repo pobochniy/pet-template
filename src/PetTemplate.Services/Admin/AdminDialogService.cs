@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PetTemplate.Db.Entity;
 using PetTemplate.Services.Assistant;
 using PetTemplate.Shared.Dto.Admin;
+using PetTemplate.Shared.Exceptions;
 using PetTemplate.Shared.Options;
 
 namespace PetTemplate.Services.Admin;
@@ -20,6 +21,7 @@ namespace PetTemplate.Services.Admin;
 public class AdminDialogService(
     ApplicationContext db,
     AdminAccessLogService accessLog,
+    TraceSummary trace,
     IOptions<AssistantOptions> assistantOptions)
 {
     /// <summary>Период по умолчанию — «за 7 дней»</summary>
@@ -31,7 +33,7 @@ public class AdminDialogService(
     {
         var last = filter.To ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var first = filter.From ?? last.AddDays(1 - DefaultDays);
-        if (first > last) throw new ArgumentException("Начало периода позже его конца");
+        if (first > last) throw new AdminRejectionException("Начало периода позже его конца");
 
         var since = first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var until = last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -141,7 +143,7 @@ public class AdminDialogService(
                     Step = x.Step,
                     Kind = x.Kind,
                     ToolName = x.ToolName,
-                    Summary = TraceSummary.Build(x.Kind, x.ToolName, x.Input),
+                    Summary = trace.Build(x.Kind, x.ToolName, x.Input),
                     Input = x.Input,
                     Output = x.Output,
                     DurationMs = x.DurationMs,

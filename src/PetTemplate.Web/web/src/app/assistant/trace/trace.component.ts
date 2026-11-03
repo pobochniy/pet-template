@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
 import { AssistantApiService } from '../../shared/api/assistant-api.service';
-import { I18nService } from '../../shared/i18n/i18n.service';
 import { formatNumber } from '../../shared/i18n/format.util';
 import { AssistantTrace } from '../../shared/models/assistant.model';
+import { injectI18n } from '../../shared/i18n/inject-i18n';
+import { ASSISTANT_SCOPES } from '../assistant.scopes';
 
 /**
  * «Показать ход мысли» (спец. assistant, 13.2): шаги хода в читаемом виде —
@@ -45,7 +46,7 @@ import { AssistantTrace } from '../../shared/models/assistant.model';
 })
 export class AssistantTraceComponent {
   private readonly api = inject(AssistantApiService);
-  protected readonly i18n = inject(I18nService);
+  protected readonly i18n = injectI18n(...ASSISTANT_SCOPES);
 
   public readonly runId = input.required<string>();
 

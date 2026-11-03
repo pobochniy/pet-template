@@ -19,10 +19,10 @@ scp -r IaC user@your-vm:/home/user/
 # Подключитесь к VM
 ssh user@your-vm
 
-# Запустите скрипт подготовки
+# Запустите скрипт подготовки — через bash: в проекте из шаблона у скриптов нет бита
+# исполнения (specs/infrastructure.md, 13); setup-vm.sh поставит его остальным сам
 cd ~/IaC
-chmod +x setup-vm.sh
-./setup-vm.sh
+bash setup-vm.sh
 ```
 
 ### 2. Настройка переменных окружения
@@ -33,10 +33,17 @@ nano ~/IaC/.env
 
 # Установите безопасные пароли:
 # - POSTGRES_PASSWORD   — суперпользователь postgres
-# - APP_DB_PASSWORD     — пользователь приложения (раздел 9)
+# - APP_DB_PASSWORD     — роль API, только DML (раздел 9)
+# - APP_DB_OWNER_PASSWORD — владелец базы, под ним идут миграции (раздел 9)
 # - POSTGRES_EXPORTER_PASSWORD — пользователь postgres-exporter (раздел 11, «Метрики PostgreSQL, Qdrant и машины»)
 openssl rand -hex 24   # пароль без символов, которые ломают .env и строку подключения
 ```
+
+`COMPOSE_PROFILES=observability` в `.env` включает телеметрию (раздел 11): compose читает
+строку сам, и `docker compose up -d` поднимает Grafana, Prometheus, Tempo и экспортёры
+вместе со всем. Пусто — без них. **Сервер, заведённый до профиля:** допишите строку в `.env`,
+иначе следующий `docker compose up -d` телеметрию не тронет, а пересозданный стек поднимется
+без неё.
 
 Пароли и имена читаются только при первом старте Postgres на пустом томе `db-data`.
 Переезжаете со старого тома — в `.env` те же пароли, с которыми создавалась база.
@@ -55,8 +62,12 @@ openssl rand -hex 24   # пароль без символов, которые л
   `immutable` на год;
 - `client_max_body_size 5m` — без него nginx режет тело на 1 МБ раньше API; самое большое
   тело — запись голоса ассистенту (до 4 МБ, `AssistantOptions:Transcription:MaxAudioBytes`);
-- нет `X-Frame-Options` и CSP — клиент открывается во фрейме mini-app VK и Telegram
-  (комментарий в `nginx.conf`).
+- Content-Security-Policy продукта и админки — `map $csp_product` и `$csp_admin` вверху
+  `nginx.conf`: скрипты только свои и инлайн-скрипт `index.html` по хешу, `frame-ancestors`
+  со списком площадок mini-app VK и Telegram, поэтому `X-Frame-Options` у продукта нет
+  (у админки — `DENY`). Правка инлайн-скрипта `src/index.html` меняет хеш:
+  `npm run csp:hash -- --write` в `src/PetTemplate.Web/web` вписывает новый, `--check`
+  сверяет (хук `pre-commit`, `web-tests.yml`).
 
 Проверка синтаксиса без сервера (с машины разработчика, из корня репозитория):
 
@@ -96,7 +107,7 @@ nginx при старте разрешает `dapi` из `proxy_pass` и чит�
      -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
    ```
 5. вернуть блоки 443 и `docker compose exec webserver nginx -t && docker compose exec webserver nginx -s reload`;
-6. остальное — телеметрия (раздел 11): `docker compose up -d`.
+6. остальное — телеметрия (раздел 11, профиль `observability` из `.env`): `docker compose up -d`.
 
 Продление — `crontab` из `README.md`, раздел 4.
 
@@ -152,14 +163,16 @@ sudo ./svc.sh start
 
 Пользователь раннера — тот же, под которым лежит `~/IaC`, и в группе `docker`: workflow
 зовут `docker` без `sudo` и пишут в `~/frontend`, `~/adminka`, `~/IaC/nginx/conf`,
-`~/db-backups`.
+`~/db-backups`. На машине нужен `curl`: им выкатка спрашивает `/health` нового контейнера.
 
 ### 6. Секреты GitHub Actions
 
 Settings → Secrets and variables → Actions (`specs/infrastructure.md`, раздел 9). Workflow
-`Publish Api` и `Rollback Api` пробрасывают их в контейнер как переменные окружения (набор
-один, новый секрет — строкой `--env` в обоих) — всё остальное берётся из `appsettings.json`
-и `appsettings.Release.json` (адреса соседних контейнеров — не секреты).
+`Publish Api` и `Rollback Api` пробрасывают их в контейнер как переменные окружения: значения —
+в `env:` шага, `docker run` — один, `IaC/run-api.sh` (`--env ИМЯ` без значения, в списке
+процессов секретов не видно). Новый секрет — строкой в скрипт и строкой в `env:` обоих
+workflow. Всё остальное берётся из `appsettings.json` и `appsettings.Release.json` (адреса
+соседних контейнеров — не секреты). Секреты копии бэкапа вне VM — раздел 10.
 
 | Секрет | Переменная в контейнере | Значение |
 |---|---|---|
@@ -175,7 +188,7 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 Ключи остальных внешних сервисов — тоже секретами, по той же схеме `Секция__Ключ`.
 
 Телеметрии секреты не нужны: `OTEL_EXPORTER_OTLP_ENDPOINT` (`http://otelcollectorcontainer:4317`)
-и `OTEL_SERVICE_NAME` (`pettemplate-api`) прописаны в `Publish Api` и `Rollback Api` прямо
+и `OTEL_SERVICE_NAME` (`pettemplate-api`) прописаны прямо в `IaC/run-api.sh`
 (раздел 11).
 
 Публичные id площадок — не секреты, а **переменные** (Variables) того же раздела; пустая —
@@ -196,7 +209,7 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 Запись голоса — до 4 МБ (`AssistantOptions:Transcription:MaxAudioBytes`), и `client_max_body_size`
 в `IaC/nginx/conf/nginx.conf` (5m) должен быть больше неё. Код поставщика в шаблоне один —
 `main`; второй поставщик (запасная модель другого сервиса) — ещё одна тройка `--env`
-`AssistantOptions__Providers__<код>__…` в обоих workflow и строка справочника с этим кодом.
+`AssistantOptions__Providers__<код>__…` в `IaC/run-api.sh` и `env:` обоих workflow и строка справочника с этим кодом.
 Провайдер-специфичные поля запроса (folder id и т. п.) — `AssistantOptions__Providers__<код>__ProviderOptions__<поле>`.
 Ходы ассистента идут своим воркером очереди команд в `AssistantOptions:Workers` потоков
 (по умолчанию 2) и не ждут за письмами и реиндексом поиска.
@@ -259,18 +272,46 @@ Settings → Secrets and variables → Actions (`specs/infrastructure.md`, ра�
 
 Выкатка — только руками, push в `main` ничего не выкатывает.
 
-- **API**: Actions → Publish Api → Run workflow. Контейнер `dapi` публикует порт только
-  на `127.0.0.1:5000` — снаружи API достижим лишь через nginx
-- **Откат API**: Actions → Rollback Api (`previous`, `latest` или тег по дате);
-  версии — Actions → List Api Versions
+- **API**: Actions → Publish Api → Run workflow. Сначала тесты на облачном раннере, потом
+  сборка на VM, миграции и новый контейнер. Контейнер `dapi` публикует порт только
+  на `127.0.0.1:5000` — снаружи API достижим лишь через nginx. Новый контейнер за две минуты
+  не ответил `200` на `127.0.0.1:5000/health` (база и Qdrant) — выкатка поднимает прежний
+  образ и падает; в логе шага — ответ `/health` и хвост `docker logs dapi`
+- **Откат API**: Actions → Rollback Api (`previous` — версия перед бегущей, `latest` или тег
+  по дате), с тем же ожиданием `/health`; версии — Actions → List Api Versions (только список,
+  образы чистит выкатка)
 - **Frontend**: Actions → Publish Angular → Run workflow
 - **Админка**: Actions → Publish Admin → Run workflow
-- **Бэкап базы**: Actions → Backup Db → Run workflow — дамп в `~/db-backups` на VM;
-  перед выкаткой с миграцией, которая что-то удаляет, — обязательно (раздел 10)
+- **Бэкап базы**: каждую ночь сам; руками — Actions → Backup Db → Run workflow — дамп
+  в `~/db-backups` на VM и копия вне VM, если настроена; перед выкаткой с миграцией, которая
+  что-то удаляет, — обязательно (раздел 10)
 - **Открыть админку**: Actions → Admin Access → Run workflow (раздел 8)
 
-Миграции базы накатывает сам API при старте — отдельного шага нет; поэтому у пользователя
-приложения есть права на схему (раздел 9).
+Миграции накатывает не API, а шаг `apply migrations` в Publish Api — бандлом под владельцем
+базы, до замены контейнера; у роли API прав на схему нет (раздел 9).
+
+**Клиент и админка выкатываются атомарно** (`IaC/publish-static.sh`,
+`specs/infrastructure.md`, 7): сборка ложится в `~/frontend/releases/<sha>`, ссылка `current`
+переключается на неё целиком, прежний выпуск остаётся ссылкой `previous` — из него nginx
+отдаёт чанки вкладкам, открытым до выкатки. Хранятся три выпуска. Откат без пересборки:
+
+```bash
+ls -lt ~/frontend/releases                                            # выпуски, свежие сверху
+ln -sfn releases/<sha> ~/frontend/current.tmp && mv -Tf ~/frontend/current.tmp ~/frontend/current
+```
+
+**Сервер со старой раскладкой** (сборка лежала прямо в `~/frontend`, рядом `~/frontend-backup`)
+переходит так, чтобы сайт не моргнул:
+
+1. Publish Angular и Publish Admin — в `~/frontend` и `~/adminka` появятся `releases/` и
+   `current`; старый `nginx.conf` по-прежнему отдаёт файлы из корня каталога.
+2. Новый `nginx/conf/nginx.conf` на сервер (`root …/current`) и
+   `docker compose exec webserver nginx -t && docker compose exec webserver nginx -s reload`.
+3. Убрать старые файлы и бэкапы:
+   ```bash
+   find ~/frontend ~/adminka -mindepth 1 -maxdepth 1 ! -name releases ! -name current ! -name previous -exec rm -rf {} +
+   rm -rf ~/frontend-backup ~/adminka-backup
+   ```
 
 ### 8. Админка
 
@@ -313,8 +354,9 @@ server-блок админки и `deny` на `/api/admin*` основного �
    `admin-allow.inc.example`, на MVP не заводится); workflow его не трогает. Нет ни
    того, ни другого файла — админка закрыта, основной сайт при этом работает.
 4. **Секрет** `ADMIN_JWT_SIGNING_KEY` (раздел 6), затем Publish Api и Publish Admin.
-   Сборка (`dist/admin/browser`) ложится в `~/adminka` (прежняя — в `~/adminka-backup`),
-   nginx видит её томом `./adminka` — симлинком `IaC/adminka` → `~/adminka` из `setup-vm.sh`.
+   Сборка (`dist/admin/browser`) ложится выпуском в `~/adminka/releases/<sha>` за ссылкой
+   `current` (раздел 7), nginx видит её томом `./adminka` — симлинком `IaC/adminka` → `~/adminka`
+   из `setup-vm.sh`.
    `Publish Admin` ждёт те же ворота `web-tests.yml`, что и `Publish Angular` (там и спеки
    админки): красные словари или спеки продукта останавливают и выкатку админки. Бюджет
    сборки — свой, ошибка на 600 КБ.
@@ -393,8 +435,11 @@ unset PGPASSWORD
 
 ```bash
 docker compose up -d database
-docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
+docker compose exec database bash /docker-entrypoint-initdb.d/01-app-user.sh
 ```
+
+Скрипт — через `bash`: в проекте из шаблона бит исполнения у него может не стоять
+(`specs/infrastructure.md`, 13).
 
 Потом — новый пароль в секрет `API_DB_CONNECTION_STRING` и `Rollback Api` с `latest`
 (или `Publish Api`): переменные окружения контейнер `dapi` получает только при создании.
@@ -414,7 +459,8 @@ docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
 Дамп — тем `pg_dump`, что в контейнере (той же версии, что сервер), суперпользователем по
 сокету: вход доверенный, пароль не нужен и в аргументы не попадает. Владельцы объектов
 (`pettemplate_owner`) и права роли API на них в дампе сохраняются. Это же делает workflow `Backup Db` (дампы в
-`~/db-backups`, последние `keep`). Вручную:
+`~/db-backups`, последние `keep`) — каждую ночь по расписанию (02:30 UTC, `keep` 14) и руками.
+Вручную:
 
 ```bash
 f=~/db-backups/pettemplatedb_$(date +%Y%m%d_%H%M%S).dump
@@ -423,6 +469,34 @@ docker exec dbcontainer pg_dump -U postgres -d pettemplatedb -Fc > "$f" \
 ```
 
 Скачать — `scp user@your-vm:~/db-backups/<файл>.dump .`
+
+**Копия вне VM.** Дамп на диске VM умирает вместе с диском. `Backup Db` копирует каждый
+свежий дамп в S3-совместимое хранилище (Yandex Object Storage, Selectel, Cloudflare R2, AWS S3 —
+любое) через `rclone` в контейнере — ставить на VM ничего не надо, — и удаляет там копии
+старше срока. Включается заданием в Settings → Secrets and variables → Actions:
+
+| Что | Где | Значение |
+|---|---|---|
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | секреты | статический ключ сервисного аккаунта с правом записи и удаления **только** в этом бакете |
+| `BACKUP_S3_ENDPOINT` | переменная | адрес API хранилища: `https://storage.yandexcloud.net`, `https://s3.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com` |
+| `BACKUP_S3_BUCKET` | переменная | бакет — **закрытый**: в дампе все данные пользователей, на стороне клиента он не шифруется (`specs/infrastructure.md`, 13) |
+| `BACKUP_S3_REGION` | переменная, необязательно | регион, если хранилище его требует (`ru-central1`, `us-east-1`) |
+| `BACKUP_S3_PREFIX` | переменная, необязательно | каталог в бакете, по умолчанию `pettemplatedb` |
+| `BACKUP_S3_KEEP_DAYS` | переменная, необязательно | сколько дней хранить копии, по умолчанию 30 |
+
+Пока ключа, адреса или бакета нет, шаг пишет notice и выходит зелёным — дамп остаётся только
+на VM. Проверка — Run workflow вручную: в логе шага `upload off-host` список файлов в
+хранилище. Достать копию на новую машину:
+
+```bash
+docker run --rm -v ~/db-backups:/data \
+  -e RCLONE_CONFIG_OFFSITE_TYPE=s3 -e RCLONE_CONFIG_OFFSITE_PROVIDER=Other \
+  -e RCLONE_CONFIG_OFFSITE_ENDPOINT=<адрес> -e RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID \
+  -e RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY \
+  rclone/rclone:1.71.2 copy offsite:<бакет>/pettemplatedb/<файл>.dump /data/
+```
+
+(ключи — переменными окружения оболочки, `read -rs`, а не в строке команды.)
 
 **Восстановление** — в чистую базу, API остановлен (иначе он держит соединения и тут же
 пишет):
@@ -434,7 +508,7 @@ docker exec dbcontainer psql -U postgres -v ON_ERROR_STOP=1 \
   -c "create database pettemplatedb owner pettemplate_owner"
 docker exec -i dbcontainer pg_restore -U postgres -d pettemplatedb \
   --exit-on-error --single-transaction < ~/db-backups/<файл>.dump
-docker compose exec database /docker-entrypoint-initdb.d/01-app-user.sh
+docker compose exec database bash /docker-entrypoint-initdb.d/01-app-user.sh
 docker start dapi
 ```
 
@@ -526,7 +600,7 @@ docker run --rm --network nginx-proxy-man curlimages/curl -s -o /dev/null -w '%{
 #### Телеметрия: что показывает Grafana
 
 API шлёт метрики и трассы по OTLP в коллектор (`otelcollectorcontainer:4317`, адрес —
-`OTEL_EXPORTER_OTLP_ENDPOINT` в `publish-api.yml` и `rollback-api.yml`). Коллектор раскладывает
+`OTEL_EXPORTER_OTLP_ENDPOINT` в `IaC/run-api.sh`). Коллектор раскладывает
 их: метрики уходят в Prometheus (принимает OTLP сам, `--web.enable-otlp-receiver`), трассы — в Tempo.
 Без этой переменной API не шлёт ничего. Портов на хост нет ни у кого из троих:
 своей аутентификации у них нет, видно их только через Grafana.
@@ -535,7 +609,7 @@ API шлёт метрики и трассы по OTLP в коллектор (`ot
 |---|---|---|
 | `otelcollectorcontainer` | `otel-collector/config.yaml` | ничего, держит до 150 МБ |
 | `prometheuscontainer` | `prometheus/prometheus.yml` | метрики, 30 дней или 2 ГБ |
-| `tempocontainer` | `tempo/tempo.yaml` | трассы, 30 дней — как метрики |
+| `tempocontainer` | `tempo/tempo.yaml` | трассы, 7 дней — разбирают свежие; тренды за месяц — в метриках |
 | `postgresexportercontainer` | переменные в `docker-compose.yml` | ничего, выставляет состояние PostgreSQL |
 | `nodeexportercontainer` | флаги в `docker-compose.yml` | ничего, выставляет процессор, память, диск машины |
 | `cadvisorcontainer` | флаги в `docker-compose.yml` | ничего, выставляет то же по каждому контейнеру |
@@ -548,6 +622,11 @@ API шлёт метрики и трассы по OTLP в коллектор (`ot
 `grafana/dashboards/*.json`). Дашборд поправили в интерфейсе — экспортируйте JSON
 (Share → Export) в `grafana/dashboards/`: при пересоздании Grafana версия из файла
 перезапишет правку. Новый дашборд — тоже файлом рядом.
+
+Вся телеметрия — профиль compose `observability` (`COMPOSE_PROFILES` в `.env`, раздел 2),
+у каждого контейнера — потолок памяти `mem_limit` (`specs/infrastructure.md`, 8): вместе
+около 1.7 ГБ. Упирается в потолок (`docker stats`, дашборд `containers`) — поднять
+в `docker-compose.yml`, сверив с памятью машины.
 
 Поменяли конфиги — скопировать их на сервер и пересоздать контейнер:
 
@@ -585,7 +664,7 @@ API шлёт метрики сам, а стороннее только выст�
 
 ```bash
 docker compose up -d database
-docker compose exec database /docker-entrypoint-initdb.d/02-exporter-user.sh
+docker compose exec database bash /docker-entrypoint-initdb.d/02-exporter-user.sh
 docker compose up -d postgres-exporter
 ```
 
@@ -656,7 +735,7 @@ id группы лежит прямо в `telegram.yml`: из переменно
 ```
 
 Хранятся пять последних выпусков. В контейнере каталог виден как `/app/help`
-(`-v ~/pettemplate-help:/app/help:ro` в Publish Api и Rollback Api), API читает
+(`-v ~/pettemplate-help:/app/help:ro` в `IaC/run-api.sh`), API читает
 `/app/help/current` (`HelpOptions__Path`).
 
 - **Правка формулировки без выкатки API** — Actions → Publish Help → Run workflow с той
@@ -686,7 +765,7 @@ docker logs dapi 2>&1 | grep 'Help .* published'
 - **Подключение к базе**: `src/PetTemplate.Db/README.md`
 - **Workflows**: [.github/workflows/](../.github/workflows/) — `publish-api`, `rollback-api`,
   `list-api-versions`, `cleanup-old-images`, `backup-db`, `publish-angular`, `publish-admin`,
-  `admin-access`, `publish-help`, `help-check`
+  `admin-access`, `publish-help`; в ПР — `api-tests`, `web-tests`, `help-check`
 
 ## 🔧 Полезные команды
 
@@ -703,11 +782,14 @@ docker ps
 # Откат API на предыдущую версию
 # Actions → Rollback Api → Run workflow
 
-# Откат фронтенда
-rm -rf ~/frontend/* && cp -r ~/frontend-backup/* ~/frontend/
+# Откат фронтенда — на прежний выпуск (раздел 7)
+ln -sfn "$(readlink ~/frontend/previous)" ~/frontend/current.tmp && mv -Tf ~/frontend/current.tmp ~/frontend/current
 
 # Откат админки
-rm -rf ~/adminka/* && cp -r ~/adminka-backup/* ~/adminka/
+ln -sfn "$(readlink ~/adminka/previous)" ~/adminka/current.tmp && mv -Tf ~/adminka/current.tmp ~/adminka/current
+
+# Здоровье API — 200 Healthy, если видит базу и Qdrant
+curl -s http://127.0.0.1:5000/health; docker inspect -f '{{.State.Health.Status}}' dapi
 
 # Логи телеметрии
 docker logs grafanacontainer

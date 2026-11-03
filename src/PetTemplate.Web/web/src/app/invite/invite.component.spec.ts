@@ -1,3 +1,5 @@
+import type { Mocked } from 'vitest';
+import { WorkspaceContextService } from '../shared/core/workspace-context.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
@@ -10,20 +12,26 @@ import { I18nService } from '../shared/i18n/i18n.service';
 import { loadAllScopes } from '../shared/i18n/i18n.testing';
 import { ExternalLoginApiService } from '../shared/api/external-login-api.service';
 import { ExternalLoginApiServiceMock } from '../shared/api/external-login-api.service.mock';
+import { profileDto, sessionDto } from '../shared/api/dto.mock';
 
 describe('InviteComponent', () => {
   let fixture: ComponentFixture<InviteComponent>;
   let el: HTMLElement;
-  let api: jasmine.SpyObj<InvitationApiService>;
+  let api: Mocked<InvitationApiService>;
   let router: Router;
 
   async function render(status: InvitationStatusEnum, signedIn = false) {
-    api = jasmine.createSpyObj<InvitationApiService>('InvitationApiService', ['preview', 'accept', 'register']);
-    api.preview.and.resolveTo(status === InvitationStatusEnum.Active
+    api = { preview: vi.fn(), accept: vi.fn(), register: vi.fn() } as unknown as Mocked<InvitationApiService>;
+    api.preview.mockResolvedValue(status === InvitationStatusEnum.Active
       ? { status, workspaceName: 'Рога и Копыта', inviterName: 'Oleg', inviteeName: 'Валера' }
       : { status, workspaceName: null, inviterName: null, inviteeName: null });
-    api.accept.and.resolveTo();
-    api.register.and.resolveTo();
+    const session = sessionDto({
+      token: 'token-accepted',
+      profile: profileDto({ id: 'me', userName: 'Vasya', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true }),
+      permissionsByWorkspace: { 'ws-new': [] }
+    });
+    api.accept.mockResolvedValue(session);
+    api.register.mockResolvedValue(session);
 
     await TestBed.configureTestingModule({
       imports: [InviteComponent],
@@ -32,18 +40,18 @@ describe('InviteComponent', () => {
         { provide: ExternalLoginApiService, useClass: ExternalLoginApiServiceMock },
         provideRouter([]),
         { provide: InvitationApiService, useValue: api },
-        { provide: AuthApiService, useValue: jasmine.createSpyObj<AuthApiService>('AuthApiService', ['login']) }
+        { provide: AuthApiService, useValue: { login: vi.fn() } as unknown as Mocked<AuthApiService> }
       ]
     }).compileComponents();
 
     await loadAllScopes(TestBed.inject(I18nService));
     if (signedIn) {
-      TestBed.inject(UserService).setProfile({
+      TestBed.inject(UserService).setProfile(profileDto({
         id: 'me', userName: 'Vasya', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true
-      });
+      }));
     }
     router = TestBed.inject(Router);
-    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     fixture = TestBed.createComponent(InviteComponent);
     fixture.componentRef.setInput('token', 'token-1');
@@ -71,6 +79,8 @@ describe('InviteComponent', () => {
     await fixture.whenStable();
 
     expect(api.accept).toHaveBeenCalledWith('token-1');
+    // Сессию из ответа раскладывает экран, принятое пространство — активное (6.3)
+    expect(TestBed.inject(WorkspaceContextService).currentWorkspaceId()).toBe('ws-new');
     expect(router.navigateByUrl).toHaveBeenCalledWith('/');
   });
 
