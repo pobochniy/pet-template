@@ -165,6 +165,19 @@ fi
 chmod +x "$SCRIPT_DIR"/postgres/init/*.sh "$SCRIPT_DIR"/*.sh
 success "Скрипты postgres/init и IaC исполняемые"
 
+# Страховка срока окна админки (tech-debt/admin-perimeter.md): просроченное открытие
+# закрывает не только запуск `Admin Access` по расписанию на раннере, но и cron самой VM —
+# раннер лёг или GitHub отложил расписание, а окно всё равно закроется. Вывод — в журнал
+# системы (`journalctl -t admin-access`), он ротируется сам. Запись одна: повторный запуск
+# setup-vm.sh заменяет её, а не дописывает вторую
+CRON_LINE="*/5 * * * * bash $SCRIPT_DIR/admin-access.sh expire 2>&1 | logger -t admin-access"
+if command -v crontab >/dev/null 2>&1; then
+    { crontab -l 2>/dev/null | grep -v 'admin-access.sh expire' || true; echo "$CRON_LINE"; } | crontab -
+    success "cron закрывает просроченное окно админки раз в 5 минут"
+else
+    warning "crontab не найден — окно админки закроет только запуск Admin Access по расписанию"
+fi
+
 echo ""
 echo "🔐 Шаг 5: Настройка переменных окружения..."
 echo ""

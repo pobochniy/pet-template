@@ -248,7 +248,7 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 с `lint: false` — тот же коммит он уже линтовал; вручную — правка справки без выкатки,
 `specs/help.md`, 6.4), `backup-db.yml` (раздел 11, ночью по расписанию и руками),
 `admin-access.yml` — открыть и закрыть админку и Grafana на время, плюс запуск по расписанию
-раз в 15 минут закрывает просроченное окно (`specs/admin.md`, раздел 7; Grafana — раздел 10).
+раз в 15 минут закрывает просроченное окно (то же делает `cron` самой VM — `IaC/admin-access.sh`) (`specs/admin.md`, раздел 7; Grafana — раздел 10).
 
 ---
 
