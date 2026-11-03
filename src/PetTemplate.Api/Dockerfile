@@ -14,4 +14,9 @@ COPY . .
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
 
+# Не от root: пользователь `app` (APP_UID, 1654) есть в образе .NET с версии 8. Писать API
+# на диск нечего — ключи Data Protection в базе (спец. infrastructure, 3.1), справка смонтирована
+# только на чтение, порт 8080 не привилегированный. Уязвимость в API — процесс без root в контейнере
+USER $APP_UID
+
 ENTRYPOINT [ "dotnet", "PetTemplate.Api.dll" ]

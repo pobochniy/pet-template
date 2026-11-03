@@ -27,7 +27,8 @@ MVC-контроллеры, EF Core на Npgsql, Swashbuckle, Qdrant.Client, Ope
    отдельным шагом и публикует `--no-build` — `-r linux-x64` нужен в обоих шагах, иначе
    публикация не найдёт сборку под среду. Это правка workflow, а не проекта. Быстрее старт,
    крупнее публикация; старт API бывает только на выкатке, поэтому сейчас не делаем.
-2. **Chiseled-образ** — `aspnet:10.0-noble-chiseled`: без оболочки, процесс не от root.
+2. **Chiseled-образ** — `aspnet:10.0-noble-chiseled`: без оболочки (не от root API работает
+   уже и так — `USER $APP_UID`, спец. infrastructure, 6).
    Тогда сломаются `HEALTHCHECK` образа (он на `bash` и `/dev/tcp`) и `docker exec … sh`:
    проверку здоровья придётся нести своим бинарником или убрать из образа, оставив ожидание
    `/health` в `IaC/run-api.sh`.
