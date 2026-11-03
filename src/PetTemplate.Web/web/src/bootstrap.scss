@@ -1,0 +1,98 @@
+@use "sass:list";
+@use "sass:map";
+@use "sass:meta";
+
+// Точечная сборка Bootstrap 5.3 вместо bootstrap.min.css.
+//
+// Как пользоваться: нужен компонент — раскомментируй его строку в блоке
+// "Компоненты" и пересобери. Больше ничего делать не нужно.
+// Порядок строк менять нельзя: он повторяет node_modules/bootstrap/scss/bootstrap.scss.
+//
+// Про @import: Bootstrap 5.3 не модульный — его партиалы не подключают свои
+// зависимости и рассчитывают на глобальную область, которую создаёт @import.
+// Поштучная сборка через @use не компилируется в принципе, поэтому в angular.json
+// стоит silenceDeprecations: ["import"]. Подробности и план переезда —
+// tech-debt/sass-import.md. На Bootstrap 6 не переходим, и до Sass 3.0 переписывать
+// этот файл не на что.
+
+// 0. Тёмная тема — по настройке системы (`prefers-color-scheme`), а не атрибутом
+//    `data-bs-theme`: переключателя в интерфейсе нет, а атрибут пришлось бы ставить
+//    скриптом до старта Angular (лишний инлайн-скрипт — лишний хеш в CSP nginx).
+//    Цвета в своих стилях — только переменными `--bs-*`, иначе в тёмной теме они
+//    останутся светлыми; фон блока — `bg-body-tertiary`, а не `bg-light`.
+$color-mode-type: media-query;
+
+// 1. Конфигурация — переменные и миксины. Не генерирует ни одного CSS-правила,
+//    нужна всему остальному. Трогать не надо.
+@import "bootstrap/scss/functions";
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/variables-dark";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
+@import "bootstrap/scss/utilities";
+
+// 2. База — CSS-переменные (--bs-*), нормализация, типографика.
+@import "bootstrap/scss/root";
+@import "bootstrap/scss/reboot";
+@import "bootstrap/scss/type";        // .small, .list-unstyled, заголовки
+
+// 3. Раскладка
+@import "bootstrap/scss/containers";  // .container, .container-fluid
+@import "bootstrap/scss/grid";        // .row, .col-*, .col-md-*, .g-*
+
+// 4. Компоненты — включено только то, что реально есть в шаблонах.
+@import "bootstrap/scss/tables";      // .table, .table-striped — управление правами
+@import "bootstrap/scss/forms";       // .form-control, .form-select, .form-check, .form-label
+@import "bootstrap/scss/buttons";     // .btn, .btn-primary, .btn-outline-*, .btn-lg, .btn-link
+@import "bootstrap/scss/card";        // .card, .card-body, .card-header — профиль
+@import "bootstrap/scss/badge";       // .badge — аватар, профиль
+@import "bootstrap/scss/alert";       // .alert, .alert-danger — плашки
+@import "bootstrap/scss/close";       // .btn-close — крестик плашки
+@import "bootstrap/scss/helpers";     // .text-truncate, .visually-hidden, .vstack/.hstack
+
+// Выключено — в шаблонах не встречается. Раскомментировать по мере надобности.
+// @import "bootstrap/scss/transitions"; // .fade, .collapse
+// @import "bootstrap/scss/dropdown";    // .dropdown-*
+// @import "bootstrap/scss/nav";         // .nav, .nav-link
+// @import "bootstrap/scss/list-group";  // .list-group
+// @import "bootstrap/scss/progress";    // .progress-bar
+// @import "bootstrap/scss/modal";       // .modal-*
+// @import "bootstrap/scss/images";      // .img-fluid, .figure
+// @import "bootstrap/scss/button-group"; // .btn-group
+// @import "bootstrap/scss/navbar";      // .navbar-* (требует nav)
+// @import "bootstrap/scss/accordion";   // .accordion
+// @import "bootstrap/scss/breadcrumb";  // .breadcrumb
+// @import "bootstrap/scss/pagination";  // .page-link, .pagination
+// @import "bootstrap/scss/toasts";      // .toast
+// @import "bootstrap/scss/tooltip";     // .tooltip
+// @import "bootstrap/scss/popover";     // .popover (нужен JS-попер)
+// @import "bootstrap/scss/carousel";    // .carousel
+// @import "bootstrap/scss/offcanvas";   // .offcanvas
+// @import "bootstrap/scss/spinners";    // .spinner-border
+// @import "bootstrap/scss/placeholders";// .placeholder
+
+// 5. Утилиты (.mb-3, .d-flex, .text-muted, .bg-light, ...).
+//
+//    Утилиты оставлены ВСЕ — они дёшевы поштучно. Дорого стоило другое: по
+//    умолчанию каждая утилита размножается на 6 брейкпоинтов (.mb-3, .mb-sm-3,
+//    .mb-md-3, ...), то есть ×6 к объёму. В шаблонах респонсив-варианты утилит
+//    нужны только группам ниже — остальные генерируются в базовом виде.
+//
+//    Добавить в шаблон .text-end, .bg-warning или .w-50 можно в любой момент,
+//    ничего здесь править не нужно. Править нужно только если понадобится
+//    респонсив-вариант — тогда имя группы дописывается в $responsive-utilities.
+
+$responsive-utilities: (
+  "display",        // .d-sm-flex, .d-md-none
+);
+
+@each $key, $utility in $utilities {
+  @if meta.type-of($utility) == "map" {
+    $utilities: map.merge(
+      $utilities,
+      ($key: map.merge($utility, (responsive: list.index($responsive-utilities, $key) != null)))
+    ) !global;
+  }
+}
+
+@import "bootstrap/scss/utilities/api";

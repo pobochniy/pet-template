@@ -1,0 +1,51 @@
+<div class="container py-4" style="max-width: 720px">
+  <h3 class="fw-bold text-danger mb-3">{{ i18n.t('profile.delete.title') }}</h3>
+  <p>{{ i18n.t('profile.delete.intro') }}</p>
+
+  @if (card(); as account) {
+    @if (solo().length > 0) {
+      <h6 class="fw-semibold mt-4">{{ i18n.t('profile.delete.soloTitle') }}</h6>
+      <ul class="list-group mb-3" id="delete-solo">
+        @for (workspace of solo(); track workspace.id) {
+          <li class="list-group-item">
+            <div class="fw-semibold">{{ workspace.name }}</div>
+            <div class="small text-danger">{{ i18n.t('profile.delete.soloLoses') }}</div>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (shared().length > 0) {
+      <h6 class="fw-semibold mt-4">{{ i18n.t('profile.delete.sharedTitle') }}</h6>
+      <ul class="list-group mb-3" id="delete-shared">
+        @for (workspace of shared(); track workspace.id) {
+          <li class="list-group-item">
+            <div class="fw-semibold">{{ workspace.name }}</div>
+            <div class="small text-body-secondary">
+              {{ i18n.t('profile.delete.sharedStays', { members: workspace.otherMembers.join(', ') }) }}
+            </div>
+          </li>
+        }
+      </ul>
+      <p class="small text-body-secondary">{{ i18n.t('profile.delete.authorship') }}</p>
+    }
+
+    <div class="alert alert-warning mt-4">{{ i18n.t('profile.delete.irreversible') }}</div>
+
+    <label class="form-label" for="delete-confirm">
+      {{ i18n.t('profile.delete.confirmLabel', { login: account.userName }) }}
+    </label>
+    <input class="form-control mb-3" id="delete-confirm" type="text" autocomplete="off" [formControl]="confirm" />
+
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-danger" id="delete-account" [disabled]="!confirmed() || busy()" (click)="remove()">
+        {{ i18n.t('profile.delete.submit') }}
+      </button>
+      <a class="btn btn-outline-secondary" [routerLink]="['/profile/edit']">{{ i18n.t('core.action.cancel') }}</a>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="alert alert-danger mt-3" id="delete-error">{{ error() }}</div>
+  }
+</div>

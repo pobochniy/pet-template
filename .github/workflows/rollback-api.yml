@@ -1,0 +1,91 @@
+name: Rollback Api
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to rollback to (e.g., 2026_03_03__14_30_45 or "latest" or "previous")'
+        required: true
+        default: 'previous'
+
+jobs:
+  rollback:
+    runs-on: [self-hosted]
+    steps:
+      # Ради IaC/run-api.sh: docker run один на выкатку и откат
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Determine target version
+        id: version
+        # Ввод — переменной окружения, а не подстановкой в текст скрипта: строка
+        # из формы Run workflow не становится кодом
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$VERSION" == "previous" ]; then
+            # Предыдущая — та, что собрана перед бегущей, а не вторая по дате: после
+            # отката бегущая уже не самая новая. Теги — даты сборки, sort -r — новые сверху.
+            # Бегущего контейнера нет — отсчёт от latest
+            current=$(docker inspect -f '{{.Image}}' dapi 2>/dev/null \
+              || docker image inspect -f '{{.Id}}' pettemplate-api:latest)
+            TARGET=""
+            found=""
+            for tag in $(docker images pettemplate-api --format '{{.Tag}}' | grep -v '^latest$' | sort -r); do
+              id=$(docker image inspect -f '{{.Id}}' "pettemplate-api:$tag")
+              if [ -z "$found" ]; then
+                [ "$id" = "$current" ] && found=1
+              elif [ "$id" != "$current" ]; then
+                TARGET="$tag"
+                break
+              fi
+            done
+            if [ -z "$TARGET" ]; then
+              echo "::error::нет версии старше бегущей"
+              docker images pettemplate-api --format '{{.Tag}}'
+              exit 1
+            fi
+          elif [ "$VERSION" == "latest" ]; then
+            TARGET="latest"
+          else
+            TARGET="$VERSION"
+          fi
+
+          if ! docker image inspect "pettemplate-api:$TARGET" > /dev/null 2>&1; then
+            echo "::error::образа pettemplate-api:$TARGET нет"
+            echo "Available versions:"
+            docker images pettemplate-api --format "{{.Tag}}"
+            exit 1
+          fi
+
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Rolling back to version: $TARGET"
+
+      # Тот же IaC/run-api.sh, что в publish-api.yml, и тот же набор env (спец.
+      # infrastructure, 6 и 9): новый секрет — строкой и здесь. Скрипт ждёт /health
+      # и падает, если версия не ответила 200.
+      # Схему откат не трогает: миграции накатывает только publish-api.yml (шаг apply
+      # migrations), и пишутся они так, чтобы предыдущая версия кода на новой схеме работала
+      # (спец. infrastructure, 6 — expand → датафикс → contract)
+      # Справку откат не трогает (спец. help, 6.4): в образе её нет, а версию отката
+      # мы знаем тегом — датой сборки, а не коммитом. Откатили через фичу — переключить
+      # ~/pettemplate-help/current на прежний releases/<sha> руками (IaC/DEPLOYMENT.md, «Справка»)
+      - name: Start rollback version
+        env:
+          ConnectionStrings__AppConnection: ${{ secrets.API_DB_CONNECTION_STRING }}
+          JwtOptions__SigningKey: ${{ secrets.JWT_SIGNING_KEY }}
+          AdminOptions__SigningKey: ${{ secrets.ADMIN_JWT_SIGNING_KEY }}
+          Telegram__BotToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TelegramLoginOptions__BotId: ${{ vars.TELEGRAM_BOT_ID }}
+          VkIdOptions__AppId: ${{ vars.VK_ID_APP_ID }}
+          VkOptions__PrivateKey: ${{ secrets.VK_MINIAPP_PRIVATE_KEY }}
+          MailOptions__Password: ${{ secrets.SMTP_PASSWORD }}
+          AssistantOptions__Providers__main__Endpoint: ${{ vars.ASSISTANT_ENDPOINT }}
+          AssistantOptions__Providers__main__ApiKey: ${{ secrets.ASSISTANT_API_KEY }}
+          AssistantOptions__SeedModels__0__Key: ${{ vars.ASSISTANT_MODEL }}
+          AssistantOptions__Transcription__Model: ${{ vars.ASSISTANT_TRANSCRIPTION_MODEL }}
+          TARGET: ${{ steps.version.outputs.target }}
+        run: |
+          sh IaC/run-api.sh "$TARGET"
+          echo "✅ Rolled back to version: $TARGET"

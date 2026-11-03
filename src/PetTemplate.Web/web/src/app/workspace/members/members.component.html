@@ -1,0 +1,123 @@
+<div class="workspace-members" [class.container]="!embedded()" [class.py-4]="!embedded()">
+  @if (embedded()) {
+    <h3 class="fs-5 mb-1"><svg [appIcon]="icons.Users" class="me-2"></svg>{{ i18n.t('workspace.members.titleEmbedded') }}</h3>
+  } @else {
+    <h2 class="mb-1"><svg [appIcon]="icons.Users" class="me-2"></svg>{{ i18n.t('workspace.members.title') }}</h2>
+  }
+  <p class="text-muted">{{ i18n.t('workspace.members.subtitle') }}</p>
+
+  @if (canInvite()) {
+    <section class="mb-4">
+      @if (inviteOpen()) {
+        <h4 class="fs-6 fw-semibold">{{ i18n.t('workspace.members.newMember') }}</h4>
+        <workspace-invite-form (created)="invitationCreated($event)"></workspace-invite-form>
+      } @else {
+        <button type="button" id="open-invite" class="btn btn-primary" (click)="openInvite()">
+          <svg [appIcon]="icons.UserPlus" class="me-2"></svg>{{ i18n.t('workspace.members.add') }}
+        </button>
+      }
+
+      @if (createdLink(); as link) {
+        <div class="alert alert-success mt-3" id="created-link">
+          <div class="fw-semibold">{{ i18n.t('workspace.members.linkReady') }}</div>
+          <code class="d-block text-break my-2">{{ link }}</code>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="copyCreated()">
+            <svg [appIcon]="icons.Copy" class="me-1"></svg>{{ i18n.t('workspace.members.copy') }}
+          </button>
+        </div>
+      }
+    </section>
+  }
+
+  <section class="mb-4">
+    <h4 class="fs-6 fw-semibold">{{ i18n.t('workspace.members.inSpace') }}</h4>
+    <ul class="list-group">
+      @for (member of members(); track member.id) {
+        <li class="list-group-item member-row">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span>
+              <span class="fw-semibold">{{ member.userName }}</span>
+              @if (isSelf(member.id)) {
+                <span class="badge bg-secondary ms-2">{{ i18n.t('workspace.members.you') }}</span>
+              }
+            </span>
+
+            @if (canManagePermissions()) {
+              <span class="d-flex flex-wrap align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary edit-access"
+                        [disabled]="editing() === member.id" (click)="startEdit(member.id)">
+                  <svg [appIcon]="icons.KeyRound" class="me-1"></svg>{{ i18n.t('workspace.members.editAccess') }}
+                </button>
+
+                @if (!isSelf(member.id)) {
+                  @if (kicking() === member.id) {
+                    <span class="text-danger">{{ i18n.t('workspace.members.kickConfirm') }}</span>
+                    <button type="button" class="btn btn-sm btn-danger kick-confirm" [disabled]="busy()"
+                            (click)="kick(member.id)">
+                      {{ i18n.t('workspace.members.kick') }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="cancelKick()">
+                      {{ i18n.t('core.action.cancel') }}
+                    </button>
+                  } @else {
+                    <button type="button" class="btn btn-sm btn-outline-danger kick" (click)="confirmKick(member.id)">
+                      <svg [appIcon]="icons.UserMinus" class="me-1"></svg>{{ i18n.t('workspace.members.kick') }}
+                    </button>
+                  }
+                }
+              </span>
+            }
+          </div>
+
+          @if (editing() === member.id) {
+            <workspace-member-permissions [userId]="member.id"
+                                          (saved)="stopEdit()"
+                                          (closed)="stopEdit()"></workspace-member-permissions>
+          }
+        </li>
+      } @empty {
+        <li class="list-group-item text-muted" id="no-members">{{ i18n.t('workspace.members.empty') }}</li>
+      }
+    </ul>
+  </section>
+
+  @if (canInvite()) {
+    <section>
+      <h4 class="fs-6 fw-semibold"><svg [appIcon]="icons.Link2" class="me-2"></svg>{{ i18n.t('workspace.members.invitationsTitle') }}</h4>
+      @if (invitations().length === 0) {
+        <p class="text-muted" id="no-invitations">{{ i18n.t('workspace.members.noInvitations') }}</p>
+      } @else {
+        <ul class="list-group">
+          @for (invitation of invitations(); track invitation.id) {
+            <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2 invitation-row">
+              <span>
+                <span class="fw-semibold">{{ invitation.inviteeName || i18n.t('workspace.members.noName') }}</span>
+                <span class="text-muted"> — {{ statusText(invitation) }}</span>
+              </span>
+              @if (isActive(invitation)) {
+                <span class="d-flex flex-wrap align-items-center gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary copy-invitation" (click)="copy(invitation.token)">
+                    <svg [appIcon]="icons.Copy" class="me-1"></svg>{{ i18n.t('workspace.members.copy') }}
+                  </button>
+                  @if (revoking() === invitation.id) {
+                    <span class="text-danger">{{ i18n.t('workspace.members.revokeConfirm') }}</span>
+                    <button type="button" class="btn btn-sm btn-danger revoke-confirm" (click)="revoke(invitation)">
+                      {{ i18n.t('workspace.members.revoke') }}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="revoking.set(null)">
+                      {{ i18n.t('core.action.cancel') }}
+                    </button>
+                  } @else {
+                    <button type="button" class="btn btn-sm btn-outline-danger revoke-invitation" (click)="revoking.set(invitation.id)">
+                      {{ i18n.t('workspace.members.revoke') }}
+                    </button>
+                  }
+                </span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

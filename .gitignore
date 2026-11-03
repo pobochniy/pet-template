@@ -60,3 +60,23 @@ nunit-*.xml
 riderModule.iml
 /_ReSharper.Caches/
 .idea/
+*.DotSettings.user
+.DS_Store
+
+# Публикация `dotnet publish -o out` — артефакт, не код
+out/
+
+# Личные рабочие файлы в корне (нарезка задачи, открытые вопросы, ревью) — не коммитятся
+/plan/
+
+# Разрешённые адреса админки — только на сервере (IaC/nginx/conf/admin-allow.inc.example)
+IaC/nginx/conf/admin-allow.inc
+# Открытие админки на время — его пишет и стирает workflow Admin Access
+IaC/nginx/conf/admin-allow-open.inc
+# Claude Code: личные настройки — у каждого свои; skills в .claude/skills — общие, в репозитории
+.claude/settings.local.json
+# Claude Code: worktrees агентов — рабочие копии, не код
+.claude/worktrees/
+
+# Бандл миграций выкатки (publish-api.yml)
+efbundle

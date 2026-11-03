@@ -1,0 +1,97 @@
+#!/bin/sh
+#
+# Проверки до коммита — только те, что стоят секунды: коммитов за день много.
+# Долгое (тесты) висит на pre-push. Спец. infrastructure, 4.
+#
+#   i18n:check   — сгенерированные словари совпадают с закоммиченными;
+#   i18n:lint    — в шаблонах нет текста мимо `t()`, в `*.ts` нет строк с кириллицей
+#                  (разбор — `typescript` и `@angular/compiler`: нужен `npm ci`);
+#                  на правку `tools/` — ещё самопроверка скриптов (`test:tools`);
+#   lint:storage — хранилище браузера только через `safeStorage`;
+#   i18n:codes   — у каждого кода отказа сервера есть ключ в словаре, а словарь
+#                  с кодами грузится хотя бы одним маршрутом. Гоняется и на правку
+#                  `*.cs` (новый код заводят на сервере, а забывают на клиенте),
+#                  и на правку `*.routes.ts`/`*.scopes.ts` (из них берутся маршруты);
+#   enum:parity  — копии перечислений и правил аккаунта совпадают с C#: на правку
+#                  `*.cs` и клиента (продукт и админка) — правят обычно одну сторону;
+#   csp:hash     — хеш инлайн-скрипта `index.html` в CSP `nginx.conf` тот же, что у скрипта:
+#                  на правку `index.html` и `nginx.conf`;
+#   dotnet build — бэкенд компилируется, включая проект тестов;
+#   api:types    — типы DTO клиента (`schema.d.ts`) совпадают с OpenAPI документом
+#                  API: на правку `*.cs`/`*.csproj` и самого файла типов, после сборки.
+#
+# Все три i18n-проверки — ворота `publish-angular.yml` (через `web-tests.yml`),
+# `dotnet build` повторяет сборку из `publish-api.yml`, то есть хук говорит то же,
+# что сказал бы деплой, но до пуша.
+#
+# Включается один раз на клон: `git config core.hooksPath .githooks`.
+#
+# Проверяется рабочее дерево, а не индекс: при частичном `git add` хук увидит
+# файл целиком. Для этих проверок так и надо — словари, ключи и сборка живут
+# файлами, а не строками.
+#
+# Обойти на один коммит: `git commit --no-verify`.
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if printf '%s\n' "$staged" | grep -q '^src/PetTemplate\.Web/web/\(src\|i18n\|tools\)/'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/i18n-codegen.mjs --check
+  node tools/i18n-lint.mjs
+  node tools/storage-lint.mjs
+  cd "$root"
+fi
+
+# Самопроверка скриптов на образцах — когда правят сами скрипты
+if printf '%s\n' "$staged" | grep -q '^src/PetTemplate\.Web/web/tools/'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node --test tools/*.test.mjs
+  cd "$root"
+fi
+
+# Коды отказов живут по обе стороны: объявлены в `*.cs`, переводятся словарями.
+# Поэтому проверка цепляется и к правке бэкенда, и к правке словарей.
+# `*.routes.ts` — третий вход: из них выводится, каким маршрутом грузится словарь,
+# а на этом стоит проверка достижимости
+if printf '%s\n' "$staged" | grep -q '\.cs$\|^src/PetTemplate\.Web/web/\(i18n\|tools\)/\|^src/PetTemplate\.Web/web/src/.*\.\(routes\|scopes\)\.ts$'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/i18n-server-codes.mjs
+  cd "$root"
+fi
+
+# Копии перечислений и правил аккаунта: правят `*.cs` или копию на клиенте (продукт и админка)
+if printf '%s\n' "$staged" | grep -q '\.cs$\|^src/PetTemplate\.Web/web/\(src\|projects\|tools\)/'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/enum-parity.mjs
+  cd "$root"
+fi
+
+# CSP nginx пускает инлайн-скрипт `index.html` по хешу: правка скрипта без нового хеша
+# молча сломала бы вход mini-app (`tools/csp-hash.mjs`)
+if printf '%s\n' "$staged" | grep -q 'index\.html$\|^IaC/nginx/conf/nginx\.conf$\|^src/PetTemplate\.Web/web/tools/csp-hash\.mjs$'; then
+  cd "$root/src/PetTemplate.Web/web"
+  node tools/csp-hash.mjs --check
+  cd "$root"
+fi
+
+# `-v q` — только ошибки: анализаторы дают пачку предупреждений, и в хуке
+# они утопили бы то единственное, ради чего он запущен
+if printf '%s\n' "$staged" | grep -q '\.\(cs\|csproj\|props\|slnx\)$'; then
+  dotnet build "$root/PetTemplate.slnx" -v q --nologo
+fi
+
+# Типы DTO из OpenAPI: правят DTO на сервере — или сгенерированный файл руками.
+# Решение уже собрано шагом выше, поэтому `--no-build`; без правки `*.cs` сборки не было —
+# тогда собирает сам скрипт
+if printf '%s\n' "$staged" | grep -q '\.\(cs\|csproj\)$\|^src/PetTemplate\.Web/web/src/app/shared/api/generated/schema\.d\.ts$\|^src/PetTemplate\.Web/web/tools/api-types\.mjs$'; then
+  cd "$root/src/PetTemplate.Web/web"
+  if printf '%s\n' "$staged" | grep -q '\.\(cs\|csproj\|props\|slnx\)$'; then
+    node tools/api-types.mjs --check --no-build
+  else
+    node tools/api-types.mjs --check
+  fi
+  cd "$root"
+fi

@@ -1,0 +1,77 @@
+using System.Text.Json;
+using PetTemplate.Services.Assistant.Sections;
+
+namespace PetTemplate.Services.Assistant;
+
+/// <summary>
+/// Шаг трассы человеческой строкой (спец. assistant, 13.2): «искал в справке: как
+/// пригласить коллегу», а не JSON с аргументами.
+///
+/// Это объясняет результат и делает ошибку видимой — «он искал не то».
+/// Глаголы берутся из словаря по имени инструмента: сочинять их модели нельзя,
+/// иначе объяснение хода зависело бы от того, в каком она настроении.
+///
+/// Точка расширения: глаголы инструментов раздела приносит сам раздел
+/// (<see cref="IAssistantSection.Verbs"/>, 7.1); глаголы ядра раздел не переписывает.
+/// Инструмент без глагола показывается своим именем. Синглтон: словарь собирается
+/// один раз из зарегистрированных разделов
+/// </summary>
+public class TraceSummary
+{
+    private static readonly Dictionary<string, string> CoreVerbs = new()
+    {
+        ["search_help"] = "искал в справке",
+        ["ask_user"] = "задал уточняющий вопрос",
+        ["apply_plan"] = "применил план",
+        ["remember_fact"] = "запомнил"
+    };
+
+    /// <summary>
+    /// Ключевые аргументы, которые стоит показать рядом с глаголом. Остальные молчат:
+    /// человек читает трассу, чтобы понять ход мысли, а не чтобы проверить сериализацию
+    /// </summary>
+    private static readonly string[] Interesting = ["query", "question", "date", "text", "title", "name"];
+
+    private readonly Dictionary<string, string> _verbs;
+
+    public TraceSummary(IEnumerable<IAssistantSection> sections)
+    {
+        _verbs = new Dictionary<string, string>(CoreVerbs);
+        foreach (var (tool, verb) in sections.SelectMany(x => x.Verbs)) _verbs.TryAdd(tool, verb);
+    }
+
+    public string Build(string kind, string? toolName, string arguments)
+    {
+        if (kind != "tool" || toolName == null) return "обращение к модели";
+
+        var verb = _verbs.GetValueOrDefault(toolName, toolName);
+        var details = Details(arguments);
+
+        return details.Length == 0 ? verb : $"{verb}: {details}";
+    }
+
+    private static string Details(string arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments)) return string.Empty;
+
+        try
+        {
+            var parsed = JsonDocument.Parse(arguments).RootElement;
+            if (parsed.ValueKind != JsonValueKind.Object) return string.Empty;
+
+            var parts = parsed.EnumerateObject()
+                .Where(x => Interesting.Contains(x.Name))
+                .Select(x => x.Value.ToString())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToArray();
+
+            return string.Join(", ", parts);
+        }
+        catch (JsonException)
+        {
+            // Аргументы пишет модель, и годного JSON среди них бывает не всегда —
+            // трасса от этого падать не должна
+            return string.Empty;
+        }
+    }
+}

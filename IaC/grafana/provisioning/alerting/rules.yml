@@ -1,0 +1,374 @@
+# Тревоги (спец. infrastructure, 10). Доставка в Telegram по умолчанию выключена
+# (grafana/on-hold/telegram.yml, спец. infrastructure, 13): пока проект её не включил,
+# тревоги видны только в Grafana, Alerting → Alert rules.
+#
+# У каждой тревоги два шага: A — запрос в Prometheus, B — условие «A больше нуля».
+# Пороги стоят в самих запросах, а не в B: так запрос, скопированный в Explore, сразу
+# показывает то, на что смотрит тревога.
+#
+# Пока метрики нет (писем ещё не было), тревога молчит — noDataState: OK. На случай,
+# если метрики не приходят вовсе, есть api-silent.
+#
+# Знак доллара в запросах и текстах не писать: Grafana подставит на его место
+# переменную окружения (telegram.yml)
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Почта и очередь
+    folder: PetTemplate
+    interval: 1m
+    rules:
+      # Молча неработающее восстановление пароля иначе обнаружится только жалобой
+      # (спец. mail, 7). Имя метрики — шаблоном: при переводе из OTLP Prometheus
+      # может дописать единицу перед _total
+      - uid: mail-failed
+        title: Письма не уходят
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: За час есть неотправленные письма — подтверждение почты и сброс пароля не доходят. Причина — в логе SendMailCommandHandler
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'sum(increase({__name__=~"pettemplate_mail_failed.*_total"}[1h])) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # Повтор в очереди без предела попыток (спец. mail, 4): команда, которая не пройдёт
+      # никогда (битое тело, обработчик падает на её данных), иначе крутилась бы молча.
+      # Пауза между повторами удваивается от минуты, поэтому шестая попытка — это уже
+      # больше часа неудач подряд. Тип команды — в метке commandType
+      - uid: queue-command-stuck
+        title: Команда очереди не проходит
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Команда в local_queue упала шесть раз подряд и больше часа повторяется. Причина — в логе её обработчика; тип — в метке commandType
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (commandType) ({__name__=~"local_command_queue_max_try_count.*"}) > 5'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+  # Ассистент и его расход (спец. assistant, 13.4–13.5). Снимок счёта у поставщика
+  # пересчитывает BillingMonitor раз в SpendOptions.MonitorInterval; пока платежей
+  # поставщику не записано, остатка нет и тревога молчит
+  - orgId: 1
+    name: Ассистент
+    folder: PetTemplate
+    interval: 1m
+    rules:
+      - uid: assistant-model-open
+        title: Модель разомкнута
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Модель перестала отвечать, ходы идут к следующей по порядку (спец. assistant, 16.2). Закроется сама, когда пройдёт пробный ход
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (model) ({__name__=~"pettemplate_assistant_model_open.*"})'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: billing-provider-balance-low
+        title: Остаток у поставщика модели ниже порога
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Кончится — ассистент встанет у всех разом. Пополнить счёт у поставщика и записать платёж в админке, раздел «Расход»
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (provider) ({__name__=~"pettemplate_billing_provider_balance_low.*"})'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: billing-discrepancy
+        title: Расчёт разошёлся с фактом у поставщика
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Расхождение больше 10% — цены в справочнике моделей разъехались с прайсом поставщика, а с ними и лимиты пространств. Сводка — в админке, раздел «Расход»
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (provider) (abs({__name__=~"pettemplate_billing_discrepancy.*"})) > 0.1'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+  - orgId: 1
+    name: API
+    folder: PetTemplate
+    interval: 1m
+    rules:
+      # Нет данных от API — либо API лежит, либо сломалась доставка метрик. Остальные
+      # тревоги в это время молчат (noDataState: OK), поэтому эта одна за всех.
+      # target_info приходит с каждой отправкой метрик, job — OTEL_SERVICE_NAME
+      - uid: api-silent
+        title: API не шлёт метрики
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 10 минут нет ни одной метрики от pettemplate-api — API упал или не доходит до коллектора. Остальные тревоги в это время слепы
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'absent_over_time(target_info{job="pettemplate-api"}[10m])'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+  # Машина и сервисы рядом с API: метрики забирает Prometheus сам (prometheus/prometheus.yml)
+  - orgId: 1
+    name: Инфраструктура
+    folder: PetTemplate
+    interval: 1m
+    rules:
+      - uid: infra-target-down
+        title: Сервис не отдаёт метрики
+        condition: B
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Prometheus не может забрать метрики у сервиса из метки job: для qdrant это значит, что лежит сам Qdrant, для остальных — экспортёр'
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (job) (1 - up{job=~"qdrant|postgres|node|cadvisor"})'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # Экспортёр жив, а база нет. Лёг сам экспортёр — это infra-target-down
+      - uid: postgres-down
+        title: PostgreSQL недоступен
+        condition: B
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Экспортёр жив, но до базы не достучаться — API в это время тоже не работает
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: '1 - max(pg_up)'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: postgres-connections
+        title: Соединения с PostgreSQL на исходе
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Занято больше 80% max_connections — дальше новые соединения API получат отказ
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'sum(pg_stat_database_numbackends) / max(pg_settings_max_connections) > 0.8'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: host-disk
+        title: Диск заполнен
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Занято больше 85% диска. Кончится место — PostgreSQL встанет. Смотреть docker system df и бэкапы в ~/db-backups
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 'max by (mountpoint) (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) > 0.85'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: host-memory
+        title: Память на исходе
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Свободно меньше 10% памяти 10 минут подряд — следом придёт OOM killer. Кто ест — дашборд «Контейнеры»
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: '1 - max(node_memory_MemAvailable_bytes) / max(node_memory_MemTotal_bytes) > 0.9'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: host-cpu
+        title: Процессор загружен
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Процессор занят больше чем на 90% 15 минут подряд. Кто ест — дашборд «Контейнеры»
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: '1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }

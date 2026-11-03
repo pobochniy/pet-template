@@ -11,9 +11,10 @@ public static class ClaimsPrincipalExtensions
     {
         ArgumentNullException.ThrowIfNull(principal);
 
-        var value = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (value == null) throw new ArgumentException("Не найден");
-        
+        // Без клейма сюда доходит только эндпоинт, забывший [Authorize], — ошибка разметки, 500
+        var value = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? throw new InvalidOperationException("No NameIdentifier claim: the endpoint is not authorized");
+
         var id = Guid.Parse(value);
         return id;
     }

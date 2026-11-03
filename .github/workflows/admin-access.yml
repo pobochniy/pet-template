@@ -1,0 +1,68 @@
+name: Admin Access
+
+# Открыть и закрыть adminka.example.com (спец. admin, 7). Почти всё время она закрыта
+# (`deny all` в её server-блоке), так что сканировать и подбирать пароли некому.
+# Нужно поработать — Run workflow с `open`: на заданное число часов она открыта всем,
+# без списка адресов. Закончил — `close`. Забыл — её закроет запуск по расписанию,
+# когда срок выйдет, а лёг раннер — cron на самой VM (IaC/admin-access.sh). Чем грозит окно и что ставить взамен — tech-debt/admin-perimeter.md.
+# Тем же замком закрыта grafana.example.com (спец. infrastructure, 10) — этот же файл
+# открывает и её (спец. admin, 7); проверка закрытия по-прежнему стучится в админку.
+#
+# Открытие — файл `admin-allow-open.inc` с `allow all;` рядом с `nginx.conf`: его
+# подхватывает тот же `include admin-allow*.inc`, что и постоянный список
+# `admin-allow.inc`. Постоянный список workflow не трогает. Замок `/api/admin*` на
+# основном домене от обоих не зависит и закрыт всегда.
+#
+# Раннер self-hosted на той же VM, что и nginx: файл пишется на хост, `reload` — через
+# `docker exec`. Каталог конфигов берётся из тома контейнера, а не из пути на диске.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'open — открыть, close — закрыть'
+        required: true
+        type: choice
+        options:
+          - open
+          - close
+        default: open
+      hours:
+        description: 'На сколько часов открыть (для open)'
+        required: true
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '4'
+          - '8'
+        default: '2'
+  # Закрывает открытое, у которого вышел срок. Без файла — проверяет, что nginx и правда
+  # закрыт (прошлое закрытие могло не дойти до него), и выходит.
+  # GitHub может запускать расписание с опозданием, так что срок — «не раньше чем»
+  schedule:
+    - cron: '*/15 * * * *'
+
+# Запуски не должны идти одновременно: иначе reload увидит половину. Держит их порознь
+# `flock` на хосте, а не `concurrency`: в группе GitHub ждёт только один запуск, и новый
+# отменяет прежний — ручной close съел бы запуск по расписанию, а тот — ручной.
+
+# Токену — только чтение: checkout забирает IaC/admin-access.sh, всё остальное делается на хосте
+permissions:
+  contents: read
+
+jobs:
+  toggle:
+    runs-on: [self-hosted]
+    steps:
+      # Логика — в IaC/admin-access.sh: тот же скрипт раз в 5 минут зовёт cron на VM
+      # (setup-vm.sh), чтобы срок окна держался и без раннера
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: open / close 🔐
+        env:
+          ACTION: ${{ github.event_name == 'schedule' && 'expire' || github.event.inputs.action }}
+          HOURS: ${{ github.event.inputs.hours }}
+          ACTOR: ${{ github.actor }}
+        run: bash IaC/admin-access.sh "$ACTION" "$HOURS"

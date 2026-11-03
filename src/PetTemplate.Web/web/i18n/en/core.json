@@ -1,0 +1,83 @@
+{
+  "app": {
+    "title": "PetTemplate"
+  },
+  "nav": {
+    "toggleMenu": "Show or hide the menu",
+    "home": "Home",
+    "profile": "Profile",
+    "logOut": "Log out",
+    "members": "Members",
+    "help": "Help",
+    "workspace": "Active space",
+    "workspaceSettings": "Space settings"
+  },
+  "action": {
+    "save": "Save",
+    "close": "Close",
+    "back": "Back",
+    "yes": "Yes",
+    "no": "No",
+    "cancel": "Cancel",
+    "retry": "Retry"
+  },
+  "field": {
+    "userName": "Username",
+    "password": "Password",
+    "passwordConfirm": "Repeat password",
+    "email": "Email",
+    "phone": "Phone",
+    "comment": "Comment",
+    "user": "User",
+    "name": "Name",
+    "workspaceName": "Space name"
+  },
+  "empty": {
+    "nothingFound": "Nothing found",
+    "loading": "Loading…"
+  },
+  "search": {
+    "placeholder": "Search",
+    "submit": "Find",
+    "clear": "Reset"
+  },
+  "language": {
+    "title": "Interface language",
+    "search": "Find a language",
+    "current": "Interface language: {language}"
+  },
+  "validation": {
+    "required": "“{field}” is required",
+    "minLength": {
+      "one": "At least {n} character",
+      "other": "At least {n} characters"
+    },
+    "maxLength": {
+      "one": "At most {n} character",
+      "other": "At most {n} characters"
+    },
+    "pattern": "“{field}” has the wrong format",
+    "min": "At least {min}",
+    "max": "At most {max}",
+    "email": "This is not an email address",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "stringLength": "From {min} to {max} characters",
+    "stringLengthMax": "At most {max} characters",
+    "stringLengthMin": "At least {min} characters",
+    "valueRequired": "Required field",
+    "mismatch": "The values do not match",
+    "range": "From {min} to {max}",
+    "minItems": "Select at least {min}",
+    "maxItems": "At most {max}",
+    "invalid": "Invalid value",
+    "userNameFormat": "{min} to {max} characters: Latin letters, digits, “_” and “.”, starting with a letter",
+    "userNameReserved": "Usernames like tg123 and vk123 are reserved for automatic ones — choose another",
+    "phoneFormat": "A phone number is a plus and 11 digits, e.g. +79991234567",
+    "language": "Supported languages: {supported}"
+  },
+  "error": {
+    "unknown": "Something went wrong. Please try again",
+    "sessionExpired": "Your session has expired, please log in again",
+    "malformedJson": "Could not read the request"
+  }
+}

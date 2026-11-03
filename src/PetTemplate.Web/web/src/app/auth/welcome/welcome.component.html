@@ -1,0 +1,53 @@
+<div class="container py-4 auth-welcome" id="welcome">
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      <h4 class="fw-bold text-center mb-1">{{ i18n.t('auth.welcome.title') }}</h4>
+      <div class="form-text text-center mb-4">{{ i18n.t('auth.welcome.subtitle') }}</div>
+
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <!-- Логин уже заполнен автоматическим (спец. accounts, 4.2): поменять можно, но не обязательно -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="welcome-user-name">{{ i18n.t('core.field.userName') }}</label>
+          <input class="form-control" type="text" id="welcome-user-name" autocomplete="username"
+                 [attr.maxlength]="userNameMaxLength" formControlName="userName" />
+          <div class="form-text">{{ i18n.t('auth.welcome.userNameHint') }}</div>
+          <form-validation [model]="userName" fieldKey="core.field.userName"></form-validation>
+          @if (userNameRefusal()) {
+            <div class="text-danger small mt-1" id="welcome-user-name-refusal">{{ userNameRefusal() }}</div>
+          }
+        </div>
+
+        <!--
+          Пароль необязателен: аккаунт из Telegram или VK его не имеет, и задать его здесь
+          проще, чем потом искать в профиле. Задан — поля уходят, повторно не задаётся
+        -->
+        @if (!passwordSet()) {
+          <div class="border rounded p-3 mb-3" [formGroup]="passwordForm" id="welcome-password">
+            <div class="form-text mt-0 mb-2">{{ i18n.t('auth.welcome.passwordHint') }}</div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="welcome-new-password">{{ i18n.t('core.field.password') }}</label>
+              <input class="form-control" type="password" id="welcome-new-password" autocomplete="new-password"
+                     formControlName="newPassword" />
+              <form-validation [model]="passwordForm.controls.newPassword" fieldKey="core.field.password"></form-validation>
+            </div>
+            <div>
+              <label class="form-label fw-semibold" for="welcome-new-password-confirm">{{ i18n.t('core.field.passwordConfirm') }}</label>
+              <input class="form-control" type="password" id="welcome-new-password-confirm" autocomplete="new-password"
+                     formControlName="newPasswordConfirm" />
+              <form-validation [model]="passwordForm.controls.newPasswordConfirm" fieldKey="core.field.passwordConfirm"></form-validation>
+              @if (passwordForm.controls.newPasswordConfirm.touched && passwordForm.hasError('PassNotSame')) {
+                <div class="text-danger small mt-1">{{ i18n.t('core.validation.passwordsDoNotMatch') }}</div>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary btn-lg" id="welcome-submit" [disabled]="busy()">
+            {{ i18n.t('auth.welcome.submit') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

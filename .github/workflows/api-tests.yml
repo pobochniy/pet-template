@@ -1,0 +1,35 @@
+name: Api Tests
+
+# Тесты сервера (спец. infrastructure, 5): в ПР и воротами publish-api.yml.
+# Раннер облачный, а не self-hosted: тестам нужен только докер под Testcontainers
+# (PostgreSQL и Qdrant), а код ветки из ПР незачем гонять на машине с продом, как
+# и отнимать у прода два ядра на прогон.
+
+on:
+  pull_request:
+  workflow_call:
+
+env:
+  # Как TargetFramework (net10.0)
+  DOTNET_VERSION: "10.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Одной командой по решению. verbosity=minimal у MTP по умолчанию — в логе
+      # только упавшие тесты и итог
+      - name: test 🧪
+        run: dotnet test --solution PetTemplate.slnx -c Release

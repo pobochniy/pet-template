@@ -1,0 +1,103 @@
+import type { Mocked } from 'vitest';
+import { WorkspaceContextService } from '../shared/core/workspace-context.service';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { Router, provideRouter } from '@angular/router';
+import { InviteComponent } from './invite.component';
+import { InvitationApiService } from '../shared/api/invitation-api.service';
+import { AuthApiService } from '../shared/api/auth-api.service';
+import { UserService } from '../shared/core/user.service';
+import { InvitationStatusEnum } from '../shared/enums/invitation-status.enum';
+import { I18nService } from '../shared/i18n/i18n.service';
+import { loadAllScopes } from '../shared/i18n/i18n.testing';
+import { ExternalLoginApiService } from '../shared/api/external-login-api.service';
+import { ExternalLoginApiServiceMock } from '../shared/api/external-login-api.service.mock';
+import { profileDto, sessionDto } from '../shared/api/dto.mock';
+
+describe('InviteComponent', () => {
+  let fixture: ComponentFixture<InviteComponent>;
+  let el: HTMLElement;
+  let api: Mocked<InvitationApiService>;
+  let router: Router;
+
+  async function render(status: InvitationStatusEnum, signedIn = false) {
+    api = { preview: vi.fn(), accept: vi.fn(), register: vi.fn() } as unknown as Mocked<InvitationApiService>;
+    api.preview.mockResolvedValue(status === InvitationStatusEnum.Active
+      ? { status, workspaceName: 'Рога и Копыта', inviterName: 'Oleg', inviteeName: 'Валера' }
+      : { status, workspaceName: null, inviterName: null, inviteeName: null });
+    const session = sessionDto({
+      token: 'token-accepted',
+      profile: profileDto({ id: 'me', userName: 'Vasya', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true }),
+      permissionsByWorkspace: { 'ws-new': [] }
+    });
+    api.accept.mockResolvedValue(session);
+    api.register.mockResolvedValue(session);
+
+    await TestBed.configureTestingModule({
+      imports: [InviteComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ExternalLoginApiService, useClass: ExternalLoginApiServiceMock },
+        provideRouter([]),
+        { provide: InvitationApiService, useValue: api },
+        { provide: AuthApiService, useValue: { login: vi.fn() } as unknown as Mocked<AuthApiService> }
+      ]
+    }).compileComponents();
+
+    await loadAllScopes(TestBed.inject(I18nService));
+    if (signedIn) {
+      TestBed.inject(UserService).setProfile(profileDto({
+        id: 'me', userName: 'Vasya', avatarId: null, comment: null, isAdult: true, hasAcceptedTerms: true
+      }));
+    }
+    router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    fixture = TestBed.createComponent(InviteComponent);
+    fixture.componentRef.setInput('token', 'token-1');
+    el = fixture.nativeElement;
+    await fixture.whenStable();
+  }
+
+  it('should greet by name and name the workspace', async () => {
+    await render(InvitationStatusEnum.Active);
+
+    expect(el.querySelector('#invite-greeting')?.textContent).toContain('Привет, Валера!');
+    expect(el.querySelector('#invite-greeting')?.textContent).toContain('Oleg приглашает вас в пространство «Рога и Копыта»');
+  });
+
+  it('should show the refusal of a revoked link', async () => {
+    await render(InvitationStatusEnum.Revoked);
+
+    expect(el.querySelector('#invite-refusal')?.textContent?.trim()).toBe('Приглашение отозвано. Попросите новую ссылку');
+  });
+
+  it('should let a signed-in user accept with one button', async () => {
+    await render(InvitationStatusEnum.Active, true);
+
+    el.querySelector<HTMLButtonElement>('#invite-accept')!.click();
+    await fixture.whenStable();
+
+    expect(api.accept).toHaveBeenCalledWith('token-1');
+    // Сессию из ответа раскладывает экран, принятое пространство — активное (6.3)
+    expect(TestBed.inject(WorkspaceContextService).currentWorkspaceId()).toBe('ws-new');
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/');
+  });
+
+  it('should register a guest by the link', async () => {
+    await render(InvitationStatusEnum.Active);
+
+    const set = (id: string, value: string) => {
+      const input = el.querySelector<HTMLInputElement>(id)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    };
+    set('#invite-username', 'Maxim');
+    set('#invite-password', 'password123');
+    set('#invite-password-confirm', 'password123');
+    el.querySelector<HTMLButtonElement>('#invite-register-submit')!.click();
+    await fixture.whenStable();
+
+    expect(api.register).toHaveBeenCalledWith('token-1', 'Maxim', 'password123', 'password123', 'ru');
+  });
+});

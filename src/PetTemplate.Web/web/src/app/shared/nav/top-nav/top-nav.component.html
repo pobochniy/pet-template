@@ -1,0 +1,50 @@
+<nav class="top-navbar">
+  <div class="top-navbar-left">
+    <button type="button" id="sidebarCollapse" class="icon-button"
+            [attr.aria-label]="i18n.t('core.nav.toggleMenu')" (click)="toggleMenu()">
+      <svg [appIcon]="icons.Menu"></svg>
+    </button>
+  </div>
+  <div class="top-navbar-content">
+    @if (userService.isAuthenticated) {
+      @if (workspaces().length > 0) {
+        <!-- Нативный select, а не ngModel: @angular/forms в initial не берём -->
+        <select id="workspace-selector" class="form-select form-select-sm workspace-selector"
+                [attr.aria-label]="i18n.t('core.nav.workspace')"
+                [disabled]="workspaces().length <= 1"
+                (change)="onWorkspaceChange($event)">
+          @for (ws of workspaces(); track ws.id) {
+            <option [value]="ws.id" [selected]="ws.id === workspaceContext.currentWorkspaceId()">{{ ws.name }}</option>
+          }
+        </select>
+      }
+      <button type="button" id="workspace-settings" class="icon-button" (click)="goToWorkspaceSettings()"
+              [title]="i18n.t('core.nav.workspaceSettings')" [attr.aria-label]="i18n.t('core.nav.workspaceSettings')">
+        <svg [appIcon]="icons.Settings"></svg>
+      </button>
+      <button type="button" class="icon-button" (click)="goToProfile()"
+              [title]="i18n.t('core.nav.profile')" [attr.aria-label]="i18n.t('core.nav.profile')">
+        <svg [appIcon]="icons.User"></svg>
+      </button>
+    }
+    <button type="button" id="language-picker-button" class="icon-button"
+            [title]="i18n.t('core.language.current', { language: currentLanguage().nativeName })"
+            [attr.aria-label]="i18n.t('core.language.current', { language: currentLanguage().nativeName })"
+            (click)="toggleLanguagePicker()">
+      <shared-lang-flag [lang]="i18n.lang()"></shared-lang-flag>
+    </button>
+    @if (userService.isAuthenticated) {
+      <button type="button" class="icon-button" (click)="logOut()"
+              [title]="i18n.t('core.nav.logOut')" [attr.aria-label]="i18n.t('core.nav.logOut')">
+        <svg [appIcon]="icons.LogOut"></svg>
+      </button>
+    }
+  </div>
+</nav>
+
+<shared-language-picker
+  [isOpen]="isLanguagePickerOpen()"
+  [selected]="i18n.lang()"
+  (picked)="onLanguagePicked($event)"
+  (closed)="closeLanguagePicker()"
+></shared-language-picker>

@@ -1,0 +1,84 @@
+name: Cleanup Old Docker Images
+
+# Зовётся из publish-api.yml после выкатки: пять последних версий плюс latest,
+# бегущий контейнер не трогается (спец. infrastructure, 6). Тег — дата сборки, поэтому
+# порядок docker images (новые сверху) совпадает с порядком выкаток
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: 'Docker image name to cleanup'
+        required: true
+        type: string
+      keep_versions:
+        description: 'Number of versions to keep'
+        required: false
+        type: number
+        default: 5
+      container_name:
+        description: 'Running container name to protect'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  cleanup:
+    runs-on: [self-hosted]
+    steps:
+      # Входы — переменными окружения, а не подстановкой выражений в текст скрипта:
+      # так shellcheck видит в KEEP_VERSIONS число, а значения не становятся кодом
+      - name: Cleanup old images
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          KEEP_VERSIONS: ${{ inputs.keep_versions }}
+          CONTAINER_NAME: ${{ inputs.container_name }}
+        run: |
+          echo "🧹 Cleaning up old $IMAGE_NAME images (keeping last $KEEP_VERSIONS versions + latest)..."
+          
+          # Get current running image to protect it
+          CURRENT_IMAGE=""
+          if [ -n "$CONTAINER_NAME" ] && docker ps | grep -q "$CONTAINER_NAME"; then
+            CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}' | cut -d':' -f2)
+            echo "Protected (running): $CURRENT_IMAGE"
+          fi
+          
+          # Get all images except 'latest', sorted by creation date (newest first)
+          IMAGES_TO_CHECK=$(docker images "$IMAGE_NAME" --format "{{.Tag}}" | grep -v "latest")
+          TOTAL_COUNT=$(echo "$IMAGES_TO_CHECK" | wc -l | tr -d ' ')
+          
+          echo "Total versioned images: $TOTAL_COUNT"
+          
+          if [ "$TOTAL_COUNT" -le "$KEEP_VERSIONS" ]; then
+            echo "✅ Only $TOTAL_COUNT images, no cleanup needed"
+            exit 0
+          fi
+          
+          # Delete old images (keep first N)
+          KEEP_PLUS_ONE=$((KEEP_VERSIONS + 1))
+          IMAGES_TO_DELETE=$(echo "$IMAGES_TO_CHECK" | tail -n +"$KEEP_PLUS_ONE")
+          DELETED_COUNT=0
+          
+          echo ""
+          echo "🗑️  Images to delete:"
+          echo "$IMAGES_TO_DELETE"
+          echo ""
+          
+          for TAG in $IMAGES_TO_DELETE; do
+            if [ "$TAG" = "$CURRENT_IMAGE" ]; then
+              echo "⚠️  Skipping $TAG (currently running)"
+              continue
+            fi
+            
+            if docker rmi "$IMAGE_NAME:$TAG" 2>/dev/null; then
+              echo "✅ Deleted: $TAG"
+              DELETED_COUNT=$((DELETED_COUNT + 1))
+            else
+              echo "⚠️  Failed to delete: $TAG (might be in use)"
+            fi
+          done
+          
+          echo ""
+          echo "✅ Cleanup completed: deleted $DELETED_COUNT images"
+          echo "📦 Remaining images: $(docker images "$IMAGE_NAME" | tail -n +2 | wc -l)"
+

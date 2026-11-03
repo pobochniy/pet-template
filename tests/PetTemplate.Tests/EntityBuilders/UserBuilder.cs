@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using PetTemplate.Api.Extensions.Auth;
 using PetTemplate.Db.Entity;
 using PetTemplate.Shared.Enums;
 
@@ -9,26 +10,34 @@ namespace PetTemplate.Tests.EntityBuilders;
 
 public class UserBuilder
 {
-    private static long TestUserTelegramId = 12345678;
+    private static long _lastTelegramId = 12345678;
     
-    public static readonly string SuperAdminTelegramAuth = "!Qwerty23";
+    /// <summary>Пароль аккаунта из билдера — от него хеш прежней схемы в конструкторе</summary>
+    public static readonly string SuperAdminPassword = "!Qwerty23";
+
+    public static readonly string SuperAdminTelegramAuth = SuperAdminPassword;
     public static readonly string SuperAdminName = "admin";
     
     private readonly Profile _profile;
-    private readonly List<PermissionEnum> _permissions = [];
 
     public UserBuilder(string name = "Oleg", Guid? id = null, long? telegramId = null)
     {
         id ??= Guid.CreateVersion7();
-        telegramId ??= TestUserTelegramId;
+        // Телеграм-id уникален в базе (`ix_users_telegram_id`): двум пользователям одного
+        // теста нужен каждому свой. `Interlocked` — потому что xunit гоняет классы параллельно
+        telegramId ??= Interlocked.Increment(ref _lastTelegramId);
 
         _profile = new Profile
         {
             Id = id.Value,
             UserName = name,
+            // Хеш прежней схемы (SHA-256 от «соль#пароль») от SuperAdminPassword: первый вход
+            // пересчитывает его на PBKDF2 (спец. accounts, 8.1) — так каждый тест со входом
+            // заодно проверяет, что старые пароли входят
             User = new User
             {
                 Id = id.Value,
+                CreatedAtUtc = DateTime.UtcNow,
                 TelegramId = telegramId.Value,
                 SecurityStamp = "90261657-e9f1-4b73-96f8-430c18625150",
                 PasswordHash = "92EA49A646E44C805568A15AB386888AC4E1C9A3FD82159DB59A98EAF9895DFD"
@@ -36,41 +45,114 @@ public class UserBuilder
         };
     }
 
-    public UserBuilder WithAllPermissions()
+    /// <summary>
+    /// Почта и телефон — чтобы проверить, что чужим они не уезжают (спец. authorization, 5)
+    /// </summary>
+    public UserBuilder WithContacts(string email, string phone)
     {
-        var allPermissions = Enum.GetValues(typeof(PermissionEnum))
-            .Cast<PermissionEnum>()
-            .Select(x => new UserInPermission
-            {
-                UserId = _profile.Id,
-                PermissionId = x
-            })
-            .Where(x => x.PermissionId != 0)
-            .ToArray();
-
-        _profile.User.UserPermissions = allPermissions;
-        _permissions.AddRange(allPermissions.Select(x => x.PermissionId));
+        _profile.Email = email;
+        _profile.PhoneNumber = phone;
         return this;
     }
 
-    public UserBuilder WithPermissions(Guid organizationId, ICollection<PermissionEnum> permissions)
+    /// <summary>
+    /// Аккаунт без пароля — как пришедший из Telegram или VK (спец. accounts, раздел 3):
+    /// паролем не войти, клиент — с готовым токеном (<c>TestSession</c>)
+    /// </summary>
+    public UserBuilder WithoutPassword()
+    {
+        _profile.User!.PasswordHash = null;
+        _profile.User.SecurityStamp = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Без Telegram: способом войти остаётся только пароль (спец. accounts, раздел 3).
+    /// По умолчанию билдер выдаёт каждому свой <c>TelegramId</c> — ради уникального индекса
+    /// </summary>
+    public UserBuilder WithoutTelegram()
+    {
+        _profile.User!.TelegramId = null;
+        return this;
+    }
+
+    /// <summary>Привязанный Telegram с этим id (спец. accounts, раздел 3)</summary>
+    public UserBuilder WithTelegram(long telegramId)
+    {
+        _profile.User!.TelegramId = telegramId;
+        return this;
+    }
+
+    /// <summary>Привязанный VK (спец. accounts, раздел 3)</summary>
+    public UserBuilder WithVk(long vkId)
+    {
+        _profile.User!.VkId = vkId;
+        return this;
+    }
+
+    /// <summary>
+    /// Основное пространство (спец. authorization, 7.1)
+    /// </summary>
+    public UserBuilder WithPrimaryWorkspace(Guid workspaceId)
+    {
+        _profile.PrimaryWorkspaceId = workspaceId;
+        return this;
+    }
+
+    /// <summary>
+    /// Все права в пространстве — набор владельца. Само пространство тест кладёт в базу
+    /// сам (<see cref="WorkspaceBuilder"/>): права ссылаются на него внешним ключом
+    /// </summary>
+    public UserBuilder WithAllPermissions(Guid workspaceId)
+    {
+        var allPermissions = Enum.GetValues<PermissionEnum>()
+            .Where(x => x != PermissionEnum.None)
+            .ToList();
+
+        return WithPermissions(workspaceId, allPermissions);
+    }
+
+    /// <summary>
+    /// Права в пространстве — строками в базе. В токене прав нет: сервер читает их
+    /// из базы на каждом запросе (спец. authorization, 2.3)
+    /// </summary>
+    public UserBuilder WithPermissions(Guid workspaceId, ICollection<PermissionEnum> permissions)
     {
         foreach (var permission in permissions)
         {
-            _profile.User.UserPermissions.Add(new UserInPermission 
-            { 
-                UserId = _profile.Id, 
+            _profile.User!.UserPermissions.Add(new UserInPermission
+            {
+                WorkspaceId = workspaceId,
+                UserId = _profile.Id,
                 PermissionId = permission
             });
-            _permissions.Add(permission);
         }
 
         return this;
     }
-    
-    public UserBuilder WithPermissions(Guid organizationId, params PermissionEnum[] permissions)
+
+    public UserBuilder WithPermissions(Guid workspaceId, params PermissionEnum[] permissions)
     {
-        return WithPermissions(organizationId, permissions.ToList());
+        return WithPermissions(workspaceId, permissions.ToList());
+    }
+
+    /// <summary>
+    /// Роли админки (спец. admin, 3.1) — строками в базе, по одной на роль, как их заводит
+    /// владелец. В токен продукта они не едут: админский токен выдаёт <c>Admin/Login</c>
+    /// </summary>
+    public UserBuilder WithAdminRoles(params AdminRole[] roles)
+    {
+        foreach (var role in roles)
+        {
+            _profile.User!.AdminRoles.Add(new UserInAdminRole
+            {
+                UserId = _profile.Id,
+                Role = role,
+                GrantedUtc = DateTime.UtcNow
+            });
+        }
+
+        return this;
     }
 
     public (string token, Profile profile) Please()
@@ -85,7 +167,10 @@ public class UserBuilder
         {
             new(ClaimTypes.NameIdentifier, _profile.Id.ToString()),
         };
-        claims.AddRange(_permissions.Select(permission => new Claim(ClaimTypes.Role, ((int)permission).ToString())));
+        // Как после входа паролем (спец. accounts, 8.6): окно свежего входа открыто, и привязка,
+        // отвязка и смена почты проходят без подтверждения. Давняя сессия без отметки —
+        // `TestSession.IssuedAt`
+        claims.AddRange(FreshLogin.Claims(SessionLogin.Password()));
 
         var keyBytes = Encoding.UTF8.GetBytes("TestSigningKeyThatIsLongEnough123456");
         var symmetricKey = new SymmetricSecurityKey(keyBytes);

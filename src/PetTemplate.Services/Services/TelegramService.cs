@@ -6,19 +6,26 @@ using Microsoft.Extensions.Configuration;
 
 namespace PetTemplate.Services.Services;
 
+/// <summary>
+/// Подпись <c>initData</c> mini-app Telegram (спец. accounts, 5.6) — HMAC токеном бота.
+/// Нужен только mini-app: вход на сайте проверяет <c>id_token</c> окна Telegram копией
+/// открытых ключей (<c>TelegramLogin</c>) и токена бота не знает. Свежесть подписи и
+/// Development без проверки — <c>MiniAppLaunch</c>
+/// </summary>
 public class TelegramService(IConfiguration configuration)
 {
     private readonly string _botToken = configuration["Telegram:BotToken"] 
                                         ?? throw new InvalidOperationException("Telegram:BotToken not configured");
 
     /// <summary>
-    /// Проверяет валидность подписи Telegram WebApp initData
+    /// Проверяет валидность подписи Telegram WebApp initData. Пустой токен бота — отказ,
+    /// как у <c>VkService.IsSignValid</c>: подпись ключом из пустой строки подделает любой
     /// </summary>
     public bool ValidateInitData(string? initData)
     {
         try
         {
-            if (initData == null) return false;
+            if (initData == null || string.IsNullOrWhiteSpace(_botToken)) return false;
             var parameters = HttpUtility.ParseQueryString(initData);
             var hash = parameters["hash"];
             
@@ -39,36 +46,15 @@ public class TelegramService(IConfiguration configuration)
             
             // Вычисляем HMAC-SHA256
             var computedHash = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
-            var computedHashHex = Convert.ToHexString(computedHash).ToLower();
 
-            return computedHashHex == hash;
+            // За постоянное время: побайтовое сравнение строк выходит на первом расхождении,
+            // и по времени ответа подпись подбиралась бы байт за байтом
+            return hash.Length == computedHash.Length * 2
+                   && CryptographicOperations.FixedTimeEquals(computedHash, Convert.FromHexString(hash));
         }
         catch
         {
             return false;
-        }
-    }
-
-    /// <summary>
-    /// Извлекает Telegram User ID из initData
-    /// </summary>
-    public long? ExtractTelegramUserId(string initData)
-    {
-        try
-        {
-            var parameters = HttpUtility.ParseQueryString(initData);
-            var userJson = parameters["user"];
-            
-            if (string.IsNullOrEmpty(userJson))
-                return null;
-
-            // Парсим JSON вручную для получения id
-            var userData = System.Text.Json.JsonSerializer.Deserialize<TelegramUser>(userJson);
-            return userData?.Id;
-        }
-        catch
-        {
-            return null;
         }
     }
 
@@ -91,35 +77,6 @@ public class TelegramService(IConfiguration configuration)
         {
             return null;
         }
-    }
-
-    /// <summary>
-    /// Генерирует тестовый initData с валидной подписью для разработки
-    /// </summary>
-    public string GenerateTestInitData(string username, long userId)
-    {
-        var authDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var userJson = System.Text.Json.JsonSerializer.Serialize(new TelegramUser
-        {
-            Id = userId,
-            FirstName = username,
-            Username = username
-        });
-
-        var parameters = new Dictionary<string, string>
-        {
-            { "auth_date", authDate.ToString() },
-            { "user", userJson }
-        };
-
-        var dataCheckString = string.Join("\n",
-            parameters.OrderBy(p => p.Key).Select(p => $"{p.Key}={p.Value}"));
-
-        var secretKey = HMACSHA256.HashData(Encoding.UTF8.GetBytes("WebAppData"), Encoding.UTF8.GetBytes(_botToken));
-        var computedHash = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
-        var hash = Convert.ToHexString(computedHash).ToLower();
-
-        return $"auth_date={authDate}&user={Uri.EscapeDataString(userJson)}&hash={hash}";
     }
 
     public class TelegramUser

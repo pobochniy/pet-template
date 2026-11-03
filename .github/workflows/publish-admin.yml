@@ -1,0 +1,62 @@
+name: Publish Admin
+
+# Админка — отдельная сборка отдельным артефактом (спец. admin, 2 и 7; спец. infrastructure, 7):
+# проект `admin` из того же `angular.json`, что и продукт, и свой каталог на сервере,
+# который nginx отдаёт server-блоком adminka.example.com (IaC/docker-compose.yml, том ./adminka).
+# Отдельно — потому что замок по адресу ставится на весь server-блок одной строкой,
+# а правила качества продукта (i18n, адаптив, бюджет) на админку не распространяются.
+#
+# Ворота — те же `web-tests.yml`, что у продукта: спеки админки идут там вместе
+# со спеками продукта. Проверки `i18n:*` админку не касаются — она вне их периметра,
+# без словарей и без перевода (спец. admin, 4), — но красные словари продукта
+# остановят и её выкатку: репозиторий один, и такая ветка не выкатывается целиком.
+
+on:
+  workflow_dispatch:
+
+env:
+  ANGULAR_PROJECT_PATH: src/PetTemplate.Web/web
+  # outputPath проекта admin в angular.json — dist/admin; application-билдер кладёт сайт в browser/
+  BUILD_OUTPUT_PATH: src/PetTemplate.Web/web/dist/admin/browser
+  # Корень выпусков: releases/<sha>, ссылки current и previous (IaC/publish-static.sh)
+  DEPLOY_ROOT: adminka
+
+jobs:
+  tests:
+    uses: ./.github/workflows/web-tests.yml
+
+  build-and-deploy:
+    needs: tests
+    runs-on: [self-hosted]
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ env.ANGULAR_PROJECT_PATH }}/package-lock.json
+
+      # `npm ci`, а не `npm install` — по той же причине, что в `publish-angular.yml`
+      - name: Install dependencies 📦
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm ci
+
+      # Бюджет `initial` проекта admin — свой, `maximumError` 600 КБ: превышение роняет сборку
+      - name: Build admin for production 🏗️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npx ng build admin --configuration production
+
+      # CSP админки — `script-src 'self'` без хешей: в собранном `index.html` ни инлайн-скриптов,
+      # ни инлайн-обработчиков (`tools/csp-hash.mjs`)
+      - name: Check CSP of the built index.html 🛡️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm run csp:hash -- --check
+
+      # Атомарно, как у продукта (publish-angular.yml, IaC/publish-static.sh)
+      - name: Deploy 🚀
+        env:
+          SHA: ${{ github.sha }}
+        run: sh IaC/publish-static.sh "$BUILD_OUTPUT_PATH" "$HOME/$DEPLOY_ROOT" "$SHA"

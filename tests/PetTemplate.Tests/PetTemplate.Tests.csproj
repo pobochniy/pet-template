@@ -5,17 +5,21 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <!-- xUnit1051 «передайте TestContext.Current.CancellationToken» — ~900 вызовов HTTP-клиента
+             и EF без токена. Отменять отдельный тест посреди запроса незачем, а токен в каждом
+             вызове — шум, за которым не видно настоящих предупреждений -->
+        <NoWarn>$(NoWarn);xUnit1051</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="coverlet.collector"/>
         <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
         <PackageReference Include="Microsoft.IdentityModel.Tokens" />
         <PackageReference Include="Microsoft.NET.Test.Sdk"/>
         <PackageReference Include="Moq" />
         <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+        <PackageReference Include="Testcontainers.PostgreSql" />
+        <PackageReference Include="Testcontainers.Qdrant" />
         <PackageReference Include="xunit.v3" />
         <PackageReference Include="xunit.runner.visualstudio" />
     </ItemGroup>
@@ -29,6 +33,8 @@
         <ProjectReference Include="..\..\src\PetTemplate.Db\PetTemplate.Db.csproj" />
         <ProjectReference Include="..\..\src\PetTemplate.Services\PetTemplate.Services.csproj" />
         <ProjectReference Include="..\..\src\PetTemplate.Shared\PetTemplate.Shared.csproj" />
+        <!-- Линтер и карта справки (спец. help, 4.2 и 5.2) -->
+        <ProjectReference Include="..\..\tools\HelpCheck\HelpCheck.csproj" />
     </ItemGroup>
 
 </Project>

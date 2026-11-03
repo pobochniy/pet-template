@@ -1,0 +1,53 @@
+@if (isOpen()) {
+  <div class="language-picker__backdrop" (click)="onClose()"></div>
+
+  <div class="language-picker" role="dialog" aria-modal="true" [attr.aria-label]="i18n.t('core.language.title')">
+
+    <div class="language-picker__head">
+      @if (showSearch) {
+        <div class="language-picker__search">
+          <svg [appIcon]="icons.Search" class="language-picker__search-icon"></svg>
+          <input
+            #searchInput
+            type="text"
+            id="input-language-search"
+            class="form-control form-control-sm"
+            [placeholder]="i18n.t('core.language.search')"
+            [attr.aria-label]="i18n.t('core.language.search')"
+            [value]="query()"
+            (input)="onQueryInput($any($event.target).value)"
+          />
+        </div>
+      } @else {
+        <span class="language-picker__title">{{ i18n.t('core.language.title') }}</span>
+      }
+
+      <button
+        type="button"
+        class="btn btn-sm btn-link language-picker__close"
+        [attr.aria-label]="i18n.t('core.action.close')"
+        (click)="onClose()"
+      >
+        <svg [appIcon]="icons.X"></svg>
+      </button>
+    </div>
+
+    <div class="language-picker__list">
+      @for (lang of visibleLanguages(); track lang.code) {
+        <button
+          type="button"
+          class="language-picker__item"
+          [class.language-picker__item--selected]="lang.code === selected()"
+          [attr.aria-pressed]="lang.code === selected()"
+          [attr.lang]="lang.code"
+          (click)="onPick(lang)"
+        >
+          <shared-lang-flag [lang]="lang.code"></shared-lang-flag>
+          <span class="language-picker__name">{{ lang.nativeName }}</span>
+        </button>
+      } @empty {
+        <div class="language-picker__empty text-muted small">{{ i18n.t('core.empty.nothingFound') }}</div>
+      }
+    </div>
+  </div>
+}

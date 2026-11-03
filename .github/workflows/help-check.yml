@@ -1,0 +1,50 @@
+name: Help Check
+
+# Справка в ПР (спец. help, 5.2): линтер статей и сверка карты со спецификациями.
+# ПР, который поменял раздел спецификации со статьёй и не сверил статью, падает здесь —
+# «смержили фичу — справка о ней подумала» держится на этой проверке.
+# Там же — ссылки «спец. X, N.M» из кода и документов (спец. infrastructure, 5): раздел
+# перенумеровали или убрали — ссылка на него краснеет здесь.
+#
+# Раннер облачный, а не self-hosted: проверке ничего не нужно от хоста, а код ветки
+# из ПР незачем гонять на машине с продом. Без сети к нашим сервисам, без модели, без базы.
+
+on:
+  pull_request:
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # HelpCheck зависит только от PetTemplate.Help и пакетов nuget.org
+      - name: build
+        id: build
+        run: dotnet build tools/HelpCheck -c Release
+
+      - name: lint 📖
+        run: dotnet run --project tools/HelpCheck -c Release --no-build -- lint
+
+      # Карта — и когда упал линтер: в ПР полезно увидеть обе беды сразу. Но не после
+      # упавшей сборки — без неё запускать нечего
+      - name: map 🗺️
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet run --project tools/HelpCheck -c Release --no-build -- map
+
+      # Ссылки на разделы спецификаций — тоже независимо от линтера и карты
+      - name: refs 🔗
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet run --project tools/HelpCheck -c Release --no-build -- refs

@@ -1,0 +1,137 @@
+<div class="assistant d-flex flex-column">
+  <div class="assistant__header d-flex align-items-center justify-content-between gap-2 px-3 py-2 border-bottom">
+    <h1 class="h5 mb-0">{{ i18n.t('assistant.title') }}</h1>
+
+    @if (confirmingClear()) {
+      <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+        <span class="small text-body-secondary">{{ i18n.t('assistant.clearConfirm') }}</span>
+        <button type="button" id="assistant-clear-yes" class="btn btn-sm btn-danger" (click)="clear()">
+          {{ i18n.t('assistant.clearYes') }}
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="confirmingClear.set(false)">
+          {{ i18n.t('assistant.clearNo') }}
+        </button>
+      </div>
+    } @else if (assistant.messages().length > 0) {
+      <button type="button" id="assistant-clear" class="btn btn-sm btn-outline-secondary" (click)="confirmingClear.set(true)">
+        {{ i18n.t('assistant.clear') }}
+      </button>
+    }
+  </div>
+
+  <div #feed class="assistant__feed flex-grow-1 overflow-auto px-3 py-2">
+    <div #top></div>
+
+    @if (assistant.messages().length === 0 && !assistant.loading()) {
+      <div class="assistant__empty text-center py-4">
+        <p class="text-body-secondary">{{ i18n.t('assistant.empty.title') }}</p>
+        @for (hint of hints; track hint) {
+          <button type="button" class="btn btn-sm btn-outline-primary m-1" (click)="send(i18n.t(hint))">
+            {{ i18n.t(hint) }}
+          </button>
+        }
+      </div>
+    }
+
+    @for (message of assistant.messages(); track message.id) {
+      <div class="assistant__row d-flex mb-2" [class.justify-content-end]="isMine(message)">
+        <div class="assistant__bubble p-2 rounded-3"
+             [class.assistant__bubble--mine]="isMine(message)"
+             [class.assistant__bubble--theirs]="!isMine(message)">
+          <!-- Своё — текстом как есть; ответ модели — markdown узлами шаблона, ссылки только
+               на свои страницы (спец. assistant, 2.2 и 9) -->
+          @if (isMine(message)) {
+            <div class="assistant__text">{{ message.content }}</div>
+          } @else {
+            <app-markdown class="assistant__answer" [text]="message.content" />
+          }
+
+          @if (message.plan; as plan) {
+            <app-plan-block class="d-block mt-2" [plan]="plan" />
+          }
+
+          <!-- Факт памяти пишется мимо плана и вопроса «делаем?», поэтому показывается
+               строкой в момент записи — и убирается отсюда же, сколько угодно времени
+               спустя (спец. assistant, 12.5) -->
+          @for (fact of message.facts; track fact.id) {
+            <div class="assistant__fact mt-2 d-flex flex-wrap align-items-center gap-2 small">
+              <svg [appIcon]="icons.Brain" [size]="14" class="text-body-secondary" aria-hidden="true"></svg>
+              <span>{{ i18n.t('assistant.memory.remembered', { text: fact.text }) }}</span>
+              @if (forgetting() === fact.id) {
+                <span class="text-danger">{{ i18n.t('assistant.memory.forgetConfirm') }}</span>
+                <button type="button" class="btn btn-sm btn-link text-danger p-0 fact-forget-confirm" (click)="forget(fact.id)">
+                  {{ i18n.t('assistant.memory.forget') }}
+                </button>
+                <button type="button" class="btn btn-sm btn-link p-0" (click)="forgetting.set(null)">
+                  {{ i18n.t('core.action.cancel') }}
+                </button>
+              } @else {
+                <button type="button" class="btn btn-sm btn-link p-0 fact-forget" (click)="forgetting.set(fact.id)">
+                  {{ i18n.t('assistant.memory.forget') }}
+                </button>
+              }
+            </div>
+          }
+
+          @if (message.options?.length) {
+            <div class="assistant__options mt-2 d-flex flex-wrap gap-1">
+              @for (option of message.options; track option) {
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="send(option)">
+                  {{ option }}
+                </button>
+              }
+            </div>
+          }
+
+          @if (!isMine(message) && message.runId) {
+            <div class="mt-1">
+              <app-assistant-trace [runId]="message.runId" />
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (assistant.running()) {
+    <div class="assistant__status d-flex align-items-center gap-2 px-3 py-2 border-top small">
+      @if (assistant.activeRun()?.escalated) {
+        <span class="assistant__step">{{ stepLabel() }}</span>
+      }
+      <span class="text-body-secondary">{{ activityLabel() }}</span>
+
+      @if (canStop()) {
+        <button type="button" id="assistant-stop" class="btn btn-sm btn-outline-secondary ms-auto" (click)="stop()">
+          {{ i18n.t('assistant.stop') }}
+        </button>
+      }
+    </div>
+  }
+
+  <!-- Лимит пространства: плашка встаёт на место поля ввода, внизу, и ленту не сдвигает —
+       читать её можно целиком, нельзя только отправить (спец. assistant, 13.6) -->
+  @if (assistant.limitReached()) {
+    <app-limit-reached class="assistant__input d-block px-3 py-2 border-top"
+                       [text]="assistant.limitText()" (dismiss)="assistant.dismissLimit()" />
+  } @else {
+    <form class="assistant__input d-flex align-items-end gap-2 px-3 py-2 border-top" (submit)="submit($event)">
+      <textarea class="form-control" rows="1"
+                [attr.placeholder]="i18n.t('assistant.input.chat')"
+                [attr.aria-label]="i18n.t('assistant.input.chat')"
+                [attr.maxlength]="4000"
+                [value]="draft()" (input)="onInput($event)" (keydown)="onKeydown($event)"></textarea>
+
+      <!-- Голос заполняет поле, а не отправляет: отправлять надо то, что человек видел (6) -->
+      <app-voice-input (text)="onVoice($event)" />
+
+      <!-- На узком экране от кнопки остаётся одна иконка: слово «Отправить» съедало
+           ширину у поля. Подпись возвращается с `sm` -->
+      <button type="submit" class="btn btn-primary flex-shrink-0"
+              [disabled]="draft().trim().length === 0"
+              [attr.aria-label]="i18n.t('assistant.input.send')">
+        <svg [appIcon]="icons.SendHorizontal" [size]="18" aria-hidden="true"></svg>
+        <span class="d-none d-sm-inline ms-2">{{ i18n.t('assistant.input.send') }}</span>
+      </button>
+    </form>
+  }
+</div>

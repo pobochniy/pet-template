@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Разбор статьи справки (спец. help, 3) — отдельно и без единой зависимости:
+      его берут и индекс API (PetTemplate.Services), и линтер tools/HelpCheck, а линтеру
+      в ПР на облачном раннере лишнее ни к чему
+    -->
+
+</Project>

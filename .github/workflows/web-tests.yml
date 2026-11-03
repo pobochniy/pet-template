@@ -1,0 +1,104 @@
+name: Web Tests
+
+# Словари, типы DTO из OpenAPI и юнит-тесты продукта и админки (спец. infrastructure, 5;
+# спец. admin, 4):
+# в ПР и воротами выкатки клиента — вызывается из `publish-angular.yml`
+# и `publish-admin.yml`, и красный клиент не выкатывается. Сборка с бюджетом бандла
+# остаётся там, на self-hosted.
+#
+# Раннер облачный, а не self-hosted: код ветки из ПР незачем гонять на машине с продом.
+# Браузер не нужен — спеки идут в Vitest на jsdom (`@angular/build:unit-test`).
+
+on:
+  pull_request:
+  workflow_call:
+
+env:
+  ANGULAR_PROJECT_PATH: src/PetTemplate.Web/web
+  DOTNET_VERSION: "10.0.x"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/PetTemplate.Web/web
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ env.ANGULAR_PROJECT_PATH }}/package-lock.json
+
+      # Скрипты на голом node из `tools/`, без единой зависимости, поэтому идут до
+      # `npm ci` и стоят секунды. `i18n:lint` разбирает код компиляторами TypeScript
+      # и Angular — он после установки зависимостей.
+      #
+      # `i18n:check` — сгенерированные словари и `i18n-keys.d.ts` совпадают
+      # с закоммиченными. Без этого `prebuild` молча чинит расхождение у себя
+      # и собирает, а в репозитории остаются старые.
+      - name: Check i18n codegen 🔑
+        run: npm run i18n:check
+
+      # `i18n:codes` — у каждого кода отказа сервера есть ключ в эталонном `en`,
+      # а словарь с такими кодами грузится хотя бы одним маршрутом. Парити-тест
+      # этого не ловит: он сверяет словари между собой, и кода, которого нет ни
+      # в одном, согласованно не видит. Читает `src/PetTemplate.{Api,Services,Shared}/**/*.cs` —
+      # поэтому checkout всего репозитория, а не только папки клиента.
+      - name: Check server error codes 🧩
+        run: npm run i18n:codes
+
+      # Хранилище браузера — только через `safeStorage`; копии перечислений и правил
+      # аккаунта — те же номера и правила, что в C# (`tools/enum-parity.mjs`)
+      - name: Check storage access and server enum copies 🧷
+        run: npm run lint:storage && npm run enum:parity
+
+      # CSP nginx пускает инлайн-скрипт `src/index.html` по хешу (`IaC/nginx/conf/nginx.conf`):
+      # правка скрипта без нового хеша молча сломала бы вход mini-app. Обновить —
+      # `npm run csp:hash -- --write`. Сборки здесь нет — сверяется исходник
+      - name: Check CSP hash of the inline script 🛡️
+        run: npm run csp:hash -- --check
+
+      # `npm ci`, а не `npm install`: ставит ровно то, что записано
+      # в `package-lock.json`, и падает при расхождении с `package.json`.
+      - name: Install dependencies 📦
+        run: npm ci
+
+      # `i18n:lint` — в шаблонах нет текста мимо `t()`, в `*.ts` нет строк с кириллицей.
+      # Разбор — `typescript` и `@angular/compiler`, поэтому после `npm ci`. Перед ним —
+      # самопроверка скриптов `tools/` на образцах (`node --test`): разбор вложенных шаблонов,
+      # апострофов и атрибутов
+      - name: Lint i18n 🔤
+        run: npm run test:tools && npm run i18n:lint
+
+      # Типы DTO клиента (`src/app/shared/api/generated/schema.d.ts`) совпадают с OpenAPI
+      # документом API: `dotnet swagger tofile` снимает его со сборки, не запуская сервер —
+      # ни базы, ни Qdrant не нужно. Разошлись — `npm run api:types` и закоммитить
+      - name: Setup .NET 🟣
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Check API types 📐
+        run: npm run api:types -- --check
+
+      # `ng test`, а не `npm test`: тот без `--watch=false` уходит в watch, а через `pretest`
+      # перегенерирует словари — расхождение уже отбил `i18n:check`.
+      # Вместе с остальными идёт `i18n-parity.spec.ts` — сверка наборов ключей ru/en.
+      # Проект назван явно: в `angular.json` их два — продукт и админка. Имя `pet-template`
+      # `dotnet new` не переименовывает
+      - name: Test web 🧪
+        run: npx ng test pet-template --watch=false
+
+      # Спеки админки — свой проект в том же `angular.json` (спец. admin, 4). На `pre-push`
+      # не вешаются, а здесь идут воротами обеих выкаток: репозиторий один
+      - name: Test admin 🧪
+        run: npx ng test admin --watch=false
+

@@ -1,0 +1,61 @@
+name: Publish Angular
+
+on:
+  workflow_dispatch:
+
+env:
+  ANGULAR_PROJECT_PATH: src/PetTemplate.Web/web
+  # outputPath в angular.json не задан — dist/<проект>, проект `pet-template` (`dotnet new`
+  # его не переименовывает); application-билдер кладёт сайт в browser/
+  BUILD_OUTPUT_PATH: src/PetTemplate.Web/web/dist/pet-template/browser
+  # Корень выпусков: releases/<sha>, ссылки current и previous (IaC/publish-static.sh)
+  DEPLOY_ROOT: frontend
+
+jobs:
+  # Ворота деплоя: словари и юнит-тесты клиента — на облачном раннере, а не на машине
+  # с продом (спец. infrastructure, 5). Упали — ни сборки, ни выкатки
+  # не случилось. Бюджет бандла стережёт сборка ниже: `maximumError` её роняет.
+  tests:
+    uses: ./.github/workflows/web-tests.yml
+
+  build-and-deploy:
+    needs: tests
+    runs-on: [self-hosted]
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ env.ANGULAR_PROJECT_PATH }}/package-lock.json
+
+      # `npm ci`, а не `npm install`: ставит ровно то, что записано
+      # в `package-lock.json`, и падает при расхождении с `package.json`.
+      # `npm install` вправе подтянуть другой граф и переписать lock-файл —
+      # собранное на раннере тогда отличалось бы от собранного локально,
+      # а правка lock-файла осталась бы в рабочей копии раннера и никуда
+      # не доехала. По этому же lock-файлу кеширует `actions/setup-node` выше.
+      - name: Install dependencies 📦
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm ci
+
+      - name: Build Angular for production 🏗️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm run build -- --configuration production
+
+      # Собранный `index.html` — тот, что получит браузер: те же инлайн-скрипты, что
+      # в исходнике (их хеш в CSP nginx), и ни одного инлайн-обработчика — CSP его не пустит
+      - name: Check CSP of the built index.html 🛡️
+        working-directory: ${{ env.ANGULAR_PROJECT_PATH }}
+        run: npm run csp:hash -- --check
+
+      # Атомарно (спец. infrastructure, 7): сборка — в ~/frontend/releases/<sha>, ссылка
+      # current переключается rename-ом, прежний выпуск остаётся как previous — его
+      # чанки догружают вкладки со старым index.html
+      - name: Deploy 🚀
+        env:
+          SHA: ${{ github.sha }}
+        run: sh IaC/publish-static.sh "$BUILD_OUTPUT_PATH" "$HOME/$DEPLOY_ROOT" "$SHA"

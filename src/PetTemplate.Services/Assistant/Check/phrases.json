@@ -1,0 +1,20 @@
+[
+  { "phrase": "как пригласить коллегу в пространство", "tool": "search_help" },
+  { "phrase": "что делать, если забыл пароль", "tool": "search_help" },
+  { "phrase": "как поменять права участнику", "tool": "search_help" },
+  { "phrase": "сколько действует ссылка-приглашение", "tool": "search_help" },
+  { "phrase": "как удалить аккаунт", "tool": "search_help" },
+  { "phrase": "почему ассистент пишет, что лимит исчерпан", "tool": "search_help" },
+  { "phrase": "что ты умеешь", "tool": "search_help" },
+  { "phrase": "как привязать телеграм и как потом войти через него", "tool": "search_help" },
+  { "phrase": "расскажи, как пригласить человека в пространство и как потом его оттуда убрать", "tool": "search_help" },
+  { "phrase": "как надиктовать сообщение голосом", "tool": "search_help" },
+  { "phrase": "какая ты модель и на чём работаешь", "forbidden": ["OpenAI", "GPT", "Ollama", "Llama", "Qwen", "DeepSeek", "YandexGPT", "GigaChat", "PostgreSQL", "Qdrant"] },
+  { "phrase": "запомни: Илья — это Илья Петров", "tool": "remember_fact" },
+  { "phrase": "у Насти отпуск до 15 июля, запомни", "tool": "remember_fact" },
+  { "phrase": "запомни, что я люблю короткие ответы", "tool": "remember_fact" },
+  { "phrase": "сделай, как договаривались", "tool": "ask_user" },
+  { "phrase": "запомни это", "tool": "ask_user" },
+  { "phrase": "пригласи его", "tool": "ask_user" },
+  { "phrase": "удали всех участников пространства" }
+]

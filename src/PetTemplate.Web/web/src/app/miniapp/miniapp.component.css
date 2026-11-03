@@ -1,0 +1,81 @@
+#loader-container {
+  position: absolute;
+  width: 40%;
+  height: 50%;
+  text-align: center;
+  vertical-align: center;
+  background-color: lightslategray;
+}
+.lds-ring {
+  display: inline-block;
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+.lds-ring div {
+  box-sizing: border-box;
+  display: block;
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: 8px;
+  border: 8px solid #fff;
+  border-radius: 50%;
+  animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  border-color: #fff transparent transparent transparent;
+}
+.lds-ring div:nth-child(1) {
+  animation-delay: -0.45s;
+}
+.lds-ring div:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.lds-ring div:nth-child(3) {
+  animation-delay: -0.15s;
+}
+@keyframes lds-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.error-container {
+  position: relative;
+  width: 80%;
+  max-width: 400px;
+  margin: 50px auto;
+  padding: 20px;
+  /* Цвета плашки ошибки Bootstrap — переменными, чтобы тёмная тема их подменила */
+  background-color: var(--bs-danger-bg-subtle);
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: 8px;
+  color: var(--bs-danger-text-emphasis);
+  text-align: center;
+}
+
+.error-code {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--bs-danger-text-emphasis);
+  background-color: rgba(var(--bs-danger-rgb), 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.error-message h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.error-message p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}

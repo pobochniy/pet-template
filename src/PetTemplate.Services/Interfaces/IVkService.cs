@@ -1,10 +1,7 @@
 namespace PetTemplate.Services.Interfaces;
 
+/// <summary>Подпись параметров запуска mini-app VK (спец. accounts, 5.6)</summary>
 public interface IVkService
 {
     bool IsSignValid(string queryString);
-
-    // Task<(long vkId, string token)?> GetAuthToken(Guid userId);
-
-    // Task SetToken(Guid userId, string token);
 }

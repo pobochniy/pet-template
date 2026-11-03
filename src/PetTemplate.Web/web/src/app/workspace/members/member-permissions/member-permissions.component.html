@@ -1,0 +1,37 @@
+<div class="bg-body-secondary border rounded p-3 mt-2">
+  @for (group of groups(); track group.key) {
+    <div class="mb-3">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span class="fw-semibold">{{ i18n.t(group.key) }}</span>
+        <button type="button" class="btn btn-sm btn-link p-0" (click)="toggleGroup(group.permissions)">
+          {{ i18n.t('workspace.permissions.selectAll') }}
+        </button>
+      </div>
+      @for (role of group.permissions; track role.permission) {
+        <div class="form-check">
+          <input class="form-check-input" id="chbox-{{ role.permission }}" type="checkbox"
+                 [checked]="isChecked(role.permission)"
+                 (change)="toggle(role.permission)" />
+          <label class="form-check-label" for="chbox-{{ role.permission }}">{{ i18n.t(role.labelKey) }}</label>
+        </div>
+      }
+    </div>
+  }
+
+  @if (!hasChecked()) {
+    <div class="text-danger mb-2" id="no-roles-hint">{{ i18n.t('workspace.permissions.required') }}</div>
+  }
+  @for (error of fieldErrors(); track error) {
+    <div class="text-danger mb-2 permissions-field-error">{{ error }}</div>
+  }
+
+  <div class="d-flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary btn-sm" id="save-roles"
+            [disabled]="!hasChecked() || busy()" (click)="save()">
+      {{ i18n.t('core.action.save') }}
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="closed.emit()">
+      {{ i18n.t('core.action.cancel') }}
+    </button>
+  </div>
+</div>

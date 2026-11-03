@@ -1,0 +1,28 @@
+<div class="home-container">
+  <h1>{{ i18n.t('core.app.title') }}</h1>
+
+  @if (userService.profile(); as profile) {
+    <p>{{ i18n.t('home.welcome', { name: profile.userName }) }}</p>
+    @if (noWorkspace()) {
+      <div class="alert alert-info" id="no-workspace">
+        <p class="mb-2">{{ i18n.t('home.noWorkspace.text') }}</p>
+        <a routerLink="/workspace/settings" class="btn btn-primary">{{ i18n.t('home.noWorkspace.create') }}</a>
+      </div>
+    } @else {
+      <!-- Ассистент — внутри пространства (спец. assistant, 2): без него строке некуда вести -->
+      <home-assistant-input></home-assistant-input>
+      @if (canInvite()) {
+        <a routerLink="/workspace/members" class="btn btn-outline-primary mb-3" id="invite-members">{{ i18n.t('home.inviteMembers') }}</a>
+      }
+    }
+    <nav>
+      <a [routerLink]="['/profile/edit']">{{ i18n.t('core.nav.profile') }}</a>
+    </nav>
+    <button type="button" class="btn btn-outline-secondary mt-3" (click)="logout()">{{ i18n.t('core.nav.logOut') }}</button>
+  } @else {
+    <div class="d-flex gap-3 mt-3">
+      <a [routerLink]="['/auth/register']" class="btn btn-primary btn-lg px-4">{{ i18n.t('home.register') }}</a>
+      <a [routerLink]="['/auth/login']" class="btn btn-outline-secondary btn-lg px-4">{{ i18n.t('home.logIn') }}</a>
+    </div>
+  }
+</div>

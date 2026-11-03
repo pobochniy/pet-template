@@ -1,0 +1,124 @@
+name: Backup Db
+
+# Дамп боевой базы в ~/db-backups на той же VM, что и база (раннер self-hosted), и копия
+# вне машины — в S3-совместимое хранилище, если оно настроено.
+# Скачать с VM: scp user@<ip-вм>:<путь из лога шага> ~/pettemplate-backups/
+# Спец. infrastructure, 11; руками то же самое и восстановление — IaC/DEPLOYMENT.md, раздел 10.
+on:
+  # Каждую ночь (UTC). Расписание GitHub идёт только с ветки по умолчанию и с опозданием;
+  # в репозитории без коммитов 60 дней GitHub его выключает сам
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Сколько последних дампов оставить на VM'
+        required: true
+        default: '14'
+
+# Два дампа разом незачем: ручной запуск во время ночного подождёт
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: [self-hosted]
+    steps:
+      - name: dump 💾
+        id: dump
+        env:
+          # У запуска по расписанию входов нет — те же 14
+          KEEP: ${{ github.event.inputs.keep || '14' }}
+        run: |
+          set -euo pipefail
+
+          case "$KEEP" in
+            ''|*[!0-9]*|0) echo "::error::keep — целое число больше нуля"; exit 1 ;;
+          esac
+
+          dir="$HOME/db-backups"
+          mkdir -p "$dir"
+          chmod 700 "$dir"
+          name="pettemplatedb-$(date +'%Y_%m_%d__%H_%M_%S').dump"
+          part="$dir/$name.part"
+          trap 'rm -f "$part"' EXIT
+
+          # pg_dump — тот, что в контейнере: той же версии, что сервер. Суперпользователем
+          # по сокету внутри контейнера: вход там доверенный, пароль не нужен и ни в
+          # аргументы (видно в ps), ни в лог не попадает — секрета DB_ROOT_PASSWORD нет
+          # (спец. infrastructure, 9). Формат custom (-Fc) сжат сам: без конвейера | gzip,
+          # в котором код возврата pg_dump теряется. Без -t: иначе stderr склеивается
+          # с дампом.
+          docker exec dbcontainer pg_dump -U postgres -d pettemplatedb -Fc > "$part"
+
+          if [ ! -s "$part" ]; then
+            echo "::error::дамп пустой"
+            exit 1
+          fi
+
+          # Оборванный дамп проверяем по факту, а не по коду возврата: pg_restore прочитывает
+          # весь архив и падает на обрезанном (аналог строки «Dump completed» у mysqldump).
+          # Оглавление (-l) заодно даёт число таблиц для лога: строки «TABLE», без «TABLE DATA».
+          docker exec -i dbcontainer pg_restore -f /dev/null < "$part"
+          tables=$(docker exec -i dbcontainer pg_restore -l < "$part" \
+            | awk '$4 == "TABLE" && $5 != "DATA"' | wc -l | tr -d ' ')
+
+          mv "$part" "$dir/$name"
+          chmod 600 "$dir/$name"
+
+          # ls, а не find (SC2012): имена — свои, без пробелов, а ls -t сортирует по времени
+          # shellcheck disable=SC2012
+          ls -1t "$dir"/pettemplatedb-*.dump | tail -n +$((KEEP + 1)) | xargs -r rm -f --
+
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "дамп: $dir/$name ($(du -h "$dir/$name" | cut -f1), таблиц: $tables)"
+          echo "на VM лежит:"
+          ls -lh "$dir"
+
+      # Копия вне VM (спец. infrastructure, 11): умер диск или машина — дамп на том же
+      # диске умер вместе с базой. S3-совместимое хранилище любого поставщика через rclone
+      # в контейнере — ставить на VM ничего не надо. Выключено, пока не заданы секреты
+      # BACKUP_S3_ACCESS_KEY_ID, BACKUP_S3_SECRET_ACCESS_KEY и переменные BACKUP_S3_ENDPOINT,
+      # BACKUP_S3_BUCKET (IaC/DEPLOYMENT.md, раздел 10). Ключи — переменными окружения
+      # и `--env` без значения: в аргументы docker они не попадают
+      - name: upload off-host ☁️
+        env:
+          RCLONE_CONFIG_OFFSITE_TYPE: s3
+          RCLONE_CONFIG_OFFSITE_PROVIDER: Other
+          RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_OFFSITE_ENDPOINT: ${{ vars.BACKUP_S3_ENDPOINT }}
+          RCLONE_CONFIG_OFFSITE_REGION: ${{ vars.BACKUP_S3_REGION }}
+          # Ключу хватает прав на запись в бакет: создавать его rclone не пробует
+          RCLONE_CONFIG_OFFSITE_NO_CHECK_BUCKET: "true"
+          BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          PREFIX: ${{ vars.BACKUP_S3_PREFIX || 'pettemplatedb' }}
+          KEEP_DAYS: ${{ vars.BACKUP_S3_KEEP_DAYS || '30' }}
+          NAME: ${{ steps.dump.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$BUCKET" ] || [ -z "$RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID" ] \
+            || [ -z "$RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY" ] || [ -z "$RCLONE_CONFIG_OFFSITE_ENDPOINT" ]; then
+            echo "::notice::копия вне VM выключена: нет BACKUP_S3_* (IaC/DEPLOYMENT.md, раздел 10)"
+            exit 0
+          fi
+          case "$KEEP_DAYS" in
+            ''|*[!0-9]*|0) echo "::error::BACKUP_S3_KEEP_DAYS — целое число дней больше нуля"; exit 1 ;;
+          esac
+
+          rclone() {
+            docker run --rm -v "$HOME/db-backups:/data:ro" \
+              --env RCLONE_CONFIG_OFFSITE_TYPE --env RCLONE_CONFIG_OFFSITE_PROVIDER \
+              --env RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID --env RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY \
+              --env RCLONE_CONFIG_OFFSITE_ENDPOINT --env RCLONE_CONFIG_OFFSITE_REGION \
+              --env RCLONE_CONFIG_OFFSITE_NO_CHECK_BUCKET \
+              rclone/rclone:1.71.2 "$@"
+          }
+
+          rclone copyto "/data/$NAME" "offsite:$BUCKET/$PREFIX/$NAME"
+          # Хвост в хранилище — по возрасту: дампы старше KEEP_DAYS дней. Только свои имена
+          rclone delete --min-age "${KEEP_DAYS}d" --include 'pettemplatedb-*.dump' "offsite:$BUCKET/$PREFIX/"
+          echo "копия: $BUCKET/$PREFIX/$NAME; в хранилище:"
+          rclone lsl "offsite:$BUCKET/$PREFIX/"

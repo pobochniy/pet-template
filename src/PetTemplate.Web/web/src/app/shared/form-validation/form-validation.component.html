@@ -1,0 +1,48 @@
+<!--
+  Ошибки показываем, как только поле тронули: правкой (dirty) или отправкой формы.
+  Одного `dirty` мало — формы помечают поля перед отправкой по-разному,
+  `markAsDirty()` и `markAllAsTouched()`, и по половине из них сообщения не появлялись бы вовсе.
+-->
+@if (model['errors'] && (model['dirty'] || model['touched'])) {
+  <div class="error-msg">
+    @if (model['errors']['required']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.required', { field: fieldLabel }) }}</div>
+    }
+    @if (model['errors']['minlength']) {
+      <div class="text-danger small mt-1">
+        {{ i18n.plural('core.validation.minLength', model['errors']['minlength']['requiredLength']) }}
+      </div>
+    }
+    @if (model['errors']['maxlength']) {
+      <div class="text-danger small mt-1">
+        {{ i18n.plural('core.validation.maxLength', model['errors']['maxlength']['requiredLength']) }}
+      </div>
+    }
+    @if (model['errors']['min']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.min', { min: number(model['errors']['min']['min']) }) }}</div>
+    }
+    @if (model['errors']['max']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.max', { max: number(model['errors']['max']['max']) }) }}</div>
+    }
+    @if (model['errors']['email']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.email') }}</div>
+    }
+    @if (model['errors']['pattern']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.pattern', { field: fieldLabel }) }}</div>
+    }
+    <!-- Правила логина и телефона (`account-rules.ts`) — те же ключи, что у кодов сервера -->
+    @if (model['errors']['userNameFormat']; as format) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.userNameFormat', { min: format['min'], max: format['max'] }) }}</div>
+    }
+    @if (model['errors']['userNameReserved']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.userNameReserved') }}</div>
+    }
+    @if (model['errors']['phoneFormat']) {
+      <div class="text-danger small mt-1">{{ i18n.t('core.validation.phoneFormat') }}</div>
+    }
+    <!-- Отказы 422 сервера (`applyServerValidationErrors`) — переводятся на каждой отрисовке -->
+    @for (error of serverErrors(); track $index) {
+      <div class="text-danger small mt-1">{{ serverErrorText(error) }}</div>
+    }
+  </div>
+}

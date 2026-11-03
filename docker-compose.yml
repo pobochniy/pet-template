@@ -1,13 +1,48 @@
----
+# Инфраструктура для локального `dotnet run` (спец. infrastructure, 3). Строка подключения
+# в appsettings.Development.json смотрит сюда: localhost:5432, база pettemplatedb.
+# Версии — те же, что на сервере (IaC/docker-compose.yml)
 services:
-  mysqldb:
-    image: mysql:8.4.0
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+  postgres:
+    image: postgres:18
     environment:
-      MYSQL_ROOT_PASSWORD: 1234
-      MYSQL_DATABASE: templatedb
-      MYSQL_USER: app
-      MYSQL_PASSWORD: 12345
+      POSTGRES_DB: pettemplatedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
     ports:
-      - 3301:3306
-      
+      - 5432:5432
+    volumes:
+      - postgres18_data_pettemplate:/var/lib/postgresql
+
+  # Векторный индекс поиска (спец. search, 3). API ходит по gRPC на localhost:6334
+  # (QdrantOptions в appsettings.json); без него API не стартует, как без базы.
+  # Порты — только на 127.0.0.1: своей аутентификации у Qdrant здесь нет
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    ports:
+      - "127.0.0.1:6333:6333"   # REST и /metrics
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - qdrant_data_pettemplate:/qdrant/storage
+
+  # Эмбеддер для поиска по смыслу (спец. search, 3): llama.cpp на процессоре,
+  # multilingual-e5-small в Q8 (126 МБ весов, 384 измерения). Веса сервер качает сам
+  # с Hugging Face при первом старте в том embeddings_cache_pettemplate — на весь
+  # /root/.cache: нынешние сборки кладут веса в huggingface/, прежние — в llama.cpp/
+  # (том только на llama.cpp/ качал бы веса заново). API ходит сюда по
+  # SearchOptions:EmbeddingsEndpoint (appsettings.json, http://localhost:8080/v1); порт —
+  # только на 127.0.0.1. Не запущен — индексация ждёт в очереди, поиск идёт по словам
+  embeddings:
+    image: ghcr.io/ggml-org/llama.cpp:server-b11096
+    command: >
+      --hf-repo ${EMBEDDINGS_REPO:-TwinSunsLLC/multilingual-e5-small-gguf}
+      --hf-file ${EMBEDDINGS_FILE:-multilingual-e5-small-q8_0.gguf}
+      --embeddings --pooling mean --host 0.0.0.0 --port 8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - embeddings_cache_pettemplate:/root/.cache
+
+volumes:
+  postgres18_data_pettemplate:
+  qdrant_data_pettemplate:
+  embeddings_cache_pettemplate:

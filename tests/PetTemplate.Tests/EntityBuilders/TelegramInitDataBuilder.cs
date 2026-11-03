@@ -14,6 +14,8 @@ public class TelegramInitDataBuilder
     private string? _username = "testuser";
     private string? _languageCode = "en";
     private string _botToken = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
+    private DateTimeOffset? _authDate;
+    private string? _startParam;
 
     public TelegramInitDataBuilder WithUserId(long userId)
     {
@@ -45,6 +47,26 @@ public class TelegramInitDataBuilder
         return this;
     }
 
+    /// <summary>
+    /// Когда Telegram подписал параметры (<c>auth_date</c>). По умолчанию — сейчас;
+    /// раньше — чтобы проверить свежесть подписи (спец. accounts, 5.6)
+    /// </summary>
+    public TelegramInitDataBuilder SignedAt(DateTimeOffset authDate)
+    {
+        _authDate = authDate;
+        return this;
+    }
+
+    /// <summary>
+    /// Mini-app открыт по ссылке-приглашению: <c>start_param=inv_&lt;токен&gt;</c> — развилки
+    /// нет, аккаунт заводится сразу (спец. accounts, 5.6)
+    /// </summary>
+    public TelegramInitDataBuilder FromInvitation(string token = "abc")
+    {
+        _startParam = $"inv_{token}";
+        return this;
+    }
+
     public TelegramInitDataBuilder WithBotToken(string botToken)
     {
         _botToken = botToken;
@@ -63,7 +85,7 @@ public class TelegramInitDataBuilder
         };
 
         var userJson = JsonSerializer.Serialize(user);
-        var authDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var authDate = (_authDate ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds();
 
         // Создаем параметры (без hash)
         var parameters = new Dictionary<string, string>
@@ -71,6 +93,7 @@ public class TelegramInitDataBuilder
             { "user", userJson },
             { "auth_date", authDate.ToString() }
         };
+        if (_startParam != null) parameters["start_param"] = _startParam;
 
         // Сортируем и создаем строку для подписи
         var dataCheckString = string.Join("\n",

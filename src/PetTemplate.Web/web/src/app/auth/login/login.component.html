@@ -1,0 +1,33 @@
+<div class="col-md-offset-3 col-md-6">
+  <form class="form-horizontal" [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+    <h4>{{ i18n.t('auth.login.title') }}</h4>
+    <hr>
+    <div class="row mb-3">
+      <label class="col-md-4 col-form-label" for="login">{{ i18n.t('auth.field.login') }}</label>
+      <div class="col-md-8">
+        <input class="form-control" type="text" id="login" formControlName="login" autocomplete="username" />
+        <form-validation [model]="loginForm.controls.login" fieldKey="auth.field.login"></form-validation>
+      </div>
+    </div>
+    <div class="row mb-3">
+      <label class="col-md-4 col-form-label" for="password">{{ i18n.t('core.field.password') }}</label>
+      <div class="col-md-8">
+        <input class="form-control" type="password" id="password" formControlName="password" autocomplete="current-password" />
+        <form-validation [model]="loginForm.controls.password" fieldKey="core.field.password"></form-validation>
+      </div>
+    </div>
+    <div class="row mb-3">
+      <div class="col-md-8 offset-md-4">
+        <button type="submit" class="btn btn-primary">{{ i18n.t('auth.login.submit') }}</button>
+      </div>
+    </div>
+    <!-- Восстановление доступа — три пути (спец. accounts, 8.2) -->
+    <div class="row mb-3">
+      <div class="col-md-8 offset-md-4">
+        <a id="login-forgot" [routerLink]="['/auth/recover']">{{ i18n.t('auth.login.forgot') }}</a>
+      </div>
+    </div>
+  </form>
+  <!-- Telegram и VK — только настроенные на сервере (спец. accounts, 5.1) -->
+  <auth-external-buttons></auth-external-buttons>
+</div>

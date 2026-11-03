@@ -1,0 +1,47 @@
+<div class="container py-4 auth-recover">
+  <h4 class="fw-bold text-center mb-4">{{ i18n.t('auth.recover.title') }}</h4>
+
+  <!-- 1. Через привязанный Telegram или VK (8.3): только в существующий аккаунт -->
+  <div class="mb-3" id="recover-external">
+    <div class="form-text text-center">{{ i18n.t('auth.recover.externalHint') }}</div>
+    <auth-external-buttons purpose="recover" returnUrl="/profile/edit"></auth-external-buttons>
+  </div>
+
+  <!-- 2. Письмо на подтверждённую почту (8.4) -->
+  <div class="card shadow-sm mb-3" id="recover-mail">
+    <div class="card-body">
+      <h6 class="fw-semibold">{{ i18n.t('auth.recover.mailTitle') }}</h6>
+      @if (sent()) {
+        <div class="alert alert-info mb-0" id="recover-sent">{{ i18n.t('auth.recover.sent') }}</div>
+      } @else {
+        <div class="form-text mb-2">{{ i18n.t('auth.recover.mailHint') }}</div>
+        <div class="input-group">
+          <input class="form-control" id="recover-email" type="email" autocomplete="email"
+                 [class.is-invalid]="email.touched && email.invalid"
+                 [formControl]="email" [attr.aria-label]="i18n.t('core.field.email')"
+                 [placeholder]="i18n.t('core.field.email')" (keydown.enter)="send()" />
+          <button type="button" class="btn btn-primary" id="recover-send" [disabled]="busy()" (click)="send()">
+            {{ i18n.t('auth.recover.send') }}
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- 3. Поддержка (8.5): когда нет ни привязанного входа, ни подтверждённой почты -->
+  <div class="card shadow-sm mb-3" id="recover-support">
+    <div class="card-body">
+      <h6 class="fw-semibold">{{ i18n.t('auth.recover.supportTitle') }}</h6>
+      <div class="form-text">
+        {{ i18n.t('auth.recover.supportHint') }}
+        @if (supportContact) {
+          <a [href]="supportContact" target="_blank" rel="noopener" id="recover-support-link">{{ supportLabel }}</a>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center">
+    <a id="recover-back" [routerLink]="['/auth/login']">{{ i18n.t('auth.recover.backToLogin') }}</a>
+  </div>
+</div>

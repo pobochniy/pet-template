@@ -8,7 +8,32 @@
 
     <ItemGroup>
         <ProjectReference Include="..\PetTemplate.Db\PetTemplate.Db.csproj" />
+        <ProjectReference Include="..\PetTemplate.Help\PetTemplate.Help.csproj" />
         <ProjectReference Include="..\PetTemplate.Shared\PetTemplate.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Обработчики очереди команд — ICommandHandler и ICommandLease пакета (спец. mail, 4) -->
+        <PackageReference Include="AsuTrack.LocalQueue" />
+        <!-- Русский стеммер Snowball для ключевой половины поиска по справке (спец. help, 6.3) -->
+        <PackageReference Include="libstemmer.net" />
+        <PackageReference Include="MailKit" />
+        <!-- Поиск (спец. search): эмбеддер за IEmbeddingGenerator и векторный индекс -->
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+        <!-- Ассистент (спец. assistant, 16): свой цикл поверх IChatClient, транспорт —
+             OpenAI-совместимый клиент; версии — те же, что у абстракций эмбеддера -->
+        <PackageReference Include="Microsoft.Extensions.AI" />
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+        <PackageReference Include="Qdrant.Client" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Тексты писем (спец. mail, 2): словари сервера, ресурсы сборки — MailTemplates -->
+        <EmbeddedResource Include="Mail/Templates/*.json" />
+        <!-- Промпты ассистента (спец. assistant, 15.2): правятся как текст, а не склейкой строк -->
+        <EmbeddedResource Include="Assistant/Prompts/*.md" />
+        <!-- Набор фраз сверки моделей (спец. admin, 15.3) -->
+        <EmbeddedResource Include="Assistant/Check/phrases.json" />
     </ItemGroup>
 
 </Project>

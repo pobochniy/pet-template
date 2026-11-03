@@ -1,0 +1,50 @@
+/*
+ * Чат занимает ровно всё свободное место экрана: высота экрана минус верхнее меню
+ * (50px, оно fixed) и минус вертикальные отступы #content (2×20px). Скролл здесь только
+ * внутренний — у ленты, ввод прижат к низу
+ */
+.assistant {
+  height: calc(100dvh - 90px);
+  overflow: hidden;
+}
+
+/* Лента — единственное, что здесь тянется и прокручивается; шапка, статус и ввод стоят */
+.assistant__feed {
+  min-height: 0;
+}
+
+.assistant__header,
+.assistant__status,
+.assistant__input {
+  flex-shrink: 0;
+}
+
+.assistant__bubble {
+  max-width: min(42rem, 85%);
+}
+
+/* Своя реплика — текст как есть: переносы строк сохраняются, длинное слово не распирает ленту */
+.assistant__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Ответ модели — markdown (`app-markdown`): длинный адрес или слово тоже не распирают ленту */
+.assistant__answer {
+  overflow-wrap: anywhere;
+}
+
+/* Свои сообщения справа, ответы ассистента слева */
+.assistant__bubble--mine {
+  background: var(--bs-primary-bg-subtle);
+}
+
+.assistant__bubble--theirs {
+  background: var(--bs-secondary-bg);
+}
+
+/* Поле ввода растёт до трёх строк и дальше прокручивается само */
+.assistant__input textarea {
+  max-height: 5.5rem;
+  resize: none;
+}

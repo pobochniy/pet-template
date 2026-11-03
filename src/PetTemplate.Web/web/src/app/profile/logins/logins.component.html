@@ -1,0 +1,98 @@
+<div class="card shadow-sm mb-4" id="profile-logins">
+  <div class="card-header fw-semibold">{{ i18n.t('profile.main.title') }}</div>
+
+  @if (loadFailed()) {
+    <div class="alert alert-danger rounded-0 mb-0" id="logins-load-failed">{{ i18n.t('profile.main.loadFailed') }}</div>
+  }
+
+  @if (logins(); as current) {
+    <profile-user-name-banner class="d-block px-3 pt-3"
+                              [userId]="userId()"
+                              [userName]="current.userName"
+                              [generated]="current.userNameIsGenerated"
+                              (changeRequested)="focusUserName()"></profile-user-name-banner>
+
+    <!-- «Подтвердите, что это вы» (8.6): привязка, отвязка и смена почты ждут его -->
+    <profile-fresh-login [logins]="current" [enabled]="externalEnabled()"
+                         (changed)="logins.set($event)"></profile-fresh-login>
+
+    @if (passwordOnly()) {
+      <div class="alert alert-warning rounded-0 mb-0 small" id="password-only-banner">
+        {{ i18n.t('profile.main.passwordOnly') }}
+      </div>
+    }
+
+    <div class="list-group list-group-flush">
+      <form [formGroup]="form" (ngSubmit)="save()" id="account-form">
+        <!-- Логин (4.3): свой вызов, отказ «занят» — под полем -->
+        <div class="list-group-item py-3">
+          <label for="userName" class="form-label fw-semibold">{{ i18n.t('core.field.userName') }}</label>
+          <input #userNameInput type="text" class="form-control" id="userName" autocomplete="username"
+                 [attr.maxlength]="userNameMaxLength" formControlName="userName" />
+          <div class="form-text">{{ i18n.t('profile.main.userNameHint') }}</div>
+          <form-validation [model]="form.controls.userName" fieldKey="core.field.userName"></form-validation>
+          @if (userNameRefusal()) {
+            <div class="text-danger small mt-1" id="user-name-refusal">{{ userNameRefusal() }}</div>
+          }
+        </div>
+
+        <!-- Почта: подтверждение — про сохранённый адрес (8.4) -->
+        <div class="list-group-item py-3">
+          <label for="email" class="form-label fw-semibold">{{ i18n.t('core.field.email') }}</label>
+          <input type="email" class="form-control" id="email" autocomplete="email"
+                 [attr.maxlength]="emailMaxLength" formControlName="email" />
+          <profile-email id="email-state" [logins]="current" [value]="emailValue()"></profile-email>
+          <form-validation [model]="form.controls.email" fieldKey="core.field.email"></form-validation>
+        </div>
+
+        <!-- Телефон — он же логин для входа (раздел 3) -->
+        <div class="list-group-item py-3">
+          <label for="phone" class="form-label fw-semibold">{{ i18n.t('core.field.phone') }}</label>
+          <input type="tel" class="form-control" id="phone" autocomplete="tel" maxlength="12" formControlName="phone" />
+          <div class="form-text">{{ i18n.t('profile.main.phoneHint') }}</div>
+          <form-validation [model]="form.controls.phone" fieldKey="core.field.phone"></form-validation>
+        </div>
+
+        <div class="list-group-item py-3">
+          <label for="comment" class="form-label fw-semibold">{{ i18n.t('core.field.comment') }}</label>
+          <textarea class="form-control" id="comment" rows="2" formControlName="comment"
+                    [placeholder]="i18n.t('profile.edit.commentPlaceholder')"></textarea>
+          <form-validation [model]="form.controls.comment" fieldKey="core.field.comment"></form-validation>
+        </div>
+
+        <div class="list-group-item py-3 text-end">
+          <button type="submit" class="btn btn-primary" id="account-save" [disabled]="saving()">
+            {{ i18n.t('core.action.save') }}
+          </button>
+        </div>
+      </form>
+
+      <!-- Пароль — свой вызов, вне общей формы (8.1) -->
+      <div class="list-group-item py-3">
+        <profile-password [hasPassword]="current.hasPassword"
+                          [canSetWithoutCurrent]="current.canSetPasswordWithoutCurrent"
+                          (changed)="reload()"></profile-password>
+      </div>
+
+      <!-- Привязка — тем же окном Telegram или VK ID, что вход (раздел 6) -->
+      <div class="list-group-item py-3" id="telegram-row">
+        <profile-external-login provider="telegram" [logins]="current" [enabled]="externalEnabled().telegram"
+                                (changed)="logins.set($event)"></profile-external-login>
+      </div>
+      <div class="list-group-item py-3" id="vk-row">
+        <profile-external-login provider="vk" [logins]="current" [enabled]="externalEnabled().vk"
+                                (changed)="logins.set($event)"></profile-external-login>
+      </div>
+
+      <!-- Два аккаунта у одного человека — слияние (раздел 7); удаление — раздел 9 -->
+      <div class="list-group-item py-3" id="account-actions">
+        <profile-merge-start [enabled]="externalEnabled()"></profile-merge-start>
+        <div class="mt-2">
+          <a class="link-danger" id="delete-account-link" [routerLink]="['/profile/delete']">
+            {{ i18n.t('profile.main.deleteAccount') }}
+          </a>
+        </div>
+      </div>
+    </div>
+  }
+</div>

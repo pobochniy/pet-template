@@ -1,0 +1,42 @@
+# Метрики приходят двумя путями:
+#  - API шлёт сам, по OTLP через коллектор (otel-collector/config.yaml) — push;
+#  - всё стороннее (экспортёры, Qdrant) только выставляет /metrics,
+#    и Prometheus забирает сам — pull, scrape_configs ниже. Не через коллектор: готовые дашборды
+#    (IaC/grafana/dashboards) ждут имена метрик ровно как у экспортёров, а пересылка
+#    через OTLP их переименовывает. Цель не ответила — up = 0, на этом стоят тревоги
+# Срок хранения — флагом в docker-compose.yml
+global:
+  scrape_interval: 30s
+  evaluation_interval: 1m
+
+otlp:
+  # service.name и service.instance.id и так становятся job и instance; остальное
+  # из ресурса — в target_info
+  keep_identifying_resource_attributes: true
+
+storage:
+  tsdb:
+    # Коллектор копит пачки, и точки приходят не строго по порядку
+    out_of_order_time_window: 30m
+
+scrape_configs:
+  # Свой /metrics есть у Qdrant: коллекции, точки, время ответа
+  - job_name: qdrant
+    static_configs:
+      - targets: ["qdrantcontainer:6333"]
+
+  # Состояние PostgreSQL — через экспортёр: сам PostgreSQL метрик не отдаёт
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgresexportercontainer:9187"]
+
+  # Сама виртуалка: процессор, память, диск
+  - job_name: node
+    static_configs:
+      - targets: ["nodeexportercontainer:9100"]
+
+  # Каждый контейнер: память, процессор, диск, сеть
+  - job_name: cadvisor
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["cadvisorcontainer:8080"]

@@ -1,0 +1,80 @@
+a,
+a:hover,
+a:focus {
+  color: inherit;
+  text-decoration: none;
+}
+
+#sidebar {
+  min-width: 250px;
+  max-width: 250px;
+  background: #7386D5;
+  color: #fff;
+  transition: all 0.3s;
+  position: relative;
+  z-index: 998;
+}
+
+#sidebar.active {
+  margin-left: -250px;
+}
+
+#sidebar .sidebar-header {
+  padding: 20px;
+  background: #6d7fcc;
+}
+
+#sidebar ul.components {
+  padding: 20px 0;
+  border-bottom: 1px solid #47748b;
+}
+
+/* Иконка и подпись пункта — в одну строку, с одинаковым отступом */
+#sidebar ul li a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 10px;
+  font-size: 1.1em;
+}
+
+#sidebar ul li a:hover {
+  color: #7386D5;
+  background: #fff;
+}
+
+li.link-active {
+  color: #fff;
+  background: #6d7fcc;
+}
+
+svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+@media (max-width: 768px) {
+  #sidebar {
+    margin-left: -250px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+  }
+
+  #sidebar.active {
+    margin-left: 0;
+    margin-top: 50px;
+  }
+
+  #sidebar.active .sidebar-header {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  #sidebar {
+    margin-left: 0 !important;
+    margin-top: 0 !important;
+  }
+}

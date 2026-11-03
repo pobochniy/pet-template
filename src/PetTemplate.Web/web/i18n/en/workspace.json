@@ -1,0 +1,100 @@
+{
+  "settings": {
+    "title": "My spaces",
+    "subtitle": "A space is a shared home for data and people: everything inside is visible to its members only.",
+    "primaryBadge": "primary",
+    "makePrimary": "Make primary",
+    "members": "Members",
+    "rename": "Rename",
+    "leave": "Leave",
+    "leaveConfirm": "Leave? You will only be able to come back with an invitation.",
+    "leaveLastConfirm": "You are the last member: once you leave, the space is deleted with all its data.",
+    "empty": "No spaces yet. Create your own — or ask someone who already has a space for an invitation link.",
+    "createTitle": "New space",
+    "createHint": "You can invite others right after creating it.",
+    "createSubmit": "Create space",
+    "createOpen": "Add a space",
+    "namePlaceholder": "For example, “Horns and Hooves”",
+    "primaryChanged": "Primary space changed",
+    "renamed": "Name saved",
+    "left": "You left the space"
+  },
+  "members": {
+    "title": "Space members",
+    "titleEmbedded": "Members",
+    "subtitle": "Whom to invite, who may do what and which links have been issued.",
+    "newMember": "New member",
+    "add": "Add a member",
+    "linkReady": "The link is ready — valid for three days",
+    "copy": "Copy",
+    "copied": "Link copied",
+    "copyFailed": "Could not copy — select the link manually",
+    "inSpace": "In the space",
+    "you": "you",
+    "editAccess": "Edit access",
+    "kick": "Remove",
+    "kickConfirm": "Remove? They will only be able to come back with a new invitation.",
+    "empty": "No members yet — invite the first one.",
+    "invitationsTitle": "Issued links",
+    "noInvitations": "No invitations issued yet.",
+    "noName": "No name",
+    "revoke": "Revoke",
+    "revokeConfirm": "Revoke the invitation? The link will stop working.",
+    "removed": "The member has been removed from the space",
+    "loadFailed": "Could not load the member list",
+    "invitationsLoadFailed": "Could not load the invitation list"
+  },
+  "invitation": {
+    "accepted": "accepted: {user}",
+    "acceptedByMember": "member",
+    "revoked": "revoked",
+    "expired": "expired",
+    "active": "active until {date}"
+  },
+  "invite": {
+    "hint": "The link is single-use and lives for three days: one person comes in through it and gets exactly the permissions ticked below. Send it via any messenger.",
+    "inviteeName": "Whom are you inviting (optional)",
+    "inviteeNamePlaceholder": "For example, Val",
+    "inviteeNameHint": "The name goes into the greeting on the invitation page.",
+    "permissions": "Member permissions",
+    "permissionsRequired": "Keep at least one permission — an invitation without permissions is useless",
+    "submit": "Create link"
+  },
+  "permissions": {
+    "selectAll": "Select all",
+    "required": "Keep at least one permission: without permissions a person is no longer a member of the space. To remove them completely, use “Remove”.",
+    "saved": "Permissions saved",
+    "loadFailed": "Could not load the member's permissions"
+  },
+  "field": {
+    "inviteeName": "Name"
+  },
+  "error": {
+    "notAMember": "You are not a member of this space",
+    "memberNotFound": "The member was not found in this space",
+    "cannotRemoveSelf": "To remove yourself from the space, use “Leave”",
+    "emptyPermissions": "Keep at least one permission for the member. To remove a person from the space, remove the member",
+    "permissionsExceedOwn": "You cannot grant permissions you do not have yourself",
+    "unavailable": "The space is unavailable",
+    "lastPermissionManager": "At least one member managing permissions must remain in the space. Grant this permission to someone else first",
+    "setPrimaryFailed": "Could not change the primary space",
+    "renameFailed": "Could not rename the space",
+    "leaveFailed": "Could not leave the space",
+    "createFailed": "Could not create the space",
+    "loadFailed": "Could not load the list of spaces",
+    "inviteFailed": "Could not create the invitation",
+    "savePermissionsFailed": "Could not save permissions",
+    "kickFailed": "Could not remove the member",
+    "revokeFailed": "Could not revoke the invitation"
+  },
+  "permission": {
+    "permissionManagement": "Manage member permissions",
+    "workspaceInfoCrud": "Edit the space",
+    "workspaceMemberCrud": "Invite members",
+    "workspaceMemberRead": "View members and issued links"
+  },
+  "permissionGroup": {
+    "permissionManagement": "Member permissions",
+    "workspace": "Space"
+  }
+}

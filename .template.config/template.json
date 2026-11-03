@@ -5,7 +5,7 @@
   "name": "Pet Project Template",
   "description": "Full-stack template: ASP.NET Core API + Angular frontend",
   "identity": "pobochniy.PetTemplate",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "shortName": "pet",
   "tags": {
     "language": "C#",
@@ -13,19 +13,40 @@
   },
   "sourceName": "PetTemplate",
   "preferNameDirectory": true,
+  "symbols": {
+    "domain": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Домен проекта: заменяет example.com в nginx, certbot, workflow, appsettings, клиенте, письмах и документации (adminka.example.com, grafana.example.com — вместе с ним)",
+      "defaultValue": "example.com",
+      "replaces": "example.com"
+    }
+  },
   "sources": [
     {
       "modifiers": [
         {
           "exclude": [
+            ".git",
             ".git/**",
             ".idea/**",
+            ".claude/settings.local.json",
+            ".claude/worktrees/**",
             "**/bin/**",
             "**/obj/**",
             "**/.DS_Store",
-            "PetTemplate.Web/web/node_modules/**",
-            "PetTemplate.Web/web/.angular/**",
-            "PetTemplate.Web/web/dist/**",
+            "**/*.DotSettings.user",
+            "plan/**",
+            "src/PetTemplate.Web/web/node_modules/**",
+            "src/PetTemplate.Web/web/.angular/**",
+            "src/PetTemplate.Web/web/dist/**",
+            "src/PetTemplate.Web/web/out-tsc/**",
+            "src/PetTemplate.Web/web/coverage/**",
+            "out/**",
+            "efbundle",
+            "IaC/nginx/conf/admin-allow.inc",
+            "IaC/nginx/conf/admin-allow-open.inc",
+            "IaC/.env",
             ".template.config/**"
           ]
         }

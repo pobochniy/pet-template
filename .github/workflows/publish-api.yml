@@ -1,0 +1,142 @@
+name: Publish Api
+
+# Выкатка — только по кнопке (спец. infrastructure, 1): push в main ничего не выкатывает
+on:
+  workflow_dispatch:
+
+env:
+  PUBLISH_DIR: publishfolder
+  # Как TargetFramework (net10.0): SDK старше net10.0 не собирает (спец. infrastructure, 6)
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  # Ворота (спец. infrastructure, 5): тесты на облачном раннере — тот же workflow, что
+  # в ПР. Красные — сборка на VM не начинается, контейнер не трогается
+  tests:
+    uses: ./.github/workflows/api-tests.yml
+
+  build-and-deploy:
+    needs: tests
+    runs-on: [self-hosted]
+    steps:
+      - name: checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+        env:
+          DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
+
+      # Справка с ошибкой линтера останавливает выкатку сразу (спец. help, 6.4), а не
+      # после того, как новый контейнер уже поднят и остался со старой справкой.
+      # В ПР линтер уже прошёл — здесь это страховка для ветки, не прошедшей ПР.
+      # publish-help.yml ниже зовётся с lint: false — тот же коммит дважды не линтуем
+      - name: help lint 📖
+        run: dotnet run --project tools/HelpCheck -c Release -- lint
+
+      - name: restore
+        run: dotnet restore src/PetTemplate.Api/PetTemplate.Api.csproj
+
+      - name: build 🏗️
+        run: dotnet build src/PetTemplate.Api/PetTemplate.Api.csproj --no-restore -c Release
+
+      - name: publish
+        run: dotnet publish src/PetTemplate.Api/PetTemplate.Api.csproj --no-build -c Release -o ${{ env.PUBLISH_DIR }}
+
+      # Бандл миграций (спец. infrastructure, 8): собирается здесь, накатывается ниже —
+      # до замены контейнера. Контекст ему даёт ApplicationContextFactory,
+      # без хоста API и его секретов. dotnet-ef — из манифеста dotnet-tools.json в корне
+      - name: migrations bundle
+        run: |
+          dotnet tool restore
+          dotnet ef migrations bundle --project src/PetTemplate.Db --startup-project src/PetTemplate.Api \
+            --configuration Release --output efbundle --force
+
+      - name: copy Dockerfile
+        run: cp src/PetTemplate.Api/Dockerfile ${{ env.PUBLISH_DIR }}/Dockerfile
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y_%m_%d__%H_%M_%S')" >> "$GITHUB_OUTPUT"
+
+      - name: build docker image
+        run: docker build --tag pettemplate-api:${{ steps.date.outputs.date }} ${{ env.PUBLISH_DIR }}
+
+      # Миграции — под владельцем базы (MIGRATIONS_DB_CONNECTION_STRING), а не под ролью API:
+      # у той только DML (IaC/postgres/init/01-app-user.sh). Бандл идёт в контейнере
+      # с рантаймом в сети базы — dbcontainer на хост порта не выставляет; строка — переменной
+      # без значения в `--env` (docker берёт её из окружения шага), чтобы не светиться в списке процессов. Упали миграции — старый
+      # контейнер не тронут. Старый API живёт, пока они идут: миграция обязана не ломать
+      # предыдущую версию кода (её же поднимает откат ниже и rollback-api.yml — откат схему не откатывает)
+      - name: apply migrations 🗄️
+        env:
+          ConnectionStrings__AppConnection: ${{ secrets.MIGRATIONS_DB_CONNECTION_STRING }}
+        run: |
+          if [ -z "$ConnectionStrings__AppConnection" ]; then
+            echo "::error::секрет MIGRATIONS_DB_CONNECTION_STRING не задан (IaC/DEPLOYMENT.md, 6 и 9)"
+            exit 1
+          fi
+          docker run --rm --network nginx-proxy-man \
+            --env ConnectionStrings__AppConnection \
+            -v "$PWD/efbundle:/efbundle:ro" \
+            mcr.microsoft.com/dotnet/aspnet:10.0 /efbundle
+
+      # Прежний образ — по id, а не по тегу: после отката на latest контейнер записан
+      # как pettemplate-api:latest, а latest ниже переедет на новый образ
+      - name: remember running image
+        id: previous
+        run: echo "image=$(docker inspect -f '{{.Image}}' dapi 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+      # Переменные — по таблице спец. infrastructure, 9 (полный список — IaC/DEPLOYMENT.md, 6);
+      # тот же набор env — в rollback-api.yml, сам docker run — в IaC/run-api.sh.
+      # Новый секрет — строкой в env: обоих workflow и строкой --env в скрипте.
+      # Не ответил 200 на /health — поднимаем прежний образ и роняем выкатку
+      - name: run new container 🚀
+        env:
+          ConnectionStrings__AppConnection: ${{ secrets.API_DB_CONNECTION_STRING }}
+          JwtOptions__SigningKey: ${{ secrets.JWT_SIGNING_KEY }}
+          AdminOptions__SigningKey: ${{ secrets.ADMIN_JWT_SIGNING_KEY }}
+          Telegram__BotToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TelegramLoginOptions__BotId: ${{ vars.TELEGRAM_BOT_ID }}
+          VkIdOptions__AppId: ${{ vars.VK_ID_APP_ID }}
+          VkOptions__PrivateKey: ${{ secrets.VK_MINIAPP_PRIVATE_KEY }}
+          MailOptions__Password: ${{ secrets.SMTP_PASSWORD }}
+          AssistantOptions__Providers__main__Endpoint: ${{ vars.ASSISTANT_ENDPOINT }}
+          AssistantOptions__Providers__main__ApiKey: ${{ secrets.ASSISTANT_API_KEY }}
+          AssistantOptions__SeedModels__0__Key: ${{ vars.ASSISTANT_MODEL }}
+          AssistantOptions__Transcription__Model: ${{ vars.ASSISTANT_TRANSCRIPTION_MODEL }}
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.image }}
+        run: |
+          if sh IaC/run-api.sh "${{ steps.date.outputs.date }}"; then
+            exit 0
+          fi
+          if [ -n "$PREVIOUS_IMAGE" ]; then
+            echo "::error::новая версия не поднялась — возвращаю прежний образ $PREVIOUS_IMAGE"
+            sh IaC/run-api.sh "$PREVIOUS_IMAGE" || echo "::error::прежний образ тоже не ответил на /health — смотрите docker logs dapi"
+          else
+            echo "::error::новая версия не поднялась, а прежнего контейнера не было — API лежит"
+          fi
+          exit 1
+
+      - name: tag as latest
+        run: docker tag pettemplate-api:${{ steps.date.outputs.date }} pettemplate-api:latest
+
+  # Справка того же коммита, что и код (спец. help, 6.4): упала выкатка — справка
+  # не меняется. Условия на ветку нет — на проде код этой ветки, и описывать его должна
+  # её справка
+  publish-help:
+    needs: build-and-deploy
+    uses: ./.github/workflows/publish-help.yml
+    with:
+      lint: false
+    secrets: inherit
+
+  cleanup:
+    needs: build-and-deploy
+    uses: ./.github/workflows/cleanup-old-images.yml
+    with:
+      image_name: pettemplate-api
+      keep_versions: 5
+      container_name: dapi

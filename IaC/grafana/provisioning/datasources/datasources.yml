@@ -1,0 +1,23 @@
+# Источники данных заводятся из файла, а не руками в интерфейсе: том Grafana
+# пересоздаётся, а файл лежит в репозитории. Правка в интерфейсе запрещена (editable)
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheuscontainer:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # API отдаёт метрики раз в минуту (интервал экспорта OTLP по умолчанию);
+      # окно rate() меньше двух точек показало бы пустоту
+      timeInterval: 60s
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempocontainer:3200
+    editable: false
