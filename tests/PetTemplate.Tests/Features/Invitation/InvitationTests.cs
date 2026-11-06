@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using PetTemplate.Shared.Constants;
 using PetTemplate.Shared.Dto;
 using PetTemplate.Shared.Enums;
+using PetTemplate.Shared.Errors;
 using PetTemplate.Tests.Arranges;
 using PetTemplate.Tests.Asserts;
 using PetTemplate.Tests.EntityBuilders;
@@ -133,6 +134,20 @@ public class InvitationTests
         var preview = await response.Content.ReadFromJsonAsync<InvitationPreviewDto>();
         Assert.Equal(InvitationStatusEnum.Expired, preview!.Status);
         Assert.Null(preview.WorkspaceName);
+    }
+
+    /// <summary>
+    /// Токен, который не лёг в <c>Guid</c> ещё в биндере, отвечает кодом, а не английской
+    /// фразой .NET «The value 'abc' is not valid»
+    /// </summary>
+    [Fact]
+    public async Task UnparsableTokenIsInvalidCode()
+    {
+        var (client, _) = await Given.ApiClient();
+
+        var response = await client.GetAsync("/api/Invitation/Preview?token=plyushka");
+
+        await response.ShouldBeValidationWith("token", ValidationCodes.Invalid);
     }
 
     [Fact]
