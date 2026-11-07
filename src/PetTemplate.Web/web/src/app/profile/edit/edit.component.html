@@ -8,69 +8,72 @@
   </div>
 
   <div class="row justify-content-center">
-    <div class="col-lg-7">
-      <!-- Первым — блок «Основное»: логин и все способы войти (спец. accounts, 6) -->
-      <profile-logins></profile-logins>
+    <div class="col-xxl-10">
+      <!-- Первым — блок «Основное»: логин и все способы войти (спец. accounts, 6).
+           Слева под ним аватар и согласия, справа под паролем и привязками — переходы -->
+      <profile-logins>
+        <div profile-main class="card shadow-sm">
+          <div class="card-body p-4">
+            <form [formGroup]="profileForm" (ngSubmit)="onSubmit()">
 
-      <div class="card shadow-sm">
-        <div class="card-body p-4">
-          <form [formGroup]="profileForm" (ngSubmit)="onSubmit()">
-
-            <div class="mb-4 d-flex align-items-center gap-3">
-              <a [routerLink]="['/profile/avatar']" class="flex-shrink-0" [title]="i18n.t('profile.avatar.change')">
-                <img
-                  [src]="avatarUrl()"
-                  [alt]="i18n.t('profile.view.avatar')"
-                  class="rounded-circle border border-primary border-2"
-                  width="80"
-                  height="80"
-                  style="object-fit: cover;">
-              </a>
-              <a [routerLink]="['/profile/avatar']">{{ i18n.t('profile.avatar.change') }}</a>
-            </div>
-
-            <div class="border-top pt-4 mb-4">
-              <h6 class="fw-semibold mb-3">{{ i18n.t('profile.edit.confirmations') }}</h6>
-
-              <div class="form-check mb-3 p-3 bg-body-tertiary rounded">
-                <input class="form-check-input ms-0 me-2" type="checkbox" id="isAdult" formControlName="isAdult">
-                <label class="form-check-label fw-semibold" for="isAdult">{{ i18n.t('profile.field.isAdult') }}</label>
-                <form-validation [model]="profileForm.controls.isAdult" fieldKey="profile.field.isAdult"></form-validation>
+              <div class="mb-4 d-flex align-items-center gap-3">
+                <a [routerLink]="['/profile/avatar']" class="flex-shrink-0" [title]="i18n.t('profile.avatar.change')">
+                  <img
+                    [src]="avatarUrl()"
+                    [alt]="i18n.t('profile.view.avatar')"
+                    class="rounded-circle border border-primary border-2"
+                    width="80"
+                    height="80"
+                    style="object-fit: cover;">
+                </a>
+                <a [routerLink]="['/profile/avatar']">{{ i18n.t('profile.avatar.change') }}</a>
               </div>
 
-              <div class="form-check p-3 bg-body-tertiary rounded">
-                <input class="form-check-input ms-0 me-2" type="checkbox" id="hasAcceptedTerms" formControlName="hasAcceptedTerms">
-                <label class="form-check-label fw-semibold" for="hasAcceptedTerms">{{ i18n.t('profile.field.hasAcceptedTerms') }}</label>
-                <form-validation [model]="profileForm.controls.hasAcceptedTerms" fieldKey="profile.field.hasAcceptedTerms"></form-validation>
-              </div>
-            </div>
+              <div class="border-top pt-4 mb-4">
+                <h6 class="fw-semibold mb-3">{{ i18n.t('profile.edit.confirmations') }}</h6>
 
-            <div class="d-grid gap-2">
-              <button type="submit" class="btn btn-primary btn-lg">{{ i18n.t('profile.edit.submit') }}</button>
-            </div>
-          </form>
+                <div class="form-check mb-3 p-3 bg-body-tertiary rounded">
+                  <input class="form-check-input ms-0 me-2" type="checkbox" id="isAdult" formControlName="isAdult">
+                  <label class="form-check-label fw-semibold" for="isAdult">{{ i18n.t('profile.field.isAdult') }}</label>
+                  <form-validation [model]="profileForm.controls.isAdult" fieldKey="profile.field.isAdult"></form-validation>
+                </div>
+
+                <div class="form-check p-3 bg-body-tertiary rounded">
+                  <input class="form-check-input ms-0 me-2" type="checkbox" id="hasAcceptedTerms" formControlName="hasAcceptedTerms">
+                  <label class="form-check-label fw-semibold" for="hasAcceptedTerms">{{ i18n.t('profile.field.hasAcceptedTerms') }}</label>
+                  <form-validation [model]="profileForm.controls.hasAcceptedTerms" fieldKey="profile.field.hasAcceptedTerms"></form-validation>
+                </div>
+              </div>
+
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">{{ i18n.t('profile.edit.submit') }}</button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
 
-      <!-- Память ассистента обязана быть видимой (спец. assistant, 12.5). Подписи — словарь
-           `profile`: экран профиля словарь `assistant` не грузит, он едет с самим экраном памяти -->
-      <a [routerLink]="['/profile/assistant-memory']" id="assistant-memory-button"
-         class="card shadow-sm mt-3 text-decoration-none text-body">
-        <span class="card-body d-block">
-          <span class="d-block fw-semibold">{{ i18n.t('profile.edit.assistantLink') }}</span>
-          <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.assistantHint') }}</span>
-        </span>
-      </a>
+        <ng-container profile-security>
+        <!-- Память ассистента обязана быть видимой (спец. assistant, 12.5). Подписи — словарь
+             `profile`: экран профиля словарь `assistant` не грузит, он едет с самим экраном памяти -->
+        <a [routerLink]="['/profile/assistant-memory']" id="assistant-memory-button"
+           class="card shadow-sm text-decoration-none text-body">
+          <span class="card-body d-block">
+            <span class="d-block fw-semibold">{{ i18n.t('profile.edit.assistantLink') }}</span>
+            <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.assistantHint') }}</span>
+          </span>
+        </a>
 
-      <!-- Пространства: основное, выход, переименование и создание — на одной странице
-           (спец. authorization, 7.2); сюда же ведёт шестерёнка в шапке -->
-      <a [routerLink]="['/workspace/settings']" id="workspace-settings-button"
-         class="card shadow-sm mt-3 text-decoration-none text-body">
-        <span class="card-body d-block">
-          <span class="d-block fw-semibold">{{ i18n.t('profile.edit.workspaceLink') }}</span>
-          <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.workspaceHint') }}</span>
-        </span>
-      </a>
+        <!-- Пространства: основное, выход, переименование и создание — на одной странице
+             (спец. authorization, 7.2); сюда же ведёт шестерёнка в шапке -->
+        <a [routerLink]="['/workspace/settings']" id="workspace-settings-button"
+           class="card shadow-sm mt-3 text-decoration-none text-body">
+          <span class="card-body d-block">
+            <span class="d-block fw-semibold">{{ i18n.t('profile.edit.workspaceLink') }}</span>
+            <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.workspaceHint') }}</span>
+          </span>
+        </a>
+        </ng-container>
+      </profile-logins>
     </div>
   </div>
 

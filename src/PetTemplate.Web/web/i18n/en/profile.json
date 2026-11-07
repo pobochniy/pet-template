@@ -39,6 +39,7 @@
   },
   "main": {
     "title": "Main",
+    "securityTitle": "Sign-in and linked accounts",
     "userNameHint": "3–20 characters: Latin letters, digits, “_” and “.”. Space members find you by your username",
     "phoneHint": "A plus and 11 digits — you can sign in with it too",
     "passwordOnly": "Link Telegram or VK, or confirm your email — without them only support can restore a forgotten password",

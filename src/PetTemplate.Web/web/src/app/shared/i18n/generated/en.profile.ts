@@ -66,6 +66,7 @@ export default {
   "profile.main.phoneHint": "A plus and 11 digits — you can sign in with it too",
   "profile.main.saveFailed": "Could not save the profile",
   "profile.main.saved": "Profile saved",
+  "profile.main.securityTitle": "Sign-in and linked accounts",
   "profile.main.title": "Main",
   "profile.main.userNameFailed": "Could not change the username",
   "profile.main.userNameHint": "3–20 characters: Latin letters, digits, “_” and “.”. Space members find you by your username",
