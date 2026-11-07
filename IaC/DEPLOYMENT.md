@@ -53,7 +53,7 @@ openssl rand -hex 24   # пароль без символов, которые л
 
 Домен — `example.com` (шаблон `dotnet new` подставляет свой): в `server_name` HTTP-блока
 `nginx/conf/nginx.conf`, в файлах сайтов `nginx/conf/sites/`, в пути сертификата
-`snippets/tls.inc` и в `DOMAINS` скрипта `issue-cert.sh`. Адрес API `dapi:8080` уже на месте.
+`snippets/tls.inc` (`issue-cert.sh` берёт имена сертификата из `server_name`). Адрес API `dapi:8080` уже на месте.
 Как устроен `nginx/conf/` — `nginx/README.md`: `nginx.conf` — HTTP всех имён (проверка certbot
 и переадресация на HTTPS) и последней строкой `include` сайтов из `sites/`, по файлу на имя;
 общие куски — в `snippets/`. Что важно:
@@ -311,8 +311,11 @@ server-блок админки и `deny` на `/api/admin*` основного �
 замка `POST example.com/api/Admin/Login` шёл бы мимо первого. Почти всё время админка закрыта
 для всех и открывается на время workflow `Admin Access`.
 
-1. **DNS**: A-запись `adminka.example.com` на тот же адрес, что у `example.com`.
-2. **Сертификат** — `bash ~/IaC/issue-cert.sh`: имя уже в его списке, существующий сертификат
+1. **DNS**: A-запись `adminka.example.com` на тот же адрес, что у `example.com`. Скрипт ниже
+   выпускает сертификат сразу на все имена из `server_name` HTTP-блока `nginx.conf`, включая
+   `grafana.example.com` (раздел 11): её A-запись тоже нужна сейчас — или убрать имя из
+   `server_name` до раздела 11, иначе certbot не выпустит ни одного.
+2. **Сертификат** — `bash ~/IaC/issue-cert.sh`: имя уже в `server_name`, существующий сертификат
    расширяется (`--expand`), путь `live/example.com/` не меняется.
 3. **Открыть на время** — Actions → **Admin Access** → Run workflow: `open` и срок
    (1, 2, 4 или 8 часов). Раннер на сервере пишет в `nginx/conf/` файл

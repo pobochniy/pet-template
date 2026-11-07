@@ -405,8 +405,9 @@ IaC/
 
 - `webserver` — `nginx:1.30` (стабильная ветка; патчи приходят сами), тома `./frontend`, `./adminka`, `./nginx/conf:ro`, certbot;
   сеть `nginx-proxy-man` (внешняя, создаётся `setup-vm.sh`).
-- `certbot` — выпуск и продление; первый запуск — без https, потом сертификат, потом блок 443
-  (порядок — в шапке файла и `IaC/DEPLOYMENT.md`, раздел 4).
+- `certbot` — выпуск и продление; выпуск и расширение новым именем — `IaC/issue-cert.sh`: на чистой
+  машине он на время выпуска комментирует `include` сайтов в `nginx.conf` и держит nginx только на HTTP
+  (`IaC/DEPLOYMENT.md`, раздел 4).
 - `database` — `postgres:18`, `container_name: dbcontainer`, **именованный том `db-data`**
   (`/var/lib/postgresql`: с 18-й версии образ держит данные в `18/docker` под ним; в анонимном томе данные уносит `docker compose down -v`
   или пересоздание), пароли из `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
@@ -473,12 +474,12 @@ IaC/
   а `add_header` в `location` отменяет унаследованные;
 - `nginx.conf` — единственный `*.conf` верхнего уровня (каталог смонтирован в `/etc/nginx/conf.d`,
   и его `*.conf` nginx подключает сам): `access_log off`, `server_tokens off`, один server-блок на
-  80-м порту для всех имён — проверка certbot и `301` на HTTPS. Сайт, API, админка и Grafana по
+  80-м порту для всех имён — проверка certbot и `308` на HTTPS. Сайт, API, админка и Grafana по
   HTTP не отдаются — вход с паролем и токены ходят только по HTTPS. Последняя строка —
   `include …/sites/*.conf`: без сертификата сайты не дают nginx стартовать, и `IaC/issue-cert.sh`
   на чистой машине выключает их этой строкой на время выпуска;
 - домен `example.com` — символ шаблона (разделы 12–13): `server_name`, путь сертификата в
-  `snippets/tls.inc`, `DOMAINS` в `issue-cert.sh`; `proxy_pass http://dapi:8080/api/`
+  `snippets/tls.inc` (имена сертификата `issue-cert.sh` берёт из `server_name`); `proxy_pass http://dapi:8080/api/`
   (`snippets/proxy-api.inc`);
 - `location ~* ^/api/admin(/|$) { deny all; }` в `sites/product.conf` (`specs/admin.md`, раздел 7);
 - `client_max_body_size` (5m) — по максимальному телу API: запись голоса ассистенту — до 4 МБ

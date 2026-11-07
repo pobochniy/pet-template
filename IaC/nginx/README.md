@@ -5,7 +5,7 @@
 
 ```
 conf/
-├── nginx.conf              HTTP всех имён: проверка certbot и 301 на HTTPS; последняя строка —
+├── nginx.conf              HTTP всех имён: проверка certbot и 308 на HTTPS; последняя строка —
 │                           include sites/*.conf
 ├── sites/                  HTTPS — по файлу на имя
 │   ├── product.conf        продукт и API; CSP продукта — map $csp_product
@@ -33,7 +33,7 @@ conf/
 
 ## Сертификат
 
-Один на все имена, `live/example.com/`. Выпуск и расширение новым именем — `IaC/issue-cert.sh`
+Один на все имена из `server_name` HTTP-блока `nginx.conf`, `live/<первое имя>/` — `live/example.com/`. Выпуск и расширение новым именем — `IaC/issue-cert.sh`
 (`IaC/DEPLOYMENT.md`, раздел 4): пока сертификата нет, сайты из `sites/` не дают nginx
 подняться, и скрипт на время выпуска комментирует строку `include` в `nginx.conf`.
 Продление — `crontab` из `IaC/README.md`, раздел 4.
@@ -44,8 +44,9 @@ conf/
 2. Файл в `sites/` — по образцу соседей; инструмент за шлюзом (приёмник трасс, Jaeger UI и подобные) —
    по образцу `grafana.conf`: тот же замок и тот же `auth_request`, своя аутентификация у инструмента
    не включается вовсе, порт на хост не пробрасывается.
-3. Имя — в `server_name` HTTP-блока `nginx.conf` и в `DOMAINS` скрипта `IaC/issue-cert.sh`; имя из
-   `DOMAINS`, которого нет в `server_name`, скрипт находит сам и останавливается до certbot.
+3. Имя — в `server_name` HTTP-блока `nginx.conf`: `IaC/issue-cert.sh` берёт имена сертификата
+   оттуда, отдельного списка нет. Первым там остаётся `example.com` — по нему назван каталог
+   сертификата в `snippets/tls.inc`.
 4. На сервере — отвезти `nginx/conf`, `bash ~/IaC/issue-cert.sh`: он расширит сертификат и перечитает nginx.
 
 ## Проверка без сервера
