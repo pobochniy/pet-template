@@ -415,7 +415,7 @@ DialogEvaluation            автооценка прогона судьёй (16
 В `appsettings.json` — примеры; пустой `SigningKey`, ключ короче 32 байт или совпадение
 с `JwtOptions` роняет старт.
 
-**Развёртывание — server-блок и том** (`infrastructure.md`, раздел 8): в `IaC/nginx/conf/nginx.conf`
+**Развёртывание — server-блок и том** (`infrastructure.md`, раздел 8): в `IaC/nginx/conf/sites/adminka.conf`
 блок `server_name adminka.example.com` с `root /etc/nginx/html-admin` и тем же `proxy_pass` на
 `dapi:8080` (контейнер API); каталог сборки — том `./adminka` рядом с `./frontend`; сертификат —
 вторым доменом в тот же certbot.
@@ -431,7 +431,7 @@ DialogEvaluation            автооценка прогона судьёй (16
   ASP.NET к регистру безразличны.
 
 **Список адресов не заводится — админка закрыта и открывается на время.** Админы
-ходят через меняющиеся VPN. Workflow `Admin Access` кладёт рядом с `nginx.conf` файл
+ходят через меняющиеся VPN. Workflow `Admin Access` кладёт в `IaC/nginx/conf/` файл
 `admin-allow-open.inc` с `allow all;` на 1–8 часов и стирает его по `close` или по сроку —
 запуском по расписанию раз в 15 минут и, страховкой без раннера, `cron` самой VM раз в 5 минут
 (оба зовут `IaC/admin-access.sh`); закрытым считается ответ `403` с самого сервера,
@@ -809,8 +809,8 @@ DialogEvaluation            автооценка прогона судьёй (16
   `models/`, `dialogs/`, `accounts/` (с диалогами ссылки сброса и освобождения почты и
   телефона), `account-journal/`, `billing/`, `admins/`, `access-log/`. Проект `admin` —
   в `angular.json`, скрипты `start:admin`, `build:admin`, `test:admin` — в `package.json`.
-- **Развёртывание** — `IaC/nginx/conf/nginx.conf` (server-блоки `adminka` и `grafana`, замок
-  `/api/admin*` на основном домене), `IaC/nginx/conf/admin-allow.inc.example`,
+- **Развёртывание** — `IaC/nginx/conf/sites/` (`adminka.conf` и `grafana.conf`, замок
+  `/api/admin*` в `product.conf`), `IaC/nginx/conf/snippets/admin-lock.inc`, `IaC/nginx/conf/admin-allow.inc.example`,
   `IaC/docker-compose.yml` (том `./adminka`), `.github/workflows/publish-admin.yml`,
   `admin-access.yml`, `web-tests.yml`; инструкция — `IaC/DEPLOYMENT.md`, раздел 8.
 - **Тесты** — `tests/PetTemplate.Tests/Features/Admin` (`AdminWiringTests` стережёт разметку

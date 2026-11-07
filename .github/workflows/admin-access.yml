@@ -8,7 +8,7 @@ name: Admin Access
 # Тем же замком закрыта grafana.example.com (спец. infrastructure, 10) — этот же файл
 # открывает и её (спец. admin, 7); проверка закрытия по-прежнему стучится в админку.
 #
-# Открытие — файл `admin-allow-open.inc` с `allow all;` рядом с `nginx.conf`: его
+# Открытие — файл `admin-allow-open.inc` с `allow all;` в `nginx/conf/`: его
 # подхватывает тот же `include admin-allow*.inc`, что и постоянный список
 # `admin-allow.inc`. Постоянный список workflow не трогает. Замок `/api/admin*` на
 # основном домене от обоих не зависит и закрыт всегда.

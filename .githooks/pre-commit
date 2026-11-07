@@ -14,8 +14,8 @@
 #                  и на правку `*.routes.ts`/`*.scopes.ts` (из них берутся маршруты);
 #   enum:parity  — копии перечислений и правил аккаунта совпадают с C#: на правку
 #                  `*.cs` и клиента (продукт и админка) — правят обычно одну сторону;
-#   csp:hash     — хеш инлайн-скрипта `index.html` в CSP `nginx.conf` тот же, что у скрипта:
-#                  на правку `index.html` и `nginx.conf`;
+#   csp:hash     — хеш инлайн-скрипта `index.html` в CSP nginx (`sites/product.conf`,
+#                  `sites/adminka.conf`) тот же, что у скрипта: на правку `index.html` и этих файлов;
 #   dotnet build — бэкенд компилируется, включая проект тестов;
 #   api:types    — типы DTO клиента (`schema.d.ts`) совпадают с OpenAPI документом
 #                  API: на правку `*.cs`/`*.csproj` и самого файла типов, после сборки.
@@ -71,7 +71,7 @@ fi
 
 # CSP nginx пускает инлайн-скрипт `index.html` по хешу: правка скрипта без нового хеша
 # молча сломала бы вход mini-app (`tools/csp-hash.mjs`)
-if printf '%s\n' "$staged" | grep -q 'index\.html$\|^IaC/nginx/conf/nginx\.conf$\|^src/PetTemplate\.Web/web/tools/csp-hash\.mjs$'; then
+if printf '%s\n' "$staged" | grep -q 'index\.html$\|^IaC/nginx/conf/sites/\(product\|adminka\)\.conf$\|^src/PetTemplate\.Web/web/tools/csp-hash\.mjs$'; then
   cd "$root/src/PetTemplate.Web/web"
   node tools/csp-hash.mjs --check
   cd "$root"

@@ -51,46 +51,34 @@ openssl rand -hex 24   # пароль без символов, которые л
 
 ### 3. Настройка Nginx
 
-Домен — в `nginx/conf/nginx.conf`: `example.com` в `server_name` и путях сертификата
-`live/example.com/`, `adminka.example.com` у админки. Адрес API `dapi:8080` уже на месте.
-Что в нём важно:
+Домен — `example.com` (шаблон `dotnet new` подставляет свой): в `server_name` HTTP-блока
+`nginx/conf/nginx.conf`, в файлах сайтов `nginx/conf/sites/`, в пути сертификата
+`snippets/tls.inc` (`issue-cert.sh` берёт имена сертификата из `server_name`). Адрес API `dapi:8080` уже на месте.
+Как устроен `nginx/conf/` — `nginx/README.md`: `nginx.conf` — HTTP всех имён (проверка certbot
+и переадресация на HTTPS) и последней строкой `include` сайтов из `sites/`, по файлу на имя;
+общие куски — в `snippets/`. Что важно:
 
 - `location ~* ^/api/admin(/|$) { deny all; }` на основном домене и замок
-  `include admin-allow*.inc; deny all;` на `adminka.example.com` — раздел 8;
+  `snippets/admin-lock.inc` на `adminka.example.com` — раздел 8;
 - `grafana.example.com` — тот же замок и `auth_request` на `Admin/Auth/Verify` — раздел 11;
 - `index.html` и маршруты клиента — `Cache-Control: no-cache`, бандлы с хешем в имени —
   `immutable` на год;
+- по HTTP сайт, API, админка и Grafana не отдаются — только переадресация на HTTPS;
 - `client_max_body_size 5m` — без него nginx режет тело на 1 МБ раньше API; самое большое
   тело — запись голоса ассистенту (до 4 МБ, `AssistantOptions:Transcription:MaxAudioBytes`);
-- Content-Security-Policy продукта и админки — `map $csp_product` и `$csp_admin` вверху
-  `nginx.conf`: скрипты только свои и инлайн-скрипт `index.html` по хешу, `frame-ancestors`
+- Content-Security-Policy продукта и админки — `map $csp_product` в `sites/product.conf`
+  и `$csp_admin` в `sites/adminka.conf`: скрипты только свои и инлайн-скрипт `index.html` по хешу, `frame-ancestors`
   со списком площадок mini-app VK и Telegram, поэтому `X-Frame-Options` у продукта нет
   (у админки — `DENY`). Правка инлайн-скрипта `src/index.html` меняет хеш:
   `npm run csp:hash -- --write` в `src/PetTemplate.Web/web` вписывает новый, `--check`
   сверяет (хук `pre-commit`, `web-tests.yml`).
 
-Проверка синтаксиса без сервера (с машины разработчика, из корня репозитория):
-
-```bash
-docker run --rm -v $PWD/IaC/nginx/conf:/etc/nginx/conf.d:ro nginx nginx -t
-```
-
-Без контейнера `dapi` и без сертификата она упадёт на `host not found in upstream "dapi"`
-и `cannot load certificate` — это ожидаемо. Grafana на старте nginx не нужна: её имя
-разрешается на запросе (`resolver` в `nginx.conf`). Полная проверка — с заглушками:
-`--add-host dapi:127.0.0.1` и самоподписанным сертификатом, смонтированным в
-`/etc/nginx/ssl/live/example.com/` (`openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=example.com
--keyout privkey.pem -out fullchain.pem`).
+Проверка без сервера — `nginx/README.md`, «Проверка без сервера».
 
 ### 4. Запуск инфраструктуры и сертификат
 
-```bash
-cd ~/IaC
-docker compose up -d
-```
-
-nginx при старте разрешает `dapi` из `proxy_pass` и читает сертификат. Поэтому на чистой
-машине порядок такой:
+Сайты из `nginx/conf/sites/` при старте nginx разрешают `dapi` из `proxy_pass` и читают
+сертификат, поэтому на чистой машине порядок такой:
 
 1. `docker compose up -d database qdrant embeddings certbot`, дождаться `healthy` у `database`
    (`docker compose ps`) — на пустом томе в этот момент заводятся пользователь приложения
@@ -100,14 +88,16 @@ nginx при старте разрешает `dapi` из `proxy_pass` и чит�
    (`specs/infrastructure.md`, 6). Эмбеддер — нет, но веса он качает при первом старте
    (ниже, «Модель эмбеддера»);
 2. `Publish Api` (раздел 7) — контейнер `dapi` появляется в сети `nginx-proxy-man`;
-3. блоки `listen 443` в `nginx.conf` временно закомментировать, `docker compose up -d webserver`;
-4. сертификат:
+3. сертификат на все четыре имени — DNS всех четырёх на эту VM:
    ```bash
-   docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ \
-     -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
+   bash ~/IaC/issue-cert.sh
    ```
-5. вернуть блоки 443 и `docker compose exec webserver nginx -t && docker compose exec webserver nginx -s reload`;
-6. остальное — телеметрия (раздел 11, профиль `observability` из `.env`): `docker compose up -d`.
+   Скрипт на время выпуска выключает сайты строкой `include` в `nginx.conf`, поднимает nginx
+   только на HTTP, выпускает сертификат и возвращает HTTPS. Первый раз certbot спросит почту
+   и согласие с условиями. Не вышло — nginx остаётся на HTTP, скрипт пишет, что проверить
+   (чаще всего A-запись имени ещё не на этой VM: `dig +short adminka.example.com`), и его можно
+   запустить снова;
+4. остальное — телеметрия (раздел 11, профиль `observability` из `.env`): `docker compose up -d`.
 
 Продление — `crontab` из `README.md`, раздел 4.
 
@@ -207,7 +197,7 @@ workflow. Всё остальное берётся из `appsettings.json` и `a
 секретом `ASSISTANT_API_KEY`, модель — `ASSISTANT_MODEL`, модель расшифровки голоса —
 `ASSISTANT_TRANSCRIPTION_MODEL` (тот же адрес и ключ: своего секрета у голоса нет).
 Запись голоса — до 4 МБ (`AssistantOptions:Transcription:MaxAudioBytes`), и `client_max_body_size`
-в `IaC/nginx/conf/nginx.conf` (5m) должен быть больше неё. Код поставщика в шаблоне один —
+в `IaC/nginx/conf/sites/product.conf` (5m) должен быть больше неё. Код поставщика в шаблоне один —
 `main`; второй поставщик (запасная модель другого сервиса) — ещё одна тройка `--env`
 `AssistantOptions__Providers__<код>__…` в `IaC/run-api.sh` и `env:` обоих workflow и строка справочника с этим кодом.
 Провайдер-специфичные поля запроса (folder id и т. п.) — `AssistantOptions__Providers__<код>__ProviderOptions__<поле>`.
@@ -305,7 +295,7 @@ ln -sfn releases/<sha> ~/frontend/current.tmp && mv -Tf ~/frontend/current.tmp ~
 
 1. Publish Angular и Publish Admin — в `~/frontend` и `~/adminka` появятся `releases/` и
    `current`; старый `nginx.conf` по-прежнему отдаёт файлы из корня каталога.
-2. Новый `nginx/conf/nginx.conf` на сервер (`root …/current`) и
+2. Новый каталог `nginx/conf` на сервер (`root …/current`) и
    `docker compose exec webserver nginx -t && docker compose exec webserver nginx -s reload`.
 3. Убрать старые файлы и бэкапы:
    ```bash
@@ -321,15 +311,14 @@ server-блок админки и `deny` на `/api/admin*` основного �
 замка `POST example.com/api/Admin/Login` шёл бы мимо первого. Почти всё время админка закрыта
 для всех и открывается на время workflow `Admin Access`.
 
-1. **DNS**: A-запись `adminka.example.com` на тот же адрес, что у `example.com`.
-2. **Сертификат** — вторым доменом в существующий, путь `live/example.com/` не меняется:
-   ```bash
-   docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ \
-     --expand -d example.com -d www.example.com -d adminka.example.com
-   docker compose exec webserver nginx -s reload
-   ```
+1. **DNS**: A-запись `adminka.example.com` на тот же адрес, что у `example.com`. Скрипт ниже
+   выпускает сертификат сразу на все имена из `server_name` HTTP-блока `nginx.conf`, включая
+   `grafana.example.com` (раздел 11): её A-запись тоже нужна сейчас — или убрать имя из
+   `server_name` до раздела 11, иначе certbot не выпустит ни одного.
+2. **Сертификат** — `bash ~/IaC/issue-cert.sh`: имя уже в `server_name`, существующий сертификат
+   расширяется (`--expand`), путь `live/example.com/` не меняется.
 3. **Открыть на время** — Actions → **Admin Access** → Run workflow: `open` и срок
-   (1, 2, 4 или 8 часов). Раннер на сервере пишет рядом с `nginx.conf` файл
+   (1, 2, 4 или 8 часов). Раннер на сервере пишет в `nginx/conf/` файл
    `admin-allow-open.inc` с `allow all;` и перезагружает nginx — админка открыта всем,
    без списка адресов: админы ходят через меняющиеся VPN (`tech-debt/admin-perimeter.md`).
    Закончили — Run workflow с `close`, файл стёрт. Забыли — запуск по расписанию (раз
@@ -558,7 +547,7 @@ nginx на каждый запрос спрашивает `GET /api/Admin/Auth/V
 доступ кончается через час, со сроком куки, или выходом из админки — он гасит куку.
 
 1. **DNS**: A-запись `grafana.example.com` на тот же адрес.
-2. **Сервер**: скопировать `nginx/conf/nginx.conf`, `docker-compose.yml`, `grafana/`,
+2. **Сервер**: скопировать каталог `nginx/conf`, `docker-compose.yml`, `grafana/`,
    `otel-collector/`, `prometheus/`, `tempo/`, поднять телеметрию и пересоздать nginx (замок —
    тот же, что у админки, и открывается вместе с ней). Пересоздать, а не перезагрузить: nginx
    входит в сеть шлюза `grafana-gateway` с закреплённым адресом `172.30.255.2`, и Grafana верит
@@ -571,17 +560,14 @@ nginx на каждый запрос спрашивает `GET /api/Admin/Auth/V
    ```bash
    docker compose up -d
    ```
-3. **Сертификат** — третьим доменом в тот же (на чистой машине он уже в нём, раздел 4):
-   ```bash
-   docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ \
-     --expand -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
-   docker compose exec webserver nginx -s reload
-   ```
+3. **Сертификат** — `bash ~/IaC/issue-cert.sh`: расширит существующий третьим именем (на чистой
+   машине оно в нём уже, раздел 4).
 4. **Publish Api** — кука выдаётся с этой версии; до неё вход в админку Grafana не откроет.
 
 **Инструмент без proxy-auth** (приёмник трасс, Jaeger UI и подобные) встаёт так же:
-server-блок по образцу Grafana в `nginx.conf` — тот же `include admin-allow*.inc`,
-`deny all` и `auth_request`, — а своя аутентификация у инструмента не включается вовсе.
+свой файл в `nginx/conf/sites/` по образцу `grafana.conf` — тот же `snippets/admin-lock.inc`
+и `auth_request`, — а своя аутентификация у инструмента не включается вовсе
+(`nginx/README.md`, «Новое имя»).
 Портов на хост ни у него, ни у Grafana нет, даже на `127.0.0.1`: заголовок
 `X-WEBAUTH-USER` иначе подделал бы любой, кто достучался до порта.
 

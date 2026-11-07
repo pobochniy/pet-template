@@ -213,7 +213,7 @@ API — `cd src/PetTemplate.Api && dotnet run`, клиент — `cd src/PetTemp
 | `pre-commit`, тронут `src/PetTemplate.Web/web/{src,i18n,tools}` | `i18n:check`, `i18n:lint` (разбор компиляторами TypeScript и Angular — нужен `npm ci`), `lint:storage` (хранилище браузера только через `safeStorage`); на `tools/` — ещё `test:tools`, самопроверка скриптов на образцах | секунды |
 | `pre-commit`, тронуты `*.cs`, словари, `*.routes.ts`, `*.scopes.ts` | `i18n:codes` — код отказа объявлен на сервере, переведён в `en`, словарь грузится маршрутом | секунды |
 | `pre-commit`, тронуты `*.cs` или клиент (`src`, `projects`, `tools`) | `enum:parity` — копии перечислений и правил аккаунта совпадают с C# | секунды |
-| `pre-commit`, тронуты `index.html`, `IaC/nginx/conf/nginx.conf`, `tools/csp-hash.mjs` | `csp:hash --check` — хеш инлайн-скрипта `index.html` в CSP nginx тот же, что у скрипта | секунды |
+| `pre-commit`, тронуты `index.html`, `IaC/nginx/conf/sites/product.conf` или `adminka.conf`, `tools/csp-hash.mjs` | `csp:hash --check` — хеш инлайн-скрипта `index.html` в CSP nginx тот же, что у скрипта | секунды |
 | `pre-commit`, тронуты `*.cs`, `*.csproj`, `*.props`, `*.slnx` | `dotnet build PetTemplate.slnx -v q` | секунды |
 | `pre-commit`, тронуты `*.cs`, `*.csproj`, `schema.d.ts` или `tools/api-types.mjs` | `api:types --check` — типы DTO клиента совпадают с OpenAPI документом API (`dotnet swagger tofile` со сборки, сервер не запускается) | секунды |
 | `pre-push`, тронут `src/PetTemplate.Web/web/` | `npx ng test pet-template --watch=false` — Vitest в jsdom, браузер не нужен | секунды (≈7 с со сборкой) |
@@ -376,9 +376,13 @@ dist/pet-template/browser ~/frontend <sha>`. `publish-admin.yml`: то же дл
 IaC/
 ├── docker-compose.yml   nginx, certbot, postgres, qdrant, эмбеддер, телеметрия (раздел 10)
 ├── .env.example         пароли и порты; .env — только на сервере
-├── nginx/conf/
-│   ├── nginx.conf
-│   └── admin-allow.inc.example
+├── nginx/             README.md — как устроен conf/
+│   └── conf/
+│       ├── nginx.conf   HTTP: certbot и переадресация; include sites/*.conf
+│       ├── sites/       HTTPS по файлу на имя: product, adminka, grafana
+│       ├── snippets/    общие куски server-блоков
+│       └── admin-allow.inc.example
+├── issue-cert.sh        сертификат на все имена
 ├── postgres/init/       01-app-user.sh, 02-exporter-user.sh — пользователи приложения и экспортёра на пустом томе
 ├── otel-collector/      config.yaml
 ├── prometheus/          prometheus.yml
@@ -401,8 +405,9 @@ IaC/
 
 - `webserver` — `nginx:1.30` (стабильная ветка; патчи приходят сами), тома `./frontend`, `./adminka`, `./nginx/conf:ro`, certbot;
   сеть `nginx-proxy-man` (внешняя, создаётся `setup-vm.sh`).
-- `certbot` — выпуск и продление; первый запуск — без https, потом сертификат, потом блок 443
-  (порядок — в шапке файла и `IaC/DEPLOYMENT.md`, раздел 4).
+- `certbot` — выпуск и продление; выпуск и расширение новым именем — `IaC/issue-cert.sh`: на чистой
+  машине он на время выпуска комментирует `include` сайтов в `nginx.conf` и держит nginx только на HTTP
+  (`IaC/DEPLOYMENT.md`, раздел 4).
 - `database` — `postgres:18`, `container_name: dbcontainer`, **именованный том `db-data`**
   (`/var/lib/postgresql`: с 18-й версии образ держит данные в `18/docker` под ним; в анонимном томе данные уносит `docker compose down -v`
   или пересоздание), пароли из `.env` (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
@@ -460,11 +465,23 @@ IaC/
   `containers`) — поднять в `docker-compose.yml`, сверив с машиной.
 - Без `version:` — compose v2 его не читает и предупреждает.
 
-**`nginx.conf`:**
+**nginx** (`IaC/nginx/README.md`):
 
-- `server_name example.com www.example.com` в обоих блоках основного домена (домен — символ шаблона,
-  разделы 12–13); `proxy_pass http://dapi:8080/api/` в обоих блоках;
-- `location ~* ^/api/admin(/|$) { deny all; }` в блоках основного домена (`specs/admin.md`, раздел 7);
+- по файлу на имя — `sites/product.conf`, `sites/adminka.conf`, `sites/grafana.conf`; общее — в
+  `snippets/` (TLS, прокси в API, замок по адресу) строкой `include`. Новое имя — новый файл,
+  соседние не трогаются; что нужно одному сайту (CSP-`map`, у Grafana — `map` и кеш проверки
+  входа), лежит в его файле. Статика у продукта и админки своя: заголовки у них разные,
+  а `add_header` в `location` отменяет унаследованные;
+- `nginx.conf` — единственный `*.conf` верхнего уровня (каталог смонтирован в `/etc/nginx/conf.d`,
+  и его `*.conf` nginx подключает сам): `access_log off`, `server_tokens off`, один server-блок на
+  80-м порту для всех имён — проверка certbot и `308` на HTTPS. Сайт, API, админка и Grafana по
+  HTTP не отдаются — вход с паролем и токены ходят только по HTTPS. Последняя строка —
+  `include …/sites/*.conf`: без сертификата сайты не дают nginx стартовать, и `IaC/issue-cert.sh`
+  на чистой машине выключает их этой строкой на время выпуска;
+- домен `example.com` — символ шаблона (разделы 12–13): `server_name`, путь сертификата в
+  `snippets/tls.inc` (имена сертификата `issue-cert.sh` берёт из `server_name`); `proxy_pass http://dapi:8080/api/`
+  (`snippets/proxy-api.inc`);
+- `location ~* ^/api/admin(/|$) { deny all; }` в `sites/product.conf` (`specs/admin.md`, раздел 7);
 - `client_max_body_size` (5m) — по максимальному телу API: запись голоса ассистенту — до 4 МБ
   (`AssistantOptions:Transcription:MaxAudioBytes`, `specs/assistant.md`, 6.1) плюс обёртка multipart;
   поднимаете потолок записи — поднимайте и его;
@@ -473,23 +490,23 @@ IaC/
   со старым `index.html`;
 - кэш: `index.html` — `no-cache`, бандлы с хешем — `immutable` на год, чтобы новый
   `index.html` не ждал истечения кэша;
-- Content-Security-Policy — `map $csp_product` и `$csp_admin` вверху файла, заголовок
-  с `always` на server-блоках и ещё раз в блоке `index.html` (свой `add_header` отменяет
+- Content-Security-Policy — `map $csp_product` в `sites/product.conf` и `$csp_admin` в
+  `sites/adminka.conf`, заголовок с `always` на server-блоках и ещё раз в блоке `index.html` (свой `add_header` отменяет
   унаследованные). Продукт: `script-src 'self'` и хеш единственного инлайн-скрипта
   `src/index.html` (`npm run csp:hash`, раздел 4 и 5), `style-src 'unsafe-inline'` под стили
   компонентов Angular, `frame-ancestors` со списком площадок mini-app VK и Telegram
   (`specs/accounts.md`, 5.6) — поэтому `X-Frame-Options` у продукта нет. Инлайн критических
   стилей в сборке выключен (`inlineCritical: false` в `angular.json`): его `onload` CSP не пустит.
   Админка — без хешей и `frame-ancestors 'none'`, плюс `X-Frame-Options: DENY`;
-- server-блоки `adminka.example.com` (80 → 301, 443 с `include admin-allow*.inc; deny all;`,
-  `root /etc/nginx/html-admin/current`, чанки — так же из `previous`);
-- server-блоки `grafana.example.com` (раздел 10): тот же замок, что у админки, `auth_request` на
+- `sites/adminka.conf`: замок `snippets/admin-lock.inc` (`include admin-allow*.inc; deny all;`),
+  `root /etc/nginx/html-admin/current`, чанки — так же из `previous`;
+- `sites/grafana.conf` (раздел 10): тот же замок, что у админки, `auth_request` на
   `Admin/Auth/Verify` и `proxy_pass` в сеть `grafana-gateway`.
 
 **`setup-vm.sh`** (`bash setup-vm.sh`) — проверка прав на докер без `sudo`
 и запрет запуска от root, каталоги `~/frontend` и `~/adminka` (выпуски в них заводит выкатка),
 симлинки `IaC/frontend` и `IaC/adminka`, `certbot/`, сеть `nginx-proxy-man`,
-наличие `docker-compose.yml`, `nginx.conf` и обоих скриптов `postgres/init/` (`01-app-user.sh`,
+наличие `docker-compose.yml`, `nginx.conf` с сайтами в `sites/` и обоих скриптов `postgres/init/` (`01-app-user.sh`,
 `02-exporter-user.sh`), `chmod +x` на них и на `IaC/*.sh` (раздел 13), `.env` — копией
 `.env.example`.
 Каталоги `~/db-backups` и `~/pettemplate-help` заводят сами workflow.
@@ -704,6 +721,6 @@ IaC/
 | Qdrant и очередь | `src/PetTemplate.Api/Workers/QdrantInitializer.cs`, `CommandQueueRegistration.cs`, `CommandQueueOptions.cs` |
 | Метрики подсистем | `src/PetTemplate.Services/Mail/MailMetrics.cs`, `Assistant/AssistantMetrics.cs`, `Billing/BillingMetrics.cs` |
 | Тестовая инфраструктура | `tests/PetTemplate.Tests/Containers/PostgresServer.cs`, `QdrantServer.cs` |
-| Сервер | `IaC/docker-compose.yml`, `IaC/.env.example`, `IaC/setup-vm.sh`, `IaC/run-api.sh`, `IaC/publish-static.sh`, `IaC/nginx/conf/`, `IaC/postgres/init/` |
+| Сервер | `IaC/docker-compose.yml`, `IaC/.env.example`, `IaC/setup-vm.sh`, `IaC/run-api.sh`, `IaC/publish-static.sh`, `IaC/issue-cert.sh`, `IaC/nginx/`, `IaC/postgres/init/` |
 | Телеметрия | `IaC/otel-collector/config.yaml`, `IaC/prometheus/prometheus.yml`, `IaC/tempo/tempo.yaml`, `IaC/grafana/` |
 | Документация сервера | `IaC/README.md`, `IaC/DEPLOYMENT.md` |
