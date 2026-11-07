@@ -11,8 +11,11 @@
 IaC/
 ├── docker-compose.yml       # nginx, certbot, PostgreSQL, Qdrant, эмбеддер, телеметрия
 ├── nginx/
+│   ├── README.md                    # как устроен conf/, CSP, новое имя, проверка без сервера
 │   └── conf/
-│       ├── nginx.conf               # example.com, adminka. и grafana.example.com (reverse proxy)
+│       ├── nginx.conf               # HTTP: проверка certbot и переадресация; include сайтов (nginx/README.md)
+│       ├── sites/                   # HTTPS по файлу на имя: продукт, adminka, grafana
+│       ├── snippets/                # общие куски server-блоков: TLS, прокси в API, замок
 │       └── admin-allow.inc.example  # образец постоянного списка адресов админки
 ├── postgres/
 │   └── init/
@@ -28,6 +31,7 @@ IaC/
 ├── setup-vm.sh              # Скрипт подготовки виртуальной машины
 ├── run-api.sh               # docker run контейнера API и ожидание /health (зовут workflow)
 ├── publish-static.sh        # атомарная выкатка клиента и админки (зовут workflow)
+├── issue-cert.sh            # Сертификат на все имена: выпуск на чистой машине и расширение
 ├── DEPLOYMENT.md            # Пошаговый деплой, секреты GitHub Actions, админка, бэкап
 ├── .env.example             # Шаблон переменных окружения
 ├── .env                     # Переменные окружения (создаётся setup-vm.sh, только на сервере)
@@ -129,22 +133,19 @@ docker compose logs -f
 
 ### 4. SSL сертификаты
 
-Домены — `example.com`, `adminka.example.com` и `grafana.example.com` — прописаны
-в `nginx/conf/nginx.conf`. Сертификат один на все, путь `live/example.com/`:
+Один сертификат на все имена — `example.com`, `www`, `adminka` и `grafana`, путь `live/example.com/`.
+Выпуск на чистой машине и расширение новым именем — одной командой (`DEPLOYMENT.md`, раздел 4):
 
 ```bash
-# Получение сертификата
-docker compose run --rm certbot certonly --webroot \
-  --webroot-path=/var/www/certbot/ \
-  -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
-docker compose exec webserver nginx -s reload
+bash ~/IaC/issue-cert.sh
+```
 
+Продление — cron:
+
+```bash
 # Автообновление сертификатов (добавьте в crontab)
 0 0 * * * cd ~/IaC && docker compose run --rm certbot renew && docker compose exec webserver nginx -s reload
 ```
-
-Пока сертификата нет, блоки 443 не дают nginx подняться: первый раз — без них (подробно —
-`DEPLOYMENT.md`, раздел 4).
 
 ### 5. Настройка GitHub Actions Runner
 
@@ -452,7 +453,7 @@ ls -l ~/frontend ~/frontend/current/
 ls -la ./frontend
 
 # Проверьте конфигурацию nginx
-docker compose exec webserver cat /etc/nginx/conf.d/nginx.conf
+docker compose exec webserver nginx -T
 ```
 
 ## 📚 Дополнительные ресурсы

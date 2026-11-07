@@ -1,6 +1,7 @@
 // @ts-check
 /**
- * Хеш инлайн-скрипта `index.html` в Content-Security-Policy nginx (`IaC/nginx/conf/nginx.conf`).
+ * Хеш инлайн-скрипта `index.html` в Content-Security-Policy nginx (`IaC/nginx/conf/sites/`:
+ * `product.conf` и `adminka.conf`, по `map` на сайт).
  *
  * CSP продукта пускает скрипты только своего источника и один инлайн — снятие параметров
  * запуска mini-app в `src/index.html` (идёт до Angular и инлайном остаётся) — по его
@@ -8,8 +9,8 @@
  * mini-app молча перестанет входить. Поэтому хеш сверяется машиной:
  *
  *   npm run csp:hash              — напечатать хеши инлайн-скриптов;
- *   npm run csp:hash -- --check   — сверить с nginx.conf (ворота `web-tests.yml`, хук `pre-commit`);
- *   npm run csp:hash -- --write   — вписать новый хеш в nginx.conf.
+ *   npm run csp:hash -- --check   — сверить с nginx (ворота `web-tests.yml`, хук `pre-commit`);
+ *   npm run csp:hash -- --write   — вписать новый хеш в файл сайта.
  *
  * Хеш считается от исходного `index.html`: сборка инлайн-скрипт не трогает. Если сборка
  * уже лежит в `dist/` — сверяется и она: те же скрипты и ни одного инлайн-обработчика
@@ -27,18 +28,20 @@ import { fileURLToPath } from 'node:url';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = join(WEB, '..', '..', '..');
-const NGINX = join(REPO, 'IaC', 'nginx', 'conf', 'nginx.conf');
+const SITES_DIR = join(REPO, 'IaC', 'nginx', 'conf', 'sites');
 
 const SITES = [
   {
     name: 'product',
     variable: '$csp_product',
+    nginx: join(SITES_DIR, 'product.conf'),
     source: join(WEB, 'src', 'index.html'),
     built: join(WEB, 'dist', 'pet-template', 'browser', 'index.html')
   },
   {
     name: 'admin',
     variable: '$csp_admin',
+    nginx: join(SITES_DIR, 'adminka.conf'),
     source: join(WEB, 'projects', 'admin', 'src', 'index.html'),
     built: join(WEB, 'dist', 'admin', 'browser', 'index.html')
   }
@@ -47,9 +50,9 @@ const SITES = [
 const check = process.argv.includes('--check');
 const write = process.argv.includes('--write');
 const errors = [];
-let nginx = readFileSync(NGINX, 'utf8');
 
 for (const site of SITES) {
+  let nginx = readFileSync(site.nginx, 'utf8');
   const hashes = inlineScriptHashes(readFileSync(site.source, 'utf8'));
   const declaration = policyOf(nginx, site.variable);
 
@@ -68,7 +71,7 @@ for (const site of SITES) {
   }
 
   if (!declaration) {
-    errors.push(`${rel(NGINX)}: нет \`map $host ${site.variable} { default "…"; }\` с политикой ${site.name}`);
+    errors.push(`${rel(site.nginx)}: нет \`map $host ${site.variable} { default "…"; }\` с политикой ${site.name}`);
     continue;
   }
 
@@ -79,16 +82,15 @@ for (const site of SITES) {
     const scriptSrc = ["script-src 'self'", ...hashes.map(h => `'${h}'`)].join(' ');
     const value = declaration.value.replace(/script-src [^;]*/, scriptSrc);
     nginx = nginx.split(declaration.value).join(value);
+    writeFileSync(site.nginx, nginx);
     console.log(`${site.name}: ${scriptSrc}`);
   } else if (check) {
     errors.push(
-      `${rel(NGINX)}: ${site.variable} — хеши ${declared.join(' ') || 'нет'}, а инлайн-скрипты ${rel(site.source)} — ${hashes.join(' ') || 'нет'}. ` +
+      `${rel(site.nginx)}: ${site.variable} — хеши ${declared.join(' ') || 'нет'}, а инлайн-скрипты ${rel(site.source)} — ${hashes.join(' ') || 'нет'}. ` +
       'Обновить: npm run csp:hash -- --write'
     );
   }
 }
-
-if (write) writeFileSync(NGINX, nginx);
 
 if (errors.length > 0) {
   console.error(`csp-hash: CSP не сходится (${errors.length}):`);
@@ -96,7 +98,7 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-if (check) console.log('csp-hash: хеши инлайн-скриптов совпадают с nginx.conf');
+if (check) console.log('csp-hash: хеши инлайн-скриптов совпадают с nginx');
 
 /** `sha256-…` содержимого каждого инлайн-`<script>` (без `src`) — так их считает браузер */
 function inlineScriptHashes(html) {
@@ -106,7 +108,7 @@ function inlineScriptHashes(html) {
     .sort();
 }
 
-/** Значение `map $host $csp_… { default "…"; }` — одна политика на все `server` сайта */
+/** Значение `map $host $csp_… { default "…"; }` — политика сайта одной строкой */
 function policyOf(conf, variable) {
   const match = new RegExp(`map\\s+\\$host\\s+\\${variable}\\s*\\{\\s*default\\s+"([^"]*)"\\s*;`).exec(conf);
   return match ? { value: match[1] } : null;

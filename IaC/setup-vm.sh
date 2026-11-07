@@ -133,12 +133,12 @@ else
     success "Найден файл: docker-compose.yml"
 fi
 
-# Проверка наличия nginx конфигурации
-if [ ! -f "$SCRIPT_DIR/nginx/conf/nginx.conf" ]; then
-    error "Файл nginx/conf/nginx.conf не найден"
+# Проверка наличия nginx конфигурации: вход и сайты, которые он подключает (nginx/README.md)
+if [ ! -f "$SCRIPT_DIR/nginx/conf/nginx.conf" ] || ! ls "$SCRIPT_DIR"/nginx/conf/sites/*.conf > /dev/null 2>&1; then
+    error "Нет nginx/conf/nginx.conf или сайтов в nginx/conf/sites/ — отвезите каталог nginx/conf целиком"
     exit 1
 else
-    success "Найден файл: nginx/conf/nginx.conf"
+    success "Найдена конфигурация nginx: nginx.conf и сайты в sites/"
 fi
 
 # Скрипт, который заводит пользователя приложения в Postgres на пустом томе db-data:

@@ -220,7 +220,7 @@
 | Язык | `shared/i18n` (`lang.ts`, `i18n.service.ts`, `language.service.ts`, `flags/`), `shared/language-picker`; словари `i18n/{ru,en}/core.json`, `home.json` |
 | Плашки | `shared/alerts` |
 | Справка и markdown | `help/` (`help-list`, `help-article`, `help-api.service.ts`), `shared/markdown` (разбор и отрисовка — общие с чатом ассистента) |
-| Сервер | `src/PetTemplate.Api/Program.cs`, `IaC/nginx/conf/nginx.conf` |
+| Сервер | `src/PetTemplate.Api/Program.cs`, `IaC/nginx/conf/sites/product.conf` |
 | Тесты | `app.spec.ts`, `app.config.spec.ts`, `app.routes.spec.ts`, `roles.guard.spec.ts`, `home/home.component.spec.ts`, `home/assistant-input/assistant-input.component.spec.ts`, `shared/nav/top-nav/top-nav.component.spec.ts`, `shared/language-picker/language-picker.component.spec.ts`, `shared/interceptors/workspace.interceptor.spec.ts`, `shared/core/user.service.spec.ts`, `shared/core/session-reset.service.spec.ts`, `shared/i18n/*.spec.ts`, `help/help.component.spec.ts`, `shared/markdown/markdown.spec.ts` |
 
 ## 11. Не реализовано
