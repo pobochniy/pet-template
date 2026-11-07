@@ -31,6 +31,8 @@ using PetTemplate.Services.Qdrant;
 using PetTemplate.Services.Qdrant.Migrations;
 using PetTemplate.Services.Search;
 using PetTemplate.Shared.Constants;
+using PetTemplate.Shared.Errors;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using PetTemplate.Shared.Enums;
 using PetTemplate.Shared.Options;
 
@@ -155,7 +157,9 @@ public static class ServicesExtensions
         // его обработчик. Mini-app — подписью параметров запуска (`MiniAppLaunch`)
         services.AddTransient<TelegramLogin>();
         services.AddSingleton<TelegramTokenReplay>();
-        services.AddHttpClient<VkId>();
+        // Таймаут свой, а не 100 секунд по умолчанию: на входе человек ждёт у кнопки,
+        // а зависший запрос держит поток и соединение
+        services.AddHttpClient<VkId>(x => x.Timeout = TimeSpan.FromSeconds(10));
         services.AddTransient<MiniAppLaunch>();
         services.AddTransient<ExternalProof>();
 
@@ -265,6 +269,8 @@ public static class ServicesExtensions
             // подставил `[Required]` не-nullable ссылочным свойствам, и под правило
             // попадает в том числе он
             options.ModelMetadataDetailsProviders.Add(new ValidationCodeMessages());
+
+            SetBindingMessagesToCodes(options.ModelBindingMessageProvider);
         });
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
@@ -290,6 +296,33 @@ public static class ServicesExtensions
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Вторая половина отказов, которые .NET формулирует сам: сообщения **связывания**
+    /// («The value 'abc' is not valid.»). До атрибутов дело тут не доходит — значение
+    /// не легло в тип ещё в биндере, — а в теле 422 английская фраза выглядит так же,
+    /// как и от атрибута.
+    ///
+    /// Каждому — код: <c>ValidationError.Parse</c> признаёт его кодом и текст наружу
+    /// не отдаёт. Точность здесь грубее, чем у атрибутов (что именно не так со значением,
+    /// знает только биндер), поэтому всё, кроме «поля нет» и «тело пустое», уезжает
+    /// общим <see cref="ValidationCodes.Invalid"/>
+    /// </summary>
+    private static void SetBindingMessagesToCodes(DefaultModelBindingMessageProvider messages)
+    {
+        messages.SetMissingBindRequiredValueAccessor(_ => ValidationCodes.Required);
+        messages.SetMissingKeyOrValueAccessor(() => ValidationCodes.Required);
+        messages.SetValueMustNotBeNullAccessor(_ => ValidationCodes.Required);
+        messages.SetMissingRequestBodyRequiredValueAccessor(() => ValidationCodes.MalformedJson);
+
+        messages.SetAttemptedValueIsInvalidAccessor((_, _) => ValidationCodes.Invalid);
+        messages.SetNonPropertyAttemptedValueIsInvalidAccessor(_ => ValidationCodes.Invalid);
+        messages.SetUnknownValueIsInvalidAccessor(_ => ValidationCodes.Invalid);
+        messages.SetNonPropertyUnknownValueIsInvalidAccessor(() => ValidationCodes.Invalid);
+        messages.SetValueIsInvalidAccessor(_ => ValidationCodes.Invalid);
+        messages.SetValueMustBeANumberAccessor(_ => ValidationCodes.Invalid);
+        messages.SetNonPropertyValueMustBeANumberAccessor(() => ValidationCodes.Invalid);
     }
 
     private static IServiceCollection ConfigureCors(this IServiceCollection services)
@@ -426,6 +459,10 @@ public static class ServicesExtensions
             services.AddHttpClient<IEmbeddingGenerator<string, Embedding<float>>, SearchEmbedder>(client =>
             {
                 client.BaseAddress = new Uri(endpoint.EndsWith('/') ? endpoint : endpoint + "/");
+                // Индексация шлёт все чанки сущности одним запросом, а эмбеддер считает в один
+                // поток (IaC/docker-compose.yml) — запас на большую страницу вместо 100 секунд
+                // по умолчанию
+                client.Timeout = TimeSpan.FromSeconds(60);
             });
         }
 

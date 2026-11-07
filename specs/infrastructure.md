@@ -32,6 +32,9 @@
   в шаблоне нет.
 - **Откат — такой же workflow.** Образы API хранятся по дате сборки, сборки клиента —
   выпусками `releases/<sha>` за ссылкой `current` (раздел 7).
+- **Выкатки по одной.** Выкатка и откат API — одна очередь (`concurrency: api-deploy`), клиент,
+  админка и справка — каждый своя: второй запуск ждёт первого, начатый не отменяется. У каждого
+  задания выкатки `timeout-minutes` — зависшее иначе держит раннер до 6 часов.
 
 ---
 
@@ -431,8 +434,9 @@ IaC/
   `multilingual-e5-small` в Q8 (модель меняется `EMBEDDINGS_REPO`/`EMBEDDINGS_FILE` в `.env`),
   том `embeddings-cache` на весь `/root/.cache` (нынешние сборки кладут веса в `huggingface/`,
   прежние — в `llama.cpp/`), портов на хост нет; веса качает сам при первом старте
-  (`IaC/DEPLOYMENT.md`, раздел 4). Тег образа не закреплён: у llama.cpp теги —
-  номера сборок (`tech-debt/embeddings-model.md`).
+  (`IaC/DEPLOYMENT.md`, раздел 4). Поток один (`--threads 1`): второе ядро машины остаётся API.
+  Сборка закреплена тегом `server-b<номер>` — у llama.cpp теги — номера сборок
+  (`tech-debt/embeddings-model.md`).
 - телеметрия (раздел 10): `grafana`, `otel-collector`, `prometheus`, `tempo`, `postgres-exporter`,
   `node-exporter`, `cadvisor` — версии закреплены, портов на хост нет; тома `grafana-data`,
   `prometheus-data`, `tempo-data`; `webserver` и `grafana` — ещё и в сети `grafana-gateway`

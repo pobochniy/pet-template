@@ -8,9 +8,15 @@ on:
         required: true
         default: 'previous'
 
+# Одна очередь с publish-api.yml: откат посреди выкатки пересоздал бы dapi у неё под руками
+concurrency:
+  group: api-deploy
+  cancel-in-progress: false
+
 jobs:
   rollback:
     runs-on: [self-hosted]
+    timeout-minutes: 10
     steps:
       # Ради IaC/run-api.sh: docker run один на выкатку и откат
       - name: checkout 🛎️

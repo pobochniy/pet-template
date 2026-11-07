@@ -130,10 +130,12 @@ services:
     restart: always
     # Модель ~0.5 ГБ в памяти (выше)
     mem_limit: 768m
+    # Потоков один, хотя ядра два: индексация идёт фоном и никуда не спешит, а второе
+    # ядро должно остаться API — иначе на реиндексе сохранение ждёт эмбеддер
     command: >
       --hf-repo ${EMBEDDINGS_REPO:-TwinSunsLLC/multilingual-e5-small-gguf}
       --hf-file ${EMBEDDINGS_FILE:-multilingual-e5-small-q8_0.gguf}
-      --embeddings --pooling mean --host 0.0.0.0 --port 8080
+      --embeddings --pooling mean --threads 1 --host 0.0.0.0 --port 8080
     networks:
       - nginx-proxy-man
     volumes:

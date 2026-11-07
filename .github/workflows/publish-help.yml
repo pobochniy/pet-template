@@ -32,9 +32,16 @@ env:
 permissions:
   contents: read
 
+# Публикации по одной: ручная и вызванная из Publish Api переключали бы current друг у друга.
+# Группа своя, не api-deploy: Publish Api зовёт этот workflow из своей группы
+concurrency:
+  group: help-deploy
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: [self-hosted]
+    timeout-minutes: 10
     steps:
       - name: checkout 🛎️
         uses: actions/checkout@v4
