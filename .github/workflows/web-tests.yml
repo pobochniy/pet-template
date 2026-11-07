@@ -60,7 +60,7 @@ jobs:
       - name: Check storage access and server enum copies 🧷
         run: npm run lint:storage && npm run enum:parity
 
-      # CSP nginx пускает инлайн-скрипт `src/index.html` по хешу (`IaC/nginx/conf/nginx.conf`):
+      # CSP nginx пускает инлайн-скрипт `src/index.html` по хешу (`IaC/nginx/conf/sites/product.conf`):
       # правка скрипта без нового хеша молча сломала бы вход mini-app. Обновить —
       # `npm run csp:hash -- --write`. Сборки здесь нет — сверяется исходник
       - name: Check CSP hash of the inline script 🛡️

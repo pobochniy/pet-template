@@ -61,7 +61,7 @@
               ],
               // Без инлайна критических стилей: он вешает на <link> обработчик
               // onload="this.media='all'", а CSP с `script-src 'self' 'sha256-…'` инлайн-обработчики
-              // не пускает (IaC/nginx/conf/nginx.conf, `npm run csp:hash`). Стили — обычным <link>
+              // не пускает (IaC/nginx/conf/sites/product.conf, `npm run csp:hash`). Стили — обычным <link>
               "optimization": {
                 "scripts": true,
                 "styles": { "minify": true, "inlineCritical": false },
@@ -159,7 +159,7 @@
                 }
               ],
               // Как у продукта: без onload-обработчика критических стилей — CSP админки
-              // `script-src 'self'` его не пустит (IaC/nginx/conf/nginx.conf)
+              // `script-src 'self'` его не пустит (IaC/nginx/conf/sites/adminka.conf)
               "optimization": {
                 "scripts": true,
                 "styles": { "minify": true, "inlineCritical": false },

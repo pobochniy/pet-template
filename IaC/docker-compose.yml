@@ -1,9 +1,7 @@
 # first run manually: docker network create nginx-proxy-man (это делает setup-vm.sh)
 
-# вначале нужно запуститься без https,
-# потом запустить certbot чтобы он создал сертификат в нужной папке
-# docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot/ -d example.com -d www.example.com -d adminka.example.com -d grafana.example.com
-# только потом добавить блок для https (IaC/DEPLOYMENT.md, раздел 4)
+# сертификат на чистой машине — bash ~/IaC/issue-cert.sh: он на время выпуска поднимает nginx
+# только на HTTP (IaC/DEPLOYMENT.md, раздел 4)
 #
 # API в compose не входит: контейнер dapi поднимают workflow выкатки (спец. infrastructure, 6).
 # Qdrant и эмбеддер (спец. infrastructure, 8; specs/search.md) — отдельными сервисами ниже:

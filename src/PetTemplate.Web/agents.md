@@ -76,7 +76,7 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 ### CSP и инлайн-скрипт `index.html`
 
 - nginx отдаёт CSP с `script-src 'self' 'sha256-…'` — хеш единственного инлайн-скрипта
-  `src/index.html` (`IaC/nginx/conf/nginx.conf`). Правите скрипт — `npm run csp:hash -- --write`;
+  `src/index.html` (`IaC/nginx/conf/sites/product.conf`). Правите скрипт — `npm run csp:hash -- --write`;
   `--check` стоит в `pre-commit`, `web-tests.yml` и после сборки в `publish-*.yml`.
 - Инлайн-обработчиков (`onclick="…"`) и новых инлайн-скриптов нет; поэтому в `angular.json`
   выключен `inlineCritical` (его `onload` CSP не пустит).
