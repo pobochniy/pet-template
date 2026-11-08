@@ -66,6 +66,7 @@ export default {
   "profile.main.phoneHint": "Плюс и 11 цифр — по нему тоже можно войти",
   "profile.main.saveFailed": "Не удалось сохранить профиль",
   "profile.main.saved": "Профиль сохранён",
+  "profile.main.securityTitle": "Вход и привязки",
   "profile.main.title": "Основное",
   "profile.main.userNameFailed": "Не удалось сменить логин",
   "profile.main.userNameHint": "3–20 символов: латинские буквы, цифры, «_» и «.». По логину вас находят участники пространства",
