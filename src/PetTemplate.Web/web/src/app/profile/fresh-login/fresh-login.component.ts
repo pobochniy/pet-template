@@ -13,7 +13,7 @@ import { injectI18n } from '../../shared/i18n/inject-i18n';
 import { PROFILE_SCOPES } from '../profile.scopes';
 
 /**
- * «Подтвердите, что это вы» в блоке «Основное» (спец. accounts, 8.6): появляется, когда
+ * «Подтвердите, что это вы» вверху профиля, над колонками (спец. accounts, 8.6): появляется, когда
  * привязка, отвязка, смена почты или слияние ждут подтверждения (`FreshLoginService`).
  * Аккаунт с паролем подтверждает паролем — ответ сервера новая сессия, и действие идёт
  * дальше само. Без пароля — только заново войти через привязанную площадку: уход
@@ -25,7 +25,7 @@ import { PROFILE_SCOPES } from '../profile.scopes';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (fresh.pending()) {
-      <div class="alert alert-warning rounded-0 mb-0" id="fresh-login" role="alert">
+      <div #alert class="alert alert-warning mb-3" id="fresh-login" role="alert">
         <div class="fw-semibold mb-1">{{ i18n.t('profile.fresh.title') }}</div>
         @if (logins().hasPassword) {
           <div class="small mb-2">{{ i18n.t('profile.fresh.passwordHint') }}</div>
@@ -89,6 +89,7 @@ export class ProfileFreshLoginComponent {
       enabled[provider] && (provider === 'telegram' ? logins.telegramLinked : logins.vkLinked));
   });
 
+  private readonly alert = viewChild<ElementRef<HTMLElement>>('alert');
   private readonly passwordInput = viewChild<ElementRef<HTMLInputElement>>('passwordInput');
 
   constructor(
@@ -96,10 +97,13 @@ export class ProfileFreshLoginComponent {
     private external: ExternalLoginService,
     private userService: UserService
   ) {
-    // Запрос мог прийти от кнопки внизу блока — показать его там, где он появился
+    // Запрос стоит над колонками, а кнопка, что его вызвала, — где угодно ниже (на телефоне
+    // колонки друг под другом): прокрутить к нему в обоих видах — с паролем и без
     effect(() => {
+      const alert = this.alert()?.nativeElement;
+      if (!alert) return;
       const input = this.passwordInput()?.nativeElement;
-      input?.scrollIntoView({ block: 'center' });
+      (input ?? alert).scrollIntoView({ block: 'center' });
       input?.focus();
     });
     effect(() => {

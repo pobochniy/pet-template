@@ -9,8 +9,8 @@
 
   <div class="row justify-content-center">
     <div class="col-xxl-10">
-      <!-- Первым — блок «Основное»: логин и все способы войти (спец. accounts, 6).
-           Слева под ним аватар и согласия, справа под паролем и привязками — переходы -->
+      <!-- Две колонки (спец. accounts, 6): слева «Основное», под ним аватар и согласия;
+           справа «Вход и привязки», под ним переходы -->
       <profile-logins>
         <div profile-main class="card shadow-sm">
           <div class="card-body p-4">
@@ -53,25 +53,25 @@
         </div>
 
         <ng-container profile-security>
-        <!-- Память ассистента обязана быть видимой (спец. assistant, 12.5). Подписи — словарь
-             `profile`: экран профиля словарь `assistant` не грузит, он едет с самим экраном памяти -->
-        <a [routerLink]="['/profile/assistant-memory']" id="assistant-memory-button"
-           class="card shadow-sm text-decoration-none text-body">
-          <span class="card-body d-block">
-            <span class="d-block fw-semibold">{{ i18n.t('profile.edit.assistantLink') }}</span>
-            <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.assistantHint') }}</span>
-          </span>
-        </a>
+          <!-- Память ассистента обязана быть видимой (спец. assistant, 12.5). Подписи — словарь
+               `profile`: экран профиля словарь `assistant` не грузит, он едет с самим экраном памяти -->
+          <a [routerLink]="['/profile/assistant-memory']" id="assistant-memory-button"
+             class="card shadow-sm text-decoration-none text-body">
+            <span class="card-body d-block">
+              <span class="d-block fw-semibold">{{ i18n.t('profile.edit.assistantLink') }}</span>
+              <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.assistantHint') }}</span>
+            </span>
+          </a>
 
-        <!-- Пространства: основное, выход, переименование и создание — на одной странице
-             (спец. authorization, 7.2); сюда же ведёт шестерёнка в шапке -->
-        <a [routerLink]="['/workspace/settings']" id="workspace-settings-button"
-           class="card shadow-sm mt-3 text-decoration-none text-body">
-          <span class="card-body d-block">
-            <span class="d-block fw-semibold">{{ i18n.t('profile.edit.workspaceLink') }}</span>
-            <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.workspaceHint') }}</span>
-          </span>
-        </a>
+          <!-- Пространства: основное, выход, переименование и создание — на одной странице
+               (спец. authorization, 7.2); сюда же ведёт шестерёнка в шапке -->
+          <a [routerLink]="['/workspace/settings']" id="workspace-settings-button"
+             class="card shadow-sm text-decoration-none text-body">
+            <span class="card-body d-block">
+              <span class="d-block fw-semibold">{{ i18n.t('profile.edit.workspaceLink') }}</span>
+              <span class="d-block small text-body-secondary">{{ i18n.t('profile.edit.workspaceHint') }}</span>
+            </span>
+          </a>
         </ng-container>
       </profile-logins>
     </div>

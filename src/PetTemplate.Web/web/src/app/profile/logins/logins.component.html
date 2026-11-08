@@ -1,18 +1,20 @@
-<!-- Две колонки: слева основное (логин, почта, телефон), справа пароль и привязки входа.
-     Карточки экрана профиля встают под ними: [profile-main] — слева, [profile-security] — справа -->
+<!-- Две колонки: слева «Основное» (логин, почта, телефон), справа «Вход и привязки».
+     Карточки экрана профиля встают под ними: [profile-main] — слева, [profile-security] — справа.
+     Отступы между карточками — gap колонки, у самих карточек их нет -->
 @if (loadFailed()) {
   <div class="alert alert-danger mb-4" id="logins-load-failed">{{ i18n.t('profile.main.loadFailed') }}</div>
 }
 
 @if (logins(); as current) {
-  <!-- «Подтвердите, что это вы» (8.6): привязка, отвязка и смена почты ждут его -->
-  <profile-fresh-login class="d-block mb-3" [logins]="current" [enabled]="externalEnabled()"
+  <!-- «Подтвердите, что это вы» (8.6): над обеими колонками — его ждут и смена почты слева,
+       и привязка, отвязка, слияние справа; появившись, оно само прокручивается в вид -->
+  <profile-fresh-login [logins]="current" [enabled]="externalEnabled()"
                        (changed)="logins.set($event)"></profile-fresh-login>
 }
 
 <div class="row g-4">
-  <div class="col-lg-6">
-    <div class="card shadow-sm mb-4" id="profile-logins">
+  <div class="col-lg-6 d-flex flex-column gap-3">
+    <div class="card shadow-sm" id="profile-logins">
       <div class="card-header fw-semibold">{{ i18n.t('profile.main.title') }}</div>
       @if (logins(); as current) {
         <profile-user-name-banner class="d-block px-3 pt-3"
@@ -68,10 +70,11 @@
     <ng-content select="[profile-main]"></ng-content>
   </div>
 
-  <div class="col-lg-6">
-    @if (logins(); as current) {
-      <div class="card shadow-sm mb-4" id="profile-security">
-        <div class="card-header fw-semibold">{{ i18n.t('profile.main.securityTitle') }}</div>
+  <div class="col-lg-6 d-flex flex-column gap-3">
+    <!-- Заголовок — сразу, как у «Основное»: пока «Основное» грузится, колонки не скачут -->
+    <div class="card shadow-sm" id="profile-security">
+      <div class="card-header fw-semibold">{{ i18n.t('profile.main.securityTitle') }}</div>
+      @if (logins(); as current) {
         @if (passwordOnly()) {
           <div class="alert alert-warning rounded-0 mb-0 small" id="password-only-banner">
             {{ i18n.t('profile.main.passwordOnly') }}
@@ -105,8 +108,8 @@
             </div>
           </div>
         </div>
-      </div>
-    }
+      }
+    </div>
     <ng-content select="[profile-security]"></ng-content>
   </div>
 </div>

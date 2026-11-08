@@ -17,7 +17,7 @@ accounts.md:
   "Возврат и первый экран": { article: account, hash: 763542a28a5d29b6 }
   "Ответ сервера": skip
   "В mini-app": { article: account, hash: 35831e2f958e5e3c }
-  "Профиль: блок «Основное»": { article: account, hash: 8495950dddcca0e6 }
+  "Профиль: «Основное» и «Вход и привязки»": { article: account, hash: b4a29870e77d9f4d }
   "Когда": { article: account, hash: 1cbc8182dfaaf56b }
   "Что переносится, а что нет": { article: account, hash: d3147cb6d0cc4640 }
   "Экран слияния": { article: account, hash: 0520b92c3e500d9d }
